@@ -153,7 +153,10 @@ class FileTests(LMSCase):
             self.assertIn("private", response["Cache-Control"])
             self.assertIn("no-store", response["Cache-Control"])
             self.assertEqual(response["X-Content-Type-Options"], "nosniff")
-            response.close()
+            # Consume ClientHandler's streaming wrapper once. Calling close()
+            # again sends request_finished outside its signal guard and closes
+            # the surrounding TestCase transaction on PostgreSQL.
+            self.assertTrue(response.closed)
 
     def test_private_files_work_without_debug_and_raw_media_never_works(self):
         attempt = self.submit(file_answer=text_file())
@@ -161,7 +164,7 @@ class FileTests(LMSCase):
             with self.subTest(debug=debug), override_settings(DEBUG=debug):
                 response = self.student_client.get(attempt.file_answer.url)
                 self.assertEqual(response.status_code, 200)
-                response.close()
+                b"".join(response.streaming_content)
                 self.assertEqual(
                     self.student_client.get(
                         attempt.file_answer.url.replace("/files/", "/media/")
@@ -175,7 +178,7 @@ class FileTests(LMSCase):
         self.assertEqual(Client().get(self.assignment.material_file.url).status_code, 302)
         response = self.student_client.get(self.assignment.material_file.url)
         self.assertEqual(response.status_code, 200)
-        response.close()
+        b"".join(response.streaming_content)
         self.block.is_active = False
         self.block.save()
         self.assertEqual(
@@ -183,7 +186,7 @@ class FileTests(LMSCase):
         )
         response = self.teacher_client.get(self.assignment.material_file.url)
         self.assertEqual(response.status_code, 200)
-        response.close()
+        b"".join(response.streaming_content)
 
     def test_unreferenced_paths_and_path_traversal_are_not_downloadable(self):
         (Path(settings.MEDIA_ROOT) / "secret.txt").write_text("Unreferenced")

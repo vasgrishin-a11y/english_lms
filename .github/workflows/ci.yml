@@ -3,7 +3,8 @@ name: LMS checks
 on:
   pull_request:
   push:
-    branches: [main, 'arena/**']
+    # Feature branches are already covered by pull_request; avoid duplicate jobs.
+    branches: [main]
 
 permissions:
   contents: read
@@ -54,7 +55,7 @@ jobs:
           if ! coverage run manage.py test --verbosity 2 > test-output.log 2>&1; then
             cat test-output.log
             # Keep diagnostics available in the Checks API even if log-blob downloads are unavailable.
-            python -c 'from pathlib import Path; text = Path("test-output.log").read_bytes()[-12000:].decode("utf-8", errors="replace"); print("::error title=Django regression failures::" + text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))'
+            python scripts/report_test_failure.py test-output.log
             exit 1
           fi
           cat test-output.log
