@@ -1,0 +1,434 @@
+{
+  "audit_date_utc": "2026-09-19",
+  "repository": "vasgrishin-a11y/english_lms",
+  "source_commit": "d6699680b0a3cf43488d9a232c33335d3a308ac5",
+  "branch": "arena/01a0bae2-english-lms",
+  "original_tracked_files": 29,
+  "scope_note": "Local repository audit. No live production environment, PostgreSQL, or Docker image was tested. Browser checks used rendered synthetic HTML, not end-to-end navigation.",
+  "tools": {
+    "Django": "5.2.17",
+    "pip-audit": "2.10.1",
+    "bandit": "1.9.4",
+    "ruff": "0.16.8",
+    "detect-secrets": "1.5.0",
+    "playwright": "1.63.0"
+  },
+  "django_checks": {
+    "check": "PASS: no issues",
+    "check_deploy_default": [
+      "security.W004",
+      "security.W008",
+      "security.W009",
+      "security.W012",
+      "security.W016",
+      "security.W018"
+    ],
+    "check_deploy_debug_false": [
+      "security.W004",
+      "security.W008",
+      "security.W009",
+      "security.W012",
+      "security.W016"
+    ],
+    "makemigrations_check_dry_run": "PASS: no changes detected",
+    "migrate_sqlite": "PASS",
+    "original_test_suite": "0 tests",
+    "collectstatic": "PASS: 127 files copied, 381 post-processed",
+    "production_wsgi_smoke": {
+      "/accounts/login/": 200,
+      "/admin/login/": 200,
+      "/static/admin/css/base.css": 200
+    },
+    "pip_check": "No broken requirements found"
+  },
+  "characterization_probes": {
+    "python": "3.11.2",
+    "django": "5.2.17",
+    "tests_run": 32,
+    "failures": 0,
+    "errors": 0,
+    "observations": {
+      "grade_limit": {
+        "http": 302,
+        "assignment_max": 100,
+        "submitted_grade": 1001,
+        "saved_grade": 1001,
+        "validators": [
+          "MinValueValidator"
+        ]
+      },
+      "required_file_clear": {
+        "http": 302,
+        "saved_file": "",
+        "status": "submitted"
+      },
+      "audio_type": {
+        "http": 302,
+        "accepted_extension": "pdf"
+      },
+      "file_content": {
+        "accepted": true,
+        "filename": "answer.mp3",
+        "content_type": "text/plain"
+      },
+      "file_size": {
+        "http": 302,
+        "bytes_saved": 16777216,
+        "memory_threshold": 2621440
+      },
+      "media_acl": {
+        "debug": true,
+        "anonymous_http": 200,
+        "other_student_http": 200
+      },
+      "production_media": {
+        "debug": false,
+        "file_exists": true,
+        "authenticated_http": 404
+      },
+      "stale_feedback": {
+        "new_status": "submitted",
+        "old_grade_visible": true,
+        "new_answer_saved": true,
+        "feedback_records": 1
+      },
+      "resubmission_time": {
+        "resubmitted_after_deadline": true,
+        "submitted_at_unchanged": true,
+        "is_late": false
+      },
+      "stale_review": {
+        "sequence": "teacher GET -> student POST -> teacher POST",
+        "unseen_answer_status": "checked",
+        "saved_grade": 80
+      },
+      "review_atomicity": {
+        "fault_injection": true,
+        "requested_status": "needs_revision",
+        "persisted_status": "checked",
+        "feedback_persisted": true
+      },
+      "admin_user_profile_collision": {
+        "exception": "IntegrityError",
+        "unique_constraint": "lms_profile.user_id",
+        "user_creation_rolled_back": true
+      },
+      "admin_add_submission": {
+        "editable_fields": [
+          "status"
+        ],
+        "exception": "IntegrityError: required FK missing"
+      },
+      "orphan_files": {
+        "old_file_after_replace": true,
+        "latest_file_after_delete": true
+      },
+      "catalog_queries": {
+        "small": {
+          "blocks": 1,
+          "topics": 1,
+          "queries": 7
+        },
+        "larger": {
+          "blocks": 6,
+          "topics": 24,
+          "queries": 58
+        }
+      },
+      "teacher_pagination": {
+        "rows_in_one_response": 205,
+        "response_bytes": 159574
+      },
+      "teacher_scope": {
+        "other_teacher_http": 200,
+        "note": "Architectural observation; no per-class ownership exists in the data model"
+      },
+      "authorization_controls": {
+        "anonymous_redirect": true,
+        "student_cannot_review": true,
+        "teacher_redirect_from_student_view": true
+      },
+      "student_html_isolation": {
+        "protected": true
+      },
+      "inactive_hierarchy": {
+        "assignment_404": true,
+        "topic_404": true,
+        "block_404": true
+      },
+      "csrf": {
+        "submission_post_without_token": 403,
+        "login_without_token": 403,
+        "logout_get": 405
+      },
+      "template_escaping": {
+        "text_answer": true,
+        "description": true,
+        "feedback_comment": true
+      },
+      "extension_allowlist": {
+        "exe_rejected": true
+      },
+      "minimum_grade": {
+        "negative_rejected": true
+      },
+      "login_redirect": {
+        "external_next_rejected": true
+      },
+      "admin_grade_limit": {
+        "assignment_max": 100,
+        "admin_accepts_grade": 101
+      },
+      "first_submission_race": {
+        "stale_read_injection": true,
+        "duplicate_insert": "unhandled IntegrityError",
+        "original_row_preserved": true
+      },
+      "admin_plain_student_creation": {
+        "http": 302,
+        "succeeds": true
+      },
+      "markup": {
+        "grade_helptext_id_missing": true,
+        "revision_badge_css_mismatch": true
+      },
+      "rendering": {
+        "all_five_application_pages_http": 200
+      },
+      "admin_revision_state": {
+        "old_status": "needs_revision",
+        "action": "edit feedback comment",
+        "resulting_status": "checked"
+      },
+      "login_throttling": {
+        "failed_attempts": 30,
+        "http_codes": [
+          200
+        ],
+        "next_valid_login_http": 302,
+        "external_proxy_not_tested": true
+      }
+    },
+    "warning": "Passing characterization probes confirm existing behavior, including defects; they do not certify application security."
+  },
+  "dependency_audit": {
+    "dependencies": [
+      {
+        "name": "django",
+        "version": "5.2.17",
+        "vulns": []
+      },
+      {
+        "name": "gunicorn",
+        "version": "26.2.0",
+        "vulns": []
+      },
+      {
+        "name": "psycopg2-binary",
+        "version": "2.9.13",
+        "vulns": []
+      },
+      {
+        "name": "python-dotenv",
+        "version": "1.2.3",
+        "vulns": []
+      },
+      {
+        "name": "dj-database-url",
+        "version": "3.1.2",
+        "vulns": []
+      },
+      {
+        "name": "whitenoise",
+        "version": "6.12.0",
+        "vulns": []
+      },
+      {
+        "name": "asgiref",
+        "version": "3.12.1",
+        "vulns": []
+      },
+      {
+        "name": "sqlparse",
+        "version": "0.6.0",
+        "vulns": []
+      }
+    ],
+    "fixes": []
+  },
+  "static_analysis": {
+    "bandit": {
+      "metrics": {
+        "CONFIDENCE.HIGH": 0,
+        "CONFIDENCE.LOW": 0,
+        "CONFIDENCE.MEDIUM": 0,
+        "CONFIDENCE.UNDEFINED": 0,
+        "SEVERITY.HIGH": 0,
+        "SEVERITY.LOW": 0,
+        "SEVERITY.MEDIUM": 0,
+        "SEVERITY.UNDEFINED": 0,
+        "loc": 980,
+        "nosec": 0,
+        "skipped_tests": 0
+      },
+      "findings": [],
+      "scope": [
+        "core",
+        "lms",
+        "manage.py"
+      ]
+    },
+    "ruff_isolated": {
+      "command": "ruff check --isolated --select E4,E7,E9,F .",
+      "baseline_findings": [
+        {
+          "path": "lms/tests.py",
+          "line": 1,
+          "code": "F401",
+          "message": "Unused django.test.TestCase import"
+        },
+        {
+          "path": "lms/views.py",
+          "line": 14,
+          "code": "F401",
+          "message": "Unused .models.Topic import"
+        }
+      ]
+    },
+    "secrets": {
+      "tracked_candidate_count": 1,
+      "path": ".env.example",
+      "line": 6,
+      "type": "Basic Auth Credentials",
+      "triage": "Documented placeholder, not a real credential; no real committed secret identified."
+    },
+    "shell_syntax": "PASS: sh -n docker-entrypoint.sh",
+    "git_fsck": "PASS"
+  },
+  "browser": {
+    "engine": "Chromium 153.0.8010.0",
+    "axe_core": "4.13.0",
+    "viewports": [
+      {
+        "width": 1280,
+        "height": 900
+      },
+      {
+        "width": 320,
+        "height": 800
+      }
+    ],
+    "pages": {
+      "assignment": {
+        "violations": [
+          {
+            "id": "heading-order",
+            "impact": "moderate",
+            "help": "Heading levels should only increase by one",
+            "tags": [
+              "cat.semantics",
+              "best-practice"
+            ],
+            "elements": [
+              [
+                ".card:nth-child(2) > h3"
+              ]
+            ]
+          }
+        ],
+        "incomplete_checks": 0,
+        "mobile_320": {
+          "viewport": 320,
+          "document_width": 320,
+          "body_width": 320,
+          "table_width": null,
+          "horizontal_overflow": false
+        },
+        "missing_aria_references": []
+      },
+      "login": {
+        "violations": [
+          {
+            "id": "page-has-heading-one",
+            "impact": "moderate",
+            "help": "Page should contain a level-one heading",
+            "tags": [
+              "cat.semantics",
+              "best-practice"
+            ],
+            "elements": [
+              [
+                "html"
+              ]
+            ]
+          }
+        ],
+        "incomplete_checks": 0,
+        "mobile_320": {
+          "viewport": 320,
+          "document_width": 320,
+          "body_width": 320,
+          "table_width": null,
+          "horizontal_overflow": false
+        },
+        "missing_aria_references": []
+      },
+      "student_catalog": {
+        "violations": [],
+        "incomplete_checks": 0,
+        "mobile_320": {
+          "viewport": 320,
+          "document_width": 320,
+          "body_width": 320,
+          "table_width": null,
+          "horizontal_overflow": false
+        },
+        "missing_aria_references": []
+      },
+      "teacher_queue": {
+        "violations": [],
+        "incomplete_checks": 0,
+        "mobile_320": {
+          "viewport": 320,
+          "document_width": 742,
+          "body_width": 742,
+          "table_width": 726.328125,
+          "horizontal_overflow": true
+        },
+        "missing_aria_references": []
+      },
+      "teacher_review": {
+        "violations": [
+          {
+            "id": "heading-order",
+            "impact": "moderate",
+            "help": "Heading levels should only increase by one",
+            "tags": [
+              "cat.semantics",
+              "best-practice"
+            ],
+            "elements": [
+              [
+                ".card:nth-child(2) > h3"
+              ]
+            ]
+          }
+        ],
+        "incomplete_checks": 1,
+        "mobile_320": {
+          "viewport": 320,
+          "document_width": 320,
+          "body_width": 320,
+          "table_width": null,
+          "horizontal_overflow": false
+        },
+        "missing_aria_references": [
+          {
+            "element": "id_grade",
+            "missing_id": "id_grade_helptext"
+          }
+        ]
+      }
+    }
+  }
+}

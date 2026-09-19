@@ -1,21 +1,13 @@
 {% extends "lms/base.html" %}
-
 {% block title %}Вход — English LMS{% endblock %}
-
 {% block content %}
-<div class="card" style="max-width: 420px; margin: 40px auto;">
-    <h2>Вход в систему</h2>
-
+<div class="card login-card">
+    <h1>Вход в систему</h1>
     <form method="post">
         {% csrf_token %}
-
-        {{ form.as_p }}
-
+        {% include "lms/form_fields.html" %}
         <button class="btn" type="submit">Войти</button>
     </form>
-
-    <p class="muted small">
-        Учётные записи учеников создаёт преподаватель через админ-панель.
-    </p>
+    <p class="muted small">Учётные записи создаёт администратор. Для восстановления доступа обратитесь к нему.</p>
 </div>
 {% endblock %}

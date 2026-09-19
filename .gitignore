@@ -1,25 +1,26 @@
-# Python
 __pycache__/
 *.py[cod]
-*$py.class
-
-# Virtual environment
+.venv/
 venv/
 env/
 .env
-
-# Django local database
-db.sqlite3
+.env.*
+!.env.example
+!.env.production.example
 *.sqlite3
-
-# Media and static build
 media/
 staticfiles/
-
-# OS
+var/
+.cache/
+.ruff_cache/
+.pytest_cache/
+.coverage*
+coverage.xml
+htmlcov/
+node_modules/
+test-results/
+*.log
 .DS_Store
 Thumbs.db
-
-# IDE
 .vscode/
 .idea/

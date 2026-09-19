@@ -1,9 +1,15 @@
 {% extends "lms/base.html" %}
+{% load lms_tags %}
 
 {% block title %}Мои задания — English LMS{% endblock %}
 
 {% block content %}
 <h1>Мои задания</h1>
+<form method="get" class="card">
+    <label for="id_q">Найти задание</label>
+    <input id="id_q" type="text" name="q" maxlength="200" value="{{ query }}">
+    <button type="submit" class="btn">Найти</button>
+</form>
 
 {% if not blocks_data %}
     <div class="card">
@@ -37,6 +43,8 @@
                             {{ assignment.get_assignment_type_display }}
                         </span>
 
+                        <span class="badge badge-{{ assignment.latest_status|default:'new' }}">{{ assignment.latest_status|status_label }}</span>
+                        {% if assignment.latest_grade != None %}<span>Балл: {{ assignment.latest_grade }}</span>{% endif %}
                         {% if assignment.deadline %}
                             <span class="muted small">
                                 До: {{ assignment.deadline|date:"d.m.Y H:i" }}
@@ -48,4 +56,5 @@
         {% endfor %}
     </div>
 {% endfor %}
+{% include "lms/pagination.html" %}
 {% endblock %}

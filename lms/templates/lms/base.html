@@ -1,328 +1,40 @@
+{% load static %}
 <!doctype html>
 <html lang="ru">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}English LMS{% endblock %}</title>
-
-    <style>
-        :root {
-            --bg: #f6f8fb;
-            --card: #ffffff;
-            --text: #1f2937;
-            --muted: #6b7280;
-            --border: #e5e7eb;
-            --primary: #2563eb;
-            --primary-hover: #1d4ed8;
-            --success: #16a34a;
-            --warning: #d97706;
-            --danger: #dc2626;
-        }
-
-        * {
-            box-sizing: border-box;
-        }
-
-        body {
-            margin: 0;
-            font-family: Arial, Helvetica, sans-serif;
-            background: var(--bg);
-            color: var(--text);
-        }
-
-        nav {
-            background: var(--card);
-            border-bottom: 1px solid var(--border);
-            padding: 12px 0;
-        }
-
-        .container {
-            width: 100%;
-            max-width: 1100px;
-            margin: 0 auto;
-            padding: 0 16px;
-        }
-
-        .nav-inner {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-            flex-wrap: wrap;
-        }
-
-        .brand {
-            font-weight: 700;
-            font-size: 20px;
-            color: var(--primary);
-            text-decoration: none;
-        }
-
-        .nav-links {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            flex-wrap: wrap;
-        }
-
-        .nav-links a {
-            color: var(--text);
-            text-decoration: none;
-            font-weight: 500;
-        }
-
-        .nav-links a:hover {
-            color: var(--primary);
-        }
-
-        main {
-            padding: 24px 0 48px;
-        }
-
-        h1, h2, h3 {
-            margin-top: 0;
-        }
-
-        .card {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 16px;
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-        }
-
-        .muted {
-            color: var(--muted);
-        }
-
-        .btn {
-            display: inline-block;
-            background: var(--primary);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            padding: 10px 14px;
-            font-size: 14px;
-            cursor: pointer;
-            text-decoration: none;
-        }
-
-        .btn:hover {
-            background: var(--primary-hover);
-        }
-
-        .btn-secondary {
-            background: #64748b;
-        }
-
-        .btn-secondary:hover {
-            background: #475569;
-        }
-
-        input[type="text"],
-        input[type="number"],
-        input[type="password"],
-        input[type="file"],
-        select,
-        textarea {
-            width: 100%;
-            padding: 10px 12px;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            font-size: 14px;
-            background: white;
-        }
-
-        textarea {
-            resize: vertical;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 6px;
-            font-weight: 600;
-        }
-
-        form p {
-            margin: 0 0 14px;
-        }
-
-        .errorlist {
-            color: var(--danger);
-            margin: 6px 0 0;
-            padding-left: 18px;
-        }
-
-        .alert {
-            padding: 12px 14px;
-            border-radius: 10px;
-            margin-bottom: 14px;
-            border: 1px solid transparent;
-        }
-
-        .alert-success {
-            background: #ecfdf5;
-            color: #065f46;
-            border-color: #a7f3d0;
-        }
-
-        .alert-error,
-        .alert-danger {
-            background: #fef2f2;
-            color: #991b1b;
-            border-color: #fecaca;
-        }
-
-        .alert-warning {
-            background: #fffbeb;
-            color: #92400e;
-            border-color: #fde68a;
-        }
-
-        .alert-info {
-            background: #eff6ff;
-            color: #1e40af;
-            border-color: #bfdbfe;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            overflow: hidden;
-        }
-
-        th, td {
-            padding: 12px;
-            border-bottom: 1px solid var(--border);
-            text-align: left;
-            vertical-align: top;
-        }
-
-        th {
-            background: #f9fafb;
-            font-weight: 700;
-        }
-
-        tr:last-child td {
-            border-bottom: none;
-        }
-
-        ul {
-            padding-left: 20px;
-        }
-
-        li {
-            margin-bottom: 8px;
-        }
-
-        pre {
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            background: #f8fafc;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 12px;
-            margin: 0;
-        }
-
-        .badge {
-            display: inline-block;
-            padding: 4px 8px;
-            border-radius: 999px;
-            font-size: 12px;
-            font-weight: 600;
-            background: #e2e8f0;
-            color: #334155;
-        }
-
-        .badge-new {
-            background: #dbeafe;
-            color: #1d4ed8;
-        }
-
-        .badge-submitted {
-            background: #fef3c7;
-            color: #92400e;
-        }
-
-        .badge-in-review {
-            background: #e0e7ff;
-            color: #3730a3;
-        }
-
-        .badge-needs-revision {
-            background: #fee2e2;
-            color: #991b1b;
-        }
-
-        .badge-checked {
-            background: #dcfce7;
-            color: #166534;
-        }
-
-        .row {
-            display: flex;
-            gap: 12px;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-
-        .small {
-            font-size: 13px;
-        }
-
-        a {
-            color: var(--primary);
-        }
-    </style>
+    <link rel="stylesheet" href="{% static 'lms/app.css' %}">
 </head>
 <body>
-
-<nav>
+<a class="skip-link" href="#main-content">Перейти к содержимому</a>
+<nav aria-label="Основная навигация">
     <div class="container nav-inner">
         <a class="brand" href="{% url 'dashboard' %}">English LMS</a>
-
         <div class="nav-links">
             {% if user.is_authenticated %}
                 <a href="{% url 'dashboard' %}">Кабинет</a>
-
-                {% if user.profile.role == 'teacher' %}
+                {% if user.is_superuser or user.profile.role == 'teacher' %}
                     <a href="{% url 'teacher_submissions' %}">Проверки</a>
                 {% else %}
                     <a href="{% url 'student_assignments' %}">Задания</a>
                 {% endif %}
-
-                <span class="muted small">
-                    {{ user.get_full_name|default:user.username }}
-                </span>
-
-                <form method="post" action="{% url 'logout' %}" style="display:inline;">
-                    {% csrf_token %}
-                    <button class="btn btn-secondary" type="submit">Выйти</button>
+                <a href="{% url 'password_change' %}">Сменить пароль</a>
+                {% if user.is_staff %}<a href="{% url 'admin:index' %}">Администрирование</a>{% endif %}
+                <span class="muted small">{{ user.get_full_name|default:user.username }}</span>
+                <form method="post" action="{% url 'logout' %}" class="inline-form">
+                    {% csrf_token %}<button class="btn btn-secondary" type="submit">Выйти</button>
                 </form>
-            {% else %}
-                <a href="{% url 'login' %}">Войти</a>
-            {% endif %}
+            {% else %}<a href="{% url 'login' %}">Войти</a>{% endif %}
         </div>
     </div>
 </nav>
-
-<main class="container">
-    {% if messages %}
-        {% for message in messages %}
-            <div class="alert alert-{{ message.tags }}">
-                {{ message }}
-            </div>
-        {% endfor %}
-    {% endif %}
-
-    {% block content %}
-    {% endblock %}
+<main class="container" id="main-content" tabindex="-1">
+    {% for message in messages %}
+        <div class="alert alert-{{ message.tags }}" role="status">{{ message }}</div>
+    {% endfor %}
+    {% block content %}{% endblock %}
 </main>
-
 </body>
 </html>

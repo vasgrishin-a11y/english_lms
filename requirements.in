@@ -1,0 +1,9 @@
+# Supported runtime: Python 3.12, Django 5.2 LTS.
+Django>=5.2.17,<5.3
+django-axes>=8.3.1,<9
+gunicorn>=26.2,<27
+psycopg2-binary>=2.9.13,<3
+python-dotenv>=1.2.3,<2
+dj-database-url>=3.1.2,<4
+whitenoise>=6.12,<7
+mutagen>=1.48.1,<2

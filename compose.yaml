@@ -1,0 +1,39 @@
+# Single-host production reference. Put a TLS reverse proxy in front of web.
+# Always invoke with: docker compose --env-file .env.production ...
+services:
+  db:
+    image: postgres:16@sha256:a3b7f434b2dc57ce85a67e171163eb8ab1a1ebcb39d27484661f26b1dfbe30d6
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: lms
+      POSTGRES_USER: lms
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U lms -d lms]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+  web:
+    build: .
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      DATABASE_URL: ''
+      PGHOST: db
+      PGPORT: '5432'
+      PGUSER: lms
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}
+      PGDATABASE: lms
+      DJANGO_MEDIA_ROOT: /app/var/media
+    ports:
+      - '127.0.0.1:8000:8000'
+    volumes:
+      - private-media:/app/var/media
+    depends_on:
+      db:
+        condition: service_healthy
+volumes:
+  postgres-data:
+  private-media:

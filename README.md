@@ -1,0 +1,115 @@
+# English LMS
+
+Небольшая LMS на Django 5.2 LTS / Python 3.12: задания, неизменяемые попытки учеников, проверка преподавателем, история решений и защищённые файлы. PostgreSQL обязателен для production; SQLite разрешён только в явно включённой локальной разработке и тестах.
+
+## Локальный запуск
+
+```bash
+python3.12 -m venv .venv
+. .venv/bin/activate
+python -m pip install --require-hashes -r requirements-dev.txt
+cp .env.example .env
+# Только при первоначальном создании .env; не выводит ключ в терминал.
+python -c 'import secrets; from pathlib import Path; p=Path(".env"); p.write_text(p.read_text().replace("DJANGO_SECRET_KEY=", "DJANGO_SECRET_KEY=" + secrets.token_urlsafe(64), 1))'
+python manage.py migrate
+python manage.py createsuperuser
+python manage.py runserver 0.0.0.0:8000
+```
+
+Открыть `/admin/`, создать блок → тему → задание и учётные записи. Для внешнего dev-preview добавьте **его точный hostname** в `DJANGO_ALLOWED_HOSTS`, а HTTPS origin — в `DJANGO_CSRF_TRUSTED_ORIGINS`. Не используйте `DEBUG=True` на публичном сервере с реальными данными.
+
+Необязательные инструменты браузерной проверки:
+
+```bash
+npm ci --ignore-scripts
+python -m playwright install chromium
+RUN_BROWSER_TESTS=1 python manage.py test lms.tests.test_browser --settings=core.test_settings
+```
+
+Node/axe-core используются только для тестов; frontend build и Node в production не нужны.
+
+## Роли и права
+
+- **Ученик** (`Profile.role=student`): все активные задания единого учебного пространства; только собственные ответы и файлы.
+- **Преподаватель** (`Profile.role=teacher`): все работы этого учебного пространства, проверка и архив. Административные права автоматически не выдаются.
+- **Администратор**: superuser создаёт пользователей и учебные материалы; профиль superuser создаётся как teacher. `is_staff` сам по себе больше не превращает пользователя в преподавателя.
+- Django Admin принимает нового пользователя вместе с заполненным профилем. `auth.change_user`/управление группами выдавайте только доверенным администраторам: это привилегированные разрешения Django.
+- Сдачи, проверки и события в Admin доступны только для просмотра. Ссылки ведут в интерфейс проверки с валидацией и контролем версии.
+- Ученики могут менять свой пароль. Самостоятельный email-reset и MFA не подключены; восстановление — через администратора после проверки личности, MFA рекомендуется на уровне доверенного IdP/доступа администраторов.
+
+**Это не мультитенантная система.** Независимые школы/клиенты должны использовать отдельные развёртывания. Изоляция групп и назначение заданий конкретным ученикам — отдельные продуктовые функции, не подразумеваемые текущей моделью.
+
+## Попытки и проверки
+
+Каждая отправка создаёт новый `Submission` с увеличенным `version`. Старый ответ, файл, время и feedback не перезаписываются. Максимум баллов и дедлайн фиксируются на момент отправки. Поздние ответы разрешены и помечаются; попытки ограничены частотой отправки и файловой квотой.
+
+Преподаватель проверяет только последнюю попытку. Устаревшая форма ученика/преподавателя возвращает **409**, а не затирает данные. Параллельные операции сериализуются блокировкой строки ученика в PostgreSQL; проверка и событие сохраняются в одной транзакции. Два преподавателя не могут незаметно перезаписать решение друг друга. Каждая коррекция оставляет событие с автором, решением, оценкой и комментарием.
+
+Каталог, очередь и история имеют пагинацию. В очереди есть фильтры «На проверке», «Ожидают доработки», «Проверенные» и «Все последние попытки».
+
+## Файлы и ограничения
+
+Все `.url` файлов ведут на авторизованный `/files/…`. Старый публичный `/media/` отсутствует **в обоих режимах DEBUG**. Не настраивайте public alias к private-media в Nginx, CDN или облачном bucket.
+
+Загрузка ограничена размером и квотой; проверяются расширения, сигнатуры, структура ZIP-контейнера и реальное аудио через Mutagen. TXT — UTF-8. Архивы не распаковываются; ZIP64 и чрезмерные каталоги отвергаются. Скачивание всегда attachment, octet-stream, `nosniff`, `private, no-store`.
+
+Проверка формата **не является антивирусом**. Для среды с недоверенными внешними загрузками настройте антивирус/карантин хранилища и безопасное открытие документов на рабочих местах. Не включайте выполнение кода в каталоге файлов.
+
+| Переменная | По умолчанию |
+|---|---:|
+| `LMS_MAX_FILE_BYTES` | 20 MiB на файл/совокупность файлов запроса |
+| `LMS_STUDENT_QUOTA_BYTES` | 200 MiB на ученика, включая историю; общий файл считается один раз |
+| `LMS_SUBMISSIONS_PER_HOUR` | 30 отправок на ученика в час |
+| `LMS_PAGE_SIZE` | 25 |
+| `DJANGO_LOGIN_FAILURE_LIMIT` | 5 ошибок для пары учётная запись + IP |
+| `DJANGO_LOGIN_COOLOFF_MINUTES` | 15 минут |
+
+Ограничение входа работает через общую БД django-axes, включая Django Admin. Новая ошибка во время блокировки не продлевает её бесконечно. См. политику доверенных прокси в [инструкции развёртывания](docs/DEPLOYMENT.md).
+
+Заменённые **материалы задания** удаляются после commit, если ссылок больше нет. Файлы **старых попыток** намеренно сохраняются как история; при удалении записей удаляются только больше нигде не используемые файлы. Непривязанные файлы после сбоев обнаруживает `cleanup_orphan_files` (по умолчанию dry-run с выдержкой 24 часа).
+
+## Проверки
+
+```bash
+python manage.py test --settings=core.test_settings
+coverage run manage.py test --settings=core.test_settings
+coverage report
+ruff check .
+ruff format --check .
+bandit -q -r core lms manage.py -x lms/tests,core/test_settings.py
+python manage.py makemigrations --check --dry-run --settings=core.test_settings
+pip-audit -r requirements.txt
+```
+
+`core.test_settings` всегда использует отдельную тестовую БД, временные файлы и тестовый hasher; не берёт production `DATABASE_URL`. Для PostgreSQL:
+
+```bash
+TEST_DATABASE_URL=postgres://USER:PASSWORD@HOST:5432/lms_test \
+  python manage.py test --settings=core.test_settings
+```
+
+Пользователю тестовой БД нужно право `CREATEDB`; **не используйте production-сервер**. Проверки реальных параллельных транзакций выполняются только на PostgreSQL. Браузерный набор включается отдельно через `RUN_BROWSER_TESTS=1`.
+
+CI проверяет SQLite и PostgreSQL на Python 3.12, гонки, миграцию старых данных, покрытие (порог 80%), Ruff, Bandit, зависимости, deployment settings, браузерный процесс с axe и Docker build/non-root smoke test. Требуйте успешных jobs в branch protection — сам файл workflow не включает защиту ветки автоматически.
+
+## Зависимости
+
+`requirements.in` / `requirements-dev.in` — диапазоны поддерживаемых версий. `.txt` — полные закреплённые наборы с хешами. Обновлять в изолированной среде Python 3.12:
+
+```bash
+pip-compile --upgrade --generate-hashes --no-emit-index-url --no-emit-trusted-host -o requirements.txt requirements.in
+pip-compile --upgrade --generate-hashes --allow-unsafe --no-emit-index-url --no-emit-trusted-host -o requirements-dev.txt requirements-dev.in
+# Затем весь набор CI, включая Docker, PostgreSQL и pip-audit.
+```
+
+Dependabot настроен для pip, npm, Docker и GitHub Actions. Базовые образы и actions закреплены digest/SHA; обновления должны проходить проверку, а не применяться вслепую.
+
+## Production и обновление существующей установки
+
+**Dockerfile называется `Dockerfile`, без `.txt`:** обычный `docker build -t english-lms .` работает без `-f`.
+
+См. [DEPLOYMENT.md](docs/DEPLOYMENT.md): HTTPS, secrets, volumes, миграция, bootstrap, резервирование, restore и rollback. Перед переходом с исходной версии обязательны согласованный backup БД + media и `audit_legacy_data`. Миграция не занижает некорректные оценки автоматически и не может восстановить ответы, уже перезаписанные старой версией.
+
+[Исходный аудит](docs/audit/2026-09-19.md) описывает коммит до исправлений. [Реестр исправлений](docs/REMEDIATION.md) сопоставляет замечания с изменениями и оставшимися инфраструктурными действиями.
+
+Лицензия владельцем репозитория не определена; этот PR не добавляет разрешение на открытое распространение от его имени.
