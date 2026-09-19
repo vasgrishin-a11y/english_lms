@@ -45,7 +45,18 @@
 - Ruff check/format, `makemigrations --check --dry-run`, production deployment checks проходят. В deployment checks только W005/W021 намеренно исключены согласно доменной политике выше.
 - Миграция с исходной схемы проверена на отдельной временной БД: ID/ответ/файл/время/feedback сохраняются; некорректная оценка не изменяется и блокирует upgrade.
 
-В локальной среде нет Docker/PostgreSQL/Python 3.12; загрузка их бинарных компонентов ограничена сетью. Соответствующие реальные проверки вынесены в отдельные CI jobs, их результат нужно смотреть в PR. Параметры настоящего production, backup/restore и настройки GitHub branch protection в эту проверку не входят.
+## Подтверждено в GitHub Actions
+
+[Полностью успешный запуск на `efa002a`](https://github.com/vasgrishin-a11y/english_lms/actions/runs/35465422980):
+
+- SQLite и PostgreSQL 16 на Python 3.12, включая настоящие параллельные отправки/проверки, migration drift, coverage gate и production checks.
+- Браузерный HTTP workflow и axe.
+- Обычный `docker build .`, запуск UID 10001, миграция, readiness, login и публичная статика production-образа.
+- Bandit, Ruff и pip-audit в обоих тестовых jobs. Локальные pip-audit/npm audit также не обнаружили известных уязвимостей.
+
+Первый PostgreSQL-запуск выявил ошибку **тестового кода**: ручной повторный `FileResponse.close()` обходил защиту сигналов Django Test Client и закрывал внешнюю транзакцию TestCase. Тесты теперь полностью читают streaming wrapper и позволяют ему закрыть ответ ровно один раз; PostgreSQL job после исправления проходит. Поведение приложения не ослаблялось и тесты не исключались из проверки.
+
+Локально остаётся Python 3.11/SQLite; Docker/PostgreSQL/Python 3.12 фактически проверены в CI, а не приписаны локальной среде. Параметры настоящего production, backup/restore и настройки GitHub branch protection в эту проверку не входят.
 
 ## Не добавлено без продуктового решения
 

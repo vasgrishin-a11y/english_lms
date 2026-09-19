@@ -3,7 +3,8 @@ name: LMS checks
 on:
   pull_request:
   push:
-    branches: [main, 'arena/**']
+    # Feature branches are already covered by pull_request; avoid duplicate jobs.
+    branches: [main]
 
 permissions:
   contents: read
