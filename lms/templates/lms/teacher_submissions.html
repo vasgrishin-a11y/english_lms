@@ -1,0 +1,77 @@
+{% extends "lms/base.html" %}
+
+{% block title %}Сдачи на проверке — English LMS{% endblock %}
+
+{% block content %}
+<h1>Сдачи на проверке</h1>
+
+<div class="card">
+    <form method="get">
+        <p>
+            <label for="id_q">Поиск</label>
+            <input type="text" id="id_q" name="q" value="{{ query }}" placeholder="Имя ученика, задание, тема...">
+        </p>
+
+        <button class="btn" type="submit">Найти</button>
+
+        {% if query %}
+            <a class="btn btn-secondary" href="{% url 'teacher_submissions' %}">Сбросить</a>
+        {% endif %}
+    </form>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Ученик</th>
+            <th>Блок / Тема</th>
+            <th>Задание</th>
+            <th>Статус</th>
+            <th>Отправлено</th>
+            <th>Действие</th>
+        </tr>
+    </thead>
+
+    <tbody>
+        {% for submission in submissions %}
+            <tr>
+                <td>
+                    {{ submission.student.get_full_name|default:submission.student.username }}
+                </td>
+
+                <td>
+                    {{ submission.assignment.topic.block.name }}
+                    /
+                    {{ submission.assignment.topic.title }}
+                </td>
+
+                <td>
+                    {{ submission.assignment.title }}
+                </td>
+
+                <td>
+                    <span class="badge badge-{{ submission.status }}">
+                        {{ submission.get_status_display }}
+                    </span>
+                </td>
+
+                <td>
+                    {{ submission.submitted_at|date:"d.m.Y H:i" }}
+                </td>
+
+                <td>
+                    <a class="btn" href="{% url 'teacher_submission_review' submission.pk %}">
+                        Проверить
+                    </a>
+                </td>
+            </tr>
+        {% empty %}
+            <tr>
+                <td colspan="6">
+                    Нет сдач для проверки.
+                </td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

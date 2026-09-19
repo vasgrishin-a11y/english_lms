@@ -1,0 +1,51 @@
+{% extends "lms/base.html" %}
+
+{% block title %}Мои задания — English LMS{% endblock %}
+
+{% block content %}
+<h1>Мои задания</h1>
+
+{% if not blocks_data %}
+    <div class="card">
+        <p>Пока нет активных заданий.</p>
+    </div>
+{% endif %}
+
+{% for block_item in blocks_data %}
+    <div class="card">
+        <h2>{{ block_item.block.name }}</h2>
+
+        {% if block_item.block.description %}
+            <p class="muted">{{ block_item.block.description }}</p>
+        {% endif %}
+
+        {% for topic_item in block_item.topics %}
+            <h3>{{ topic_item.topic.title }}</h3>
+
+            {% if topic_item.topic.description %}
+                <p class="muted">{{ topic_item.topic.description }}</p>
+            {% endif %}
+
+            <ul>
+                {% for assignment in topic_item.assignments %}
+                    <li>
+                        <a href="{% url 'assignment_detail' assignment.pk %}">
+                            {{ assignment.title }}
+                        </a>
+
+                        <span class="badge">
+                            {{ assignment.get_assignment_type_display }}
+                        </span>
+
+                        {% if assignment.deadline %}
+                            <span class="muted small">
+                                До: {{ assignment.deadline|date:"d.m.Y H:i" }}
+                            </span>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        {% endfor %}
+    </div>
+{% endfor %}
+{% endblock %}

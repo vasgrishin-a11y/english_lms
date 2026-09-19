@@ -1,0 +1,120 @@
+{% extends "lms/base.html" %}
+
+{% block title %}Проверка сдачи — English LMS{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'teacher_submissions' %}">← К списку сдач</a>
+</p>
+
+<div class="card">
+    <h1>Проверка сдачи</h1>
+
+    <p>
+        <strong>Ученик:</strong>
+        {{ submission.student.get_full_name|default:submission.student.username }}
+    </p>
+
+    <p>
+        <strong>Блок:</strong>
+        {{ submission.assignment.topic.block.name }}
+    </p>
+
+    <p>
+        <strong>Тема:</strong>
+        {{ submission.assignment.topic.title }}
+    </p>
+
+    <p>
+        <strong>Задание:</strong>
+        {{ submission.assignment.title }}
+    </p>
+
+    <p>
+        <strong>Статус:</strong>
+        <span class="badge badge-{{ submission.status }}">
+            {{ submission.get_status_display }}
+        </span>
+    </p>
+
+    <p>
+        <strong>Отправлено:</strong>
+        {{ submission.submitted_at|date:"d.m.Y H:i" }}
+    </p>
+
+    {% if submission.assignment.deadline %}
+        <p>
+            <strong>Дедлайн:</strong>
+            {{ submission.assignment.deadline|date:"d.m.Y H:i" }}
+        </p>
+    {% endif %}
+
+    <h3>Условия задания</h3>
+    <div>
+        {{ submission.assignment.description|linebreaks }}
+    </div>
+
+    {% if submission.assignment.material_file %}
+        <p>
+            <a href="{{ submission.assignment.material_file.url }}" target="_blank">
+                Открыть материалы задания
+            </a>
+        </p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>Ответ ученика</h2>
+
+    {% if submission.text_answer %}
+        <h3>Текст</h3>
+        <pre>{{ submission.text_answer }}</pre>
+    {% else %}
+        <p class="muted">Текстовый ответ не отправлен.</p>
+    {% endif %}
+
+    {% if submission.file_answer %}
+        <p>
+            <strong>Файл:</strong>
+            <a href="{{ submission.file_answer.url }}" target="_blank">
+                Скачать / открыть
+            </a>
+        </p>
+    {% else %}
+        <p class="muted">Файл не отправлен.</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>Проверка</h2>
+
+    <form method="post">
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+            <div class="alert alert-danger">
+                {{ form.non_field_errors }}
+            </div>
+        {% endif %}
+
+        {% for field in form %}
+            <p>
+                <label for="{{ field.id_for_label }}">
+                    {{ field.label }}
+                </label>
+
+                {{ field }}
+
+                {% if field.help_text %}
+                    <br>
+                    <span class="muted small">{{ field.help_text }}</span>
+                {% endif %}
+
+                {{ field.errors }}
+            </p>
+        {% endfor %}
+
+        <button class="btn" type="submit">Сохранить проверку</button>
+    </form>
+</div>
+{% endblock %}
