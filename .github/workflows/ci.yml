@@ -71,7 +71,7 @@ jobs:
         run: |
           export DJANGO_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(64))')"
           python manage.py check --deploy --fail-level WARNING
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-${{ matrix.database }}
           path: coverage.xml
@@ -98,7 +98,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: python -m playwright install --with-deps chromium
       - run: python manage.py test lms.tests.test_browser --verbosity 2
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: failure()
         with:
           name: browser-failures
