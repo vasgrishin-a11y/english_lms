@@ -18,6 +18,7 @@ package*.json
 requirements-dev.*
 docs/
 lms/tests/
+scripts/
 .coverage*
 coverage.xml
 htmlcov/
