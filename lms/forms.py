@@ -1,125 +1,98 @@
 from django import forms
+from django.conf import settings
+from django.core.exceptions import ValidationError
 
-from .models import Assignment, Submission
+from .models import Assignment, Feedback, Submission
+from .validators import ALLOWED_FILE_EXTENSIONS, AUDIO_EXTENSIONS, validate_answer, validate_upload
 
 
-class SubmissionForm(forms.ModelForm):
-    class Meta:
-        model = Submission
-        fields = ["text_answer", "file_answer"]
-        widgets = {
-            "text_answer": forms.Textarea(
-                attrs={
-                    "rows": 8,
-                    "placeholder": "Введите ваш ответ здесь...",
-                }
-            ),
-        }
+class SubmissionForm(forms.Form):
+    expected_version = forms.IntegerField(min_value=0, widget=forms.HiddenInput)
+    text_answer = forms.CharField(
+        required=False,
+        max_length=20000,
+        label="Текстовый ответ",
+        widget=forms.Textarea(attrs={"rows": 8, "placeholder": "Введите ваш ответ здесь..."}),
+    )
+    file_answer = forms.FileField(required=False, label="Файл ответа", validators=[validate_upload])
 
-    def __init__(self, *args, **kwargs):
-        self.assignment = kwargs.pop("assignment", None)
+    def __init__(self, *args, assignment, submission=None, **kwargs):
+        initial = kwargs.setdefault("initial", {})
+        initial.update(
+            {
+                "expected_version": submission.version if submission else 0,
+                "text_answer": submission.text_answer if submission else "",
+                "file_answer": submission.file_answer if submission else None,
+            }
+        )
+        self.assignment = assignment
         super().__init__(*args, **kwargs)
-
-        if self.assignment:
-            if self.assignment.assignment_type == Assignment.Type.TEXT:
-                self.fields["text_answer"].label = "Текстовый ответ"
-                self.fields["file_answer"].label = "Файл (не требуется)"
-            elif self.assignment.assignment_type == Assignment.Type.FILE:
-                self.fields["text_answer"].label = "Комментарий (не требуется)"
-                self.fields["file_answer"].label = "Файл ответа"
-            elif self.assignment.assignment_type == Assignment.Type.AUDIO:
-                self.fields["text_answer"].label = "Комментарий (не требуется)"
-                self.fields["file_answer"].label = "Аудиофайл"
-            elif self.assignment.assignment_type == Assignment.Type.MIXED:
-                self.fields["text_answer"].label = "Текстовый ответ"
-                self.fields["file_answer"].label = "Файл или аудио"
+        if assignment.assignment_type == Assignment.Type.TEXT:
+            del self.fields["file_answer"]
+        else:
+            audio = assignment.assignment_type == Assignment.Type.AUDIO
+            extensions = AUDIO_EXTENSIONS if audio else ALLOWED_FILE_EXTENSIONS
+            self.fields["file_answer"].widget.attrs["accept"] = ",".join(
+                f".{ext}" for ext in sorted(extensions)
+            )
+            self.fields["file_answer"].label = "Аудиофайл" if audio else "Файл ответа"
+            self.fields[
+                "file_answer"
+            ].help_text = f"До {settings.LMS_MAX_FILE_BYTES // (1024 * 1024)} MiB. Отправка создаёт новую попытку; старый ответ сохранится в истории."
+            if assignment.assignment_type != Assignment.Type.MIXED:
+                self.fields["text_answer"].label = "Комментарий (необязательно)"
 
     def clean(self):
-        cleaned_data = super().clean()
-
-        if not self.assignment:
-            return cleaned_data
-
-        assignment_type = self.assignment.assignment_type
-
-        text_answer = cleaned_data.get("text_answer", "")
-        file_answer = cleaned_data.get("file_answer")
-
-        has_existing_file = False
-        if self.instance and self.instance.pk:
-            has_existing_file = bool(self.instance.file_answer)
-
-        if assignment_type == Assignment.Type.TEXT:
-            if not text_answer.strip():
-                self.add_error("text_answer", "Введите текстовый ответ.")
-
-        elif assignment_type in [
-            Assignment.Type.FILE,
-            Assignment.Type.AUDIO,
-        ]:
-            if not file_answer and not has_existing_file:
-                self.add_error("file_answer", "Загрузите файл.")
-
-        elif assignment_type == Assignment.Type.MIXED:
-            if not text_answer.strip():
-                self.add_error("text_answer", "Введите текстовый ответ.")
-            if not file_answer and not has_existing_file:
-                self.add_error("file_answer", "Загрузите файл или аудио.")
-
-        return cleaned_data
+        data = super().clean()
+        try:
+            validate_answer(
+                self.assignment.assignment_type,
+                data.get("text_answer", ""),
+                data.get("file_answer"),
+            )
+        except ValidationError as exc:
+            for field, errors in exc.message_dict.items():
+                self.add_error(field if field in self.fields else None, errors)
+        return data
 
 
 class ReviewForm(forms.Form):
-    DECISION_CHECKED = "checked"
-    DECISION_NEEDS_REVISION = "needs_revision"
-
-    DECISION_CHOICES = [
-        (DECISION_CHECKED, "Проверено"),
-        (DECISION_NEEDS_REVISION, "Отправить на доработку"),
-    ]
-
-    grade = forms.IntegerField(
-        required=False,
-        min_value=0,
-        label="Балл",
-        widget=forms.NumberInput(attrs={"placeholder": "Например, 85"}),
-    )
-
+    expected_version = forms.IntegerField(min_value=1, widget=forms.HiddenInput)
+    expected_review_revision = forms.IntegerField(min_value=0, widget=forms.HiddenInput)
+    grade = forms.IntegerField(required=False, min_value=0, label="Балл")
     comment = forms.CharField(
         required=False,
+        max_length=10000,
         label="Комментарий преподавателя",
-        widget=forms.Textarea(
-            attrs={
-                "rows": 6,
-                "placeholder": "Напишите комментарий ученику...",
-            }
-        ),
+        widget=forms.Textarea(attrs={"rows": 6}),
     )
-
     decision = forms.ChoiceField(
-        choices=DECISION_CHOICES,
-        label="Решение",
+        choices=Feedback._meta.get_field("decision").choices, label="Решение"
     )
 
-    def __init__(self, *args, assignment=None, feedback=None, submission=None, **kwargs):
+    def __init__(self, *args, submission, feedback=None, **kwargs):
         super().__init__(*args, **kwargs)
+        maximum = submission.max_points_snapshot
+        # Build the field with its validator; assigning .max_value later is insufficient.
+        self.fields["grade"] = forms.IntegerField(
+            required=False,
+            min_value=0,
+            max_value=maximum,
+            label="Балл",
+            help_text=f"Максимум для этой попытки: {maximum}",
+        )
+        self.initial.update(
+            {
+                "expected_version": submission.version,
+                "expected_review_revision": submission.review_revision,
+                "decision": feedback.decision if feedback else Submission.Status.CHECKED,
+                "grade": feedback.grade if feedback else None,
+                "comment": feedback.comment if feedback else "",
+            }
+        )
 
-        self.assignment = assignment
-
-        if assignment:
-            self.fields["grade"].max_value = assignment.max_points
-            self.fields["grade"].help_text = (
-                f"Максимум баллов: {assignment.max_points}"
-            )
-
-        if feedback:
-            self.initial["grade"] = feedback.grade
-            self.initial["comment"] = feedback.comment
-
-        if submission:
-            if submission.status == Submission.Status.NEEDS_REVISION:
-                self.initial["decision"] = self.DECISION_NEEDS_REVISION
-            else:
-                self.initial["decision"] = self.DECISION_CHECKED
-        else:
-            self.initial.setdefault("decision", self.DECISION_CHECKED)
+    def clean(self):
+        data = super().clean()
+        if data.get("decision") == Submission.Status.CHECKED and data.get("grade") is None:
+            self.add_error("grade", "Для завершения проверки укажите балл.")
+        return data

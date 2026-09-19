@@ -1,0 +1,8 @@
+{
+  "name": "english-lms-quality-checks",
+  "private": true,
+  "description": "Browser accessibility tooling only; no frontend build or runtime dependency",
+  "devDependencies": {
+    "axe-core": "4.13.0"
+  }
+}

@@ -1,0 +1,146 @@
+name: LMS checks
+
+on:
+  pull_request:
+  push:
+    branches: [main, 'arena/**']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lms-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Tests (${{ matrix.database }}, Python 3.12)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        database: [sqlite, postgres]
+    services:
+      postgres:
+        image: postgres:16@sha256:a3b7f434b2dc57ce85a67e171163eb8ab1a1ebcb39d27484661f26b1dfbe30d6
+        env:
+          POSTGRES_USER: lms
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: lms
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U lms"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      DJANGO_SETTINGS_MODULE: core.test_settings
+      TEST_DATABASE_URL: ${{ matrix.database == 'postgres' && 'postgres://lms:ci-only-password@127.0.0.1:5432/lms' || '' }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: 'requirements*.txt'
+      - run: python -m pip install --require-hashes -r requirements-dev.txt
+      - name: Code quality
+        run: |
+          ruff check .
+          ruff format --check .
+          bandit -q -r core lms manage.py -x lms/tests,core/test_settings.py
+          sh -n docker-entrypoint.sh
+      - run: python manage.py makemigrations --check --dry-run
+      - name: Regression and PostgreSQL concurrency tests
+        run: |
+          if ! coverage run manage.py test --verbosity 2 > test-output.log 2>&1; then
+            cat test-output.log
+            # Keep diagnostics available in the Checks API even if log-blob downloads are unavailable.
+            python -c 'from pathlib import Path; text = Path("test-output.log").read_bytes()[-12000:].decode("utf-8", errors="replace"); print("::error title=Django regression failures::" + text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))'
+            exit 1
+          fi
+          cat test-output.log
+          coverage report
+          coverage xml
+      - run: pip-audit -r requirements.txt --progress-spinner off
+      - name: Production settings checks
+        env:
+          DJANGO_SETTINGS_MODULE: core.settings
+          DJANGO_DEBUG: 'False'
+          DJANGO_ALLOWED_HOSTS: lms.example.invalid
+          DATABASE_URL: postgres://lms:ci-only-password@127.0.0.1:5432/lms
+          DJANGO_MEDIA_ROOT: /tmp/lms-private-media
+        run: |
+          export DJANGO_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(64))')"
+          python manage.py check --deploy --fail-level WARNING
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: coverage-${{ matrix.database }}
+          path: coverage.xml
+          retention-days: 7
+
+  browser:
+    name: Browser workflow and accessibility
+    runs-on: ubuntu-latest
+    env:
+      DJANGO_SETTINGS_MODULE: core.test_settings
+      RUN_BROWSER_TESTS: '1'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: 'requirements*.txt'
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+          cache: npm
+      - run: python -m pip install --require-hashes -r requirements-dev.txt
+      - run: npm ci --ignore-scripts
+      - run: python -m playwright install --with-deps chromium
+      - run: python manage.py test lms.tests.test_browser --verbosity 2
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: failure()
+        with:
+          name: browser-failures
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  container:
+    name: Docker build and non-root smoke test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16@sha256:a3b7f434b2dc57ce85a67e171163eb8ab1a1ebcb39d27484661f26b1dfbe30d6
+        env:
+          POSTGRES_USER: lms
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: lms
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U lms"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - run: docker build -t english-lms:ci .
+      - name: Start the production image with an isolated database and media volume
+        run: |
+          SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(64))')"
+          docker run -d --name lms --network host \
+            -e DJANGO_SECRET_KEY="$SECRET" -e DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1 \
+            -e DATABASE_URL=postgres://lms:ci-only-password@127.0.0.1:5432/lms \
+            -e DJANGO_RUN_MIGRATIONS=true -e DJANGO_TRUST_PROXY_SSL_HEADER=True \
+            -v lms-ci-media:/app/var/media english-lms:ci
+          test "$(docker exec lms id -u)" = 10001
+          curl --fail --retry 20 --retry-delay 3 --retry-all-errors http://127.0.0.1:8000/health/ready/
+          curl --fail -H 'X-Forwarded-Proto: https' http://127.0.0.1:8000/accounts/login/
+          curl --fail -H 'X-Forwarded-Proto: https' http://127.0.0.1:8000/static/lms/app.css
+          docker exec lms python manage.py check --deploy --fail-level WARNING
+      - name: Container logs
+        if: always()
+        run: docker logs lms || true
+      - name: Clean up
+        if: always()
+        run: |
+          docker rm -f lms || true
+          docker volume rm lms-ci-media || true

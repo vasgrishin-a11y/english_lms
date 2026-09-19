@@ -1,0 +1,14 @@
+{% for attempt in page_obj %}
+<article class="attempt">
+    <h3>Попытка {{ attempt.version }}</h3>
+    <p><span class="badge badge-{{ attempt.status }}">{{ attempt.get_status_display }}</span> · {{ attempt.submitted_at|date:"d.m.Y H:i" }} {% if attempt.is_late %}<strong>— после дедлайна</strong>{% endif %}</p>
+    {% if attempt.text_answer %}<pre>{{ attempt.text_answer }}</pre>{% endif %}
+    {% if attempt.file_answer %}<p><a href="{{ attempt.file_answer.url }}">Скачать файл попытки {{ attempt.version }}</a></p>{% endif %}
+    {% if attempt.feedback %}
+        <p><strong>{{ attempt.feedback.get_decision_display }}</strong>. {% if attempt.feedback.grade != None %}Балл: {{ attempt.feedback.grade }} из {{ attempt.max_points_snapshot }}.{% else %}Балл не выставлен.{% endif %}</p>
+        {{ attempt.feedback.comment|linebreaks }}
+    {% endif %}
+    {% if user.is_superuser or user.profile.role == 'teacher' %}<p><a href="{% url 'teacher_submission_review' attempt.pk %}">Открыть попытку {{ attempt.version }} и историю проверки</a></p>{% endif %}
+</article>
+{% empty %}<p class="muted">Пока нет отправленных попыток.</p>{% endfor %}
+{% include "lms/pagination.html" %}

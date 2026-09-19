@@ -1,0 +1,9 @@
+{% extends "lms/base.html" %}
+{% block title %}Вход временно ограничен — English LMS{% endblock %}
+{% block content %}
+<div class="card login-card" role="alert">
+    <h1>Слишком много попыток входа</h1>
+    <p>Для этой учётной записи и адреса вход временно ограничен. Подождите и попробуйте снова либо обратитесь к администратору.</p>
+    <a href="{% url 'login' %}">Вернуться ко входу</a>
+</div>
+{% endblock %}

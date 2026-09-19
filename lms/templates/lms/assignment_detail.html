@@ -1,141 +1,28 @@
 {% extends "lms/base.html" %}
-
 {% block title %}{{ assignment.title }} — English LMS{% endblock %}
-
 {% block content %}
-<p>
-    <a href="{% url 'student_assignments' %}">← Ко всем заданиям</a>
-</p>
-
-<div class="card">
+<p><a href="{% url 'student_assignments' %}">← Ко всем заданиям</a></p>
+<section class="card">
     <h1>{{ assignment.title }}</h1>
-
-    <p class="muted">
-        Блок: {{ assignment.topic.block.name }} / Тема: {{ assignment.topic.title }}
-    </p>
-
-    <p>
-        Тип ответа:
-        <span class="badge">{{ assignment.get_assignment_type_display }}</span>
-    </p>
-
-    {% if assignment.deadline %}
-        <p>
-            Дедлайн:
-            <strong>{{ assignment.deadline|date:"d.m.Y H:i" }}</strong>
-        </p>
-    {% endif %}
-
-    <p>
-        Максимум баллов: <strong>{{ assignment.max_points }}</strong>
-    </p>
-
-    <h3>Условия задания</h3>
-    <div>
-        {{ assignment.description|linebreaks }}
-    </div>
-
-    {% if assignment.material_file %}
-        <p>
-            Материалы задания:
-            <a href="{{ assignment.material_file.url }}" target="_blank">
-                Скачать файл
-            </a>
-        </p>
-    {% endif %}
-</div>
-
-{% if submission %}
-    <div class="card">
-        <h2>Ваша сдача</h2>
-
-        <p>
-            Статус:
-            <span class="badge badge-{{ submission.status }}">
-                {{ submission.get_status_display }}
-            </span>
-        </p>
-
-        <p class="muted small">
-            Отправлено: {{ submission.submitted_at|date:"d.m.Y H:i" }}
-        </p>
-
-        {% if submission.text_answer %}
-            <h3>Ваш текстовый ответ</h3>
-            <pre>{{ submission.text_answer }}</pre>
-        {% endif %}
-
-        {% if submission.file_answer %}
-            <p>
-                Ваш файл:
-                <a href="{{ submission.file_answer.url }}" target="_blank">
-                    Скачать / открыть
-                </a>
-            </p>
-        {% endif %}
-
-        {% if feedback %}
-            <h3>Проверка</h3>
-
-            <p>
-                Балл:
-                <strong>{{ feedback.grade }}</strong>
-                из {{ assignment.max_points }}
-            </p>
-
-            {% if feedback.comment %}
-                <div>
-                    <strong>Комментарий преподавателя:</strong>
-                    {{ feedback.comment|linebreaks }}
-                </div>
-            {% endif %}
-        {% endif %}
-    </div>
-{% endif %}
-
-<div class="card">
-    <h2>Отправить ответ</h2>
-
+    <p class="muted">Блок: {{ assignment.topic.block.name }} / Тема: {{ assignment.topic.title }}</p>
+    <p>Тип ответа: <span class="badge">{{ assignment.get_assignment_type_display }}</span></p>
+    {% if assignment.deadline %}<p>Дедлайн: <strong>{{ assignment.deadline|date:"d.m.Y H:i" }}</strong>. Поздние попытки принимаются с отметкой о просрочке.</p>{% endif %}
+    <p>Максимум баллов новой попытки: <strong>{{ assignment.max_points }}</strong></p>
+    <h2>Условия задания</h2>
+    {{ assignment.description|linebreaks }}
+    {% if assignment.material_file %}<p><a href="{{ assignment.material_file.url }}">Скачать материалы задания</a></p>{% endif %}
+</section>
+<section class="card">
+    <h2>{% if submission %}Отправить новую попытку{% else %}Отправить ответ{% endif %}</h2>
+    <p class="muted">Отправленные ответы не изменяются. Оценка каждой попытки хранится отдельно.</p>
+    {% if conflict %}<p><a href="{% url 'assignment_detail' assignment.pk %}">Загрузить актуальную страницу</a> — сначала скопируйте введённый текст.</p>{% endif %}
     <form method="post" enctype="multipart/form-data">
-        {% csrf_token %}
-
-        {% if form.non_field_errors %}
-            <div class="alert alert-danger">
-                {{ form.non_field_errors }}
-            </div>
-        {% endif %}
-
-        {% if assignment.assignment_type == 'text' or assignment.assignment_type == 'mixed' %}
-            <p>
-                <label for="{{ form.text_answer.id_for_label }}">
-                    {{ form.text_answer.label }}
-                </label>
-                {{ form.text_answer }}
-                {{ form.text_answer.errors }}
-            </p>
-        {% endif %}
-
-        {% if assignment.assignment_type == 'file' or assignment.assignment_type == 'audio' or assignment.assignment_type == 'mixed' %}
-            <p>
-                <label for="{{ form.file_answer.id_for_label }}">
-                    {{ form.file_answer.label }}
-                </label>
-                {{ form.file_answer }}
-                {{ form.file_answer.errors }}
-
-                {% if submission.file_answer %}
-                    <br>
-                    <span class="muted small">
-                        Уже загружен файл:
-                        <a href="{{ submission.file_answer.url }}" target="_blank">
-                            посмотреть
-                        </a>
-                    </span>
-                {% endif %}
-            </p>
-        {% endif %}
-
+        {% csrf_token %}{% include "lms/form_fields.html" %}
         <button class="btn" type="submit">Отправить на проверку</button>
     </form>
-</div>
+</section>
+<section class="card">
+    <h2>История попыток</h2>
+    {% include "lms/attempt_history.html" %}
+</section>
 {% endblock %}

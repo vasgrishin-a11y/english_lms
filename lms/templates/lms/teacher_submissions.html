@@ -1,77 +1,29 @@
 {% extends "lms/base.html" %}
-
-{% block title %}Сдачи на проверке — English LMS{% endblock %}
-
+{% block title %}Сдачи и проверки — English LMS{% endblock %}
 {% block content %}
-<h1>Сдачи на проверке</h1>
-
+<h1>Сдачи и проверки</h1>
 <div class="card">
     <form method="get">
-        <p>
-            <label for="id_q">Поиск</label>
-            <input type="text" id="id_q" name="q" value="{{ query }}" placeholder="Имя ученика, задание, тема...">
-        </p>
-
-        <button class="btn" type="submit">Найти</button>
-
-        {% if query %}
-            <a class="btn btn-secondary" href="{% url 'teacher_submissions' %}">Сбросить</a>
-        {% endif %}
+        <p><label for="id_q">Поиск</label><input type="text" id="id_q" name="q" maxlength="200" value="{{ query }}" placeholder="Имя ученика, задание, тема..."></p>
+        <p><label for="id_status">Статус</label><select id="id_status" name="status">{% for value, label in queue_choices %}<option value="{{ value }}"{% if queue == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></p>
+        <button class="btn" type="submit">Показать</button>
+        <a href="{% url 'teacher_submissions' %}">Сбросить фильтры</a>
     </form>
 </div>
-
+<p class="muted">В списке — последние попытки. История доступна внутри каждой сдачи.</p>
+<div class="table-scroll" role="region" aria-label="Таблица работ, прокручивается по горизонтали" tabindex="0">
 <table>
-    <thead>
-        <tr>
-            <th>Ученик</th>
-            <th>Блок / Тема</th>
-            <th>Задание</th>
-            <th>Статус</th>
-            <th>Отправлено</th>
-            <th>Действие</th>
-        </tr>
-    </thead>
-
-    <tbody>
-        {% for submission in submissions %}
-            <tr>
-                <td>
-                    {{ submission.student.get_full_name|default:submission.student.username }}
-                </td>
-
-                <td>
-                    {{ submission.assignment.topic.block.name }}
-                    /
-                    {{ submission.assignment.topic.title }}
-                </td>
-
-                <td>
-                    {{ submission.assignment.title }}
-                </td>
-
-                <td>
-                    <span class="badge badge-{{ submission.status }}">
-                        {{ submission.get_status_display }}
-                    </span>
-                </td>
-
-                <td>
-                    {{ submission.submitted_at|date:"d.m.Y H:i" }}
-                </td>
-
-                <td>
-                    <a class="btn" href="{% url 'teacher_submission_review' submission.pk %}">
-                        Проверить
-                    </a>
-                </td>
-            </tr>
-        {% empty %}
-            <tr>
-                <td colspan="6">
-                    Нет сдач для проверки.
-                </td>
-            </tr>
-        {% endfor %}
-    </tbody>
+    <caption>Работы учеников</caption>
+    <thead><tr><th scope="col">Ученик</th><th scope="col">Блок / тема</th><th scope="col">Задание</th><th scope="col">Статус</th><th scope="col">Отправлено</th><th scope="col">Действие</th></tr></thead>
+    <tbody>{% for submission in submissions %}<tr>
+        <td>{{ submission.student.get_full_name|default:submission.student.username }}</td>
+        <td>{{ submission.assignment.topic.block.name }} / {{ submission.assignment.topic.title }}</td>
+        <td>{{ submission.assignment.title }} · попытка {{ submission.version }}</td>
+        <td><span class="badge badge-{{ submission.status }}">{{ submission.get_status_display }}</span>{% if submission.feedback and submission.feedback.grade != None %} {{ submission.feedback.grade }}/{{ submission.max_points_snapshot }}{% endif %}</td>
+        <td>{{ submission.submitted_at|date:"d.m.Y H:i" }}{% if submission.is_late %}<br>После дедлайна{% endif %}</td>
+        <td><a class="btn" href="{% url 'teacher_submission_review' submission.pk %}">Открыть</a></td>
+    </tr>{% empty %}<tr><td colspan="6">Нет сдач по выбранным фильтрам.</td></tr>{% endfor %}</tbody>
 </table>
+</div>
+{% include "lms/pagination.html" %}
 {% endblock %}
