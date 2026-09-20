@@ -1,0 +1,149 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}Главная — English LMS{% endblock %}
+{% block workspace_class %}workspace-plain{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <div>
+        <h1>Привет, {{ user.first_name|default:user.username }} 👋</h1>
+        <p class="muted mb-0">
+            Выполнено {{ totals.done }} из {{ totals.total }} заданий
+            {% if totals.waiting %}· {{ totals.waiting }} на проверке{% endif %}
+            {% if totals.revision %}· <strong>{{ totals.revision }}</strong> ждут доработки{% endif %}
+        </p>
+        <div class="row" style="margin-top:16px">
+            <a class="btn" href="{% url 'student_assignments' %}">{% icon "layers" %}Карта курса</a>
+            <a class="btn btn-secondary" href="{% url 'student_trainer' %}">{% icon "cards" %}Тренажёр слов
+                {% if due_total %}<span class="chip count">{{ due_total }}</span>{% endif %}</a>
+            <a class="btn btn-ghost" href="{% url 'student_upcoming' %}">{% icon "calendar" %}Сроки</a>
+        </div>
+    </div>
+    <div class="hero-side">
+        <div class="ring" style="--value:{{ totals.progress }}" role="img"
+             aria-label="Выполнено {{ totals.progress }} процентов заданий">
+            <span>{{ totals.progress }}%</span>
+        </div>
+        <div class="hero-progress">
+            <div class="progress progress-lg" aria-hidden="true"><span style="width:{{ totals.progress }}%"></span></div>
+            <p class="tiny muted mb-0" style="margin-top:8px">Прогресс считается по проверенным работам</p>
+        </div>
+    </div>
+</section>
+
+<div class="home-grid">
+    <section class="card">
+        <div class="card-head">
+            <h2 class="card-title">{% icon "play" %}Продолжить</h2>
+        </div>
+        {% if continue_item %}
+            <p class="strong mb-0">{{ continue_item.title }}</p>
+            <p class="muted small">{{ continue_item.topic.block.name }} · {{ continue_item.topic.title }}</p>
+            {% if continue_draft and continue_draft.text %}
+                <p class="pill-note">{% icon "save" "icon icon-sm" %}Черновик сохранён: {{ continue_draft.updated_at|date:"d.m.Y H:i" }}</p>
+                <p class="small muted draft-excerpt">{{ continue_draft.text|truncatechars:160 }}</p>
+            {% endif %}
+            <a class="btn" href="{% url 'assignment_detail' continue_item.pk %}">
+                {% if continue_draft and continue_draft.text %}Продолжить черновик{% else %}Открыть задание{% endif %}
+                {% icon "arrow-right" %}
+            </a>
+        {% else %}
+            <div class="empty">
+                <div class="empty-icon">{% icon "check-circle" "icon icon-xl" %}</div>
+                <h3>Всё сдано</h3>
+                <p>Незавершённых заданий нет. Повторите слова в тренажёре или загляните в оценки.</p>
+            </div>
+        {% endif %}
+    </section>
+
+    <section class="card">
+        <div class="card-head">
+            <h2 class="card-title">{% icon "clock" %}Ближайшие сроки</h2>
+            <a class="btn btn-ghost btn-sm" href="{% url 'student_upcoming' %}">Все сроки</a>
+        </div>
+        {% if due_soon %}
+            <ul class="task-list">
+                {% for assignment in due_soon %}
+                    {% include "lms/parts/task_item.html" with assignment=assignment state=assignment.state %}
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="muted mb-0">На ближайшие три дня дедлайнов нет.</p>
+        {% endif %}
+    </section>
+</div>
+
+<section class="card">
+    <div class="card-head">
+        <h2 class="card-title">{% icon "layers" %}Мой курс</h2>
+        <a class="btn btn-ghost btn-sm" href="{% url 'student_assignments' %}">Открыть карту</a>
+    </div>
+    {% regroup assignments by topic.block as block_groups %}
+    <ol class="roadmap">
+        {% for block_group in block_groups %}
+            {% with block=block_group.grouper %}
+            <li class="roadmap-block">
+                <div class="roadmap-head">
+                    {% if block.cefr_level %}<span class="tag tag-cefr">{{ block.cefr_level }}</span>{% endif %}
+                    <h3 class="mb-0">{{ block.name }}</h3>
+                </div>
+                {% regroup block_group.list by topic as topic_groups %}
+                <ol class="roadmap-topics">
+                    {% for topic_group in topic_groups %}
+                        <li>
+                            <p class="strong mb-0">{{ topic_group.grouper.title }}</p>
+                            <ul class="task-list">
+                                {% for assignment in topic_group.list %}
+                                    {% include "lms/parts/task_item.html" with assignment=assignment state=assignment.state %}
+                                {% endfor %}
+                            </ul>
+                        </li>
+                    {% endfor %}
+                </ol>
+            </li>
+            {% endwith %}
+        {% empty %}
+            <li>
+                <div class="empty">
+                    <div class="empty-icon">{% icon "layers" "icon icon-xl" %}</div>
+                    <h3>Заданий пока нет</h3>
+                    <p>Как только преподаватель опубликует задания, они появятся здесь.</p>
+                </div>
+            </li>
+        {% endfor %}
+    </ol>
+</section>
+
+<section class="card">
+    <div class="card-head">
+        <h2 class="card-title">{% icon "award" %}Последние оценки</h2>
+        <a class="btn btn-ghost btn-sm" href="{% url 'student_grades' %}">Все оценки</a>
+    </div>
+    {% if recent %}
+        <div class="rows">
+            {% for attempt in recent %}
+                <div class="row-item">
+                    <span class="row-main">
+                        <a class="row-title" href="{% url 'assignment_detail' attempt.assignment_id %}">{{ attempt.assignment.title }}</a>
+                        <span class="row-meta">
+                            <span>{{ attempt.assignment.topic.block.name }} · {{ attempt.assignment.topic.title }}</span>
+                            <span>Попытка {{ attempt.version }} · {{ attempt.submitted_at|date:"d.m.Y H:i" }}</span>
+                        </span>
+                        {% if attempt.feedback.comment %}<p class="feedback-note small muted mb-0">{{ attempt.feedback.comment|truncatechars:180 }}</p>{% endif %}
+                    </span>
+                    <span class="row-side">
+                        {% if attempt.feedback.grade != None %}
+                            <span class="grade-pill tnum {{ attempt.feedback.grade|grade_class:attempt.max_points_snapshot }}">{{ attempt.feedback.grade }}<small>/{{ attempt.max_points_snapshot }}</small></span>
+                        {% else %}
+                            <span class="badge badge-{{ attempt.status }}">{{ attempt.get_status_display }}</span>
+                        {% endif %}
+                    </span>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p class="muted mb-0">Проверенных работ пока нет.</p>
+    {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,10 @@
+{% load lms_tags %}
+{% if denied %}
+    <span class="pill-note">{% icon "info" "icon icon-sm" %}Черновик недоступен для этого задания</span>
+{% elif draft and draft.text %}
+    <span class="pill-note">{% icon "save" "icon icon-sm" %}Черновик сохранён {{ draft.updated_at|date:"H:i:s" }}</span>
+{% elif draft %}
+    <span class="pill-note">{% icon "save" "icon icon-sm" %}Черновик пуст</span>
+{% else %}
+    <span class="pill-note subtle">{% icon "info" "icon icon-sm" %}Текст сохраняется автоматически</span>
+{% endif %}

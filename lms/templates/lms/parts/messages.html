@@ -1,0 +1,12 @@
+{% load lms_tags %}
+{% for message in messages %}
+    <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags|default:'info' }}{% endif %}"
+         role="{% if message.tags == 'error' or message.tags == 'warning' %}alert{% else %}status{% endif %}"
+         data-autohide="6000">
+        {% if message.tags == 'success' %}{% icon "check-circle" %}
+        {% elif message.tags == 'error' %}{% icon "alert" %}
+        {% elif message.tags == 'warning' %}{% icon "alert" %}
+        {% else %}{% icon "info" %}{% endif %}
+        <span>{{ message }}</span>
+    </div>
+{% endfor %}

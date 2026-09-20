@@ -1,0 +1,19 @@
+{% load lms_tags %}
+{% if items %}
+<nav aria-label="Хлебные крошки">
+    <ol class="crumbs">
+        {% for item in items %}
+            <li>
+                {% if not forloop.first %}<span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span>{% endif %}
+                {% if item.url and not forloop.last %}
+                    <a href="{{ item.url }}">{{ item.label }}</a>
+                {% elif forloop.last %}
+                    <span aria-current="page">{{ item.label }}</span>
+                {% else %}
+                    <span>{{ item.label }}</span>
+                {% endif %}
+            </li>
+        {% endfor %}
+    </ol>
+</nav>
+{% endif %}

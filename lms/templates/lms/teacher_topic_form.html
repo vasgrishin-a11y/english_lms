@@ -1,0 +1,41 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}{% if form.instance.pk %}Тема: {{ form.instance.title }}{% else %}Новая тема{% endif %} — English LMS{% endblock %}
+{% block workspace_class %}workspace-plain{% endblock %}
+
+{% block content %}
+<nav aria-label="Хлебные крошки">
+    <ol class="crumbs">
+        <li><a href="{% url 'teacher_curriculum' %}">Карта курса</a></li>
+        {% if form.instance.pk %}<li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span>{{ form.instance.block.name }}</span></li>{% endif %}
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">{% if form.instance.pk %}{{ form.instance.title }}{% else %}Новая тема{% endif %}</span></li>
+    </ol>
+</nav>
+
+<div class="split">
+    <div class="split-main">
+        <section class="card">
+            <h1 class="card-title">{% if form.instance.pk %}Изменить тему{% else %}Новая тема{% endif %}</h1>
+            <form method="post" novalidate>
+                {% csrf_token %}
+                {% include "lms/form_fields.html" %}
+                <div class="row">
+                    <button class="btn" type="submit">{% icon "save" %}Сохранить тему</button>
+                    <a class="btn btn-secondary" href="{% url 'teacher_curriculum' %}">Отмена</a>
+                    {% if form.instance.pk %}
+                        <a class="btn btn-ghost" href="{% url 'teacher_assignment_new' %}?topic={{ form.instance.pk }}">{% icon "plus" %}Добавить задание</a>
+                    {% endif %}
+                </div>
+            </form>
+        </section>
+    </div>
+    <div class="split-side">
+        <div class="card card-pad-sm">
+            <p class="rail-title">Подсказка</p>
+            <p class="small muted">Тема — раздел внутри блока. К теме можно привязать квизлеты: ученик увидит карточки рядом с заданиями и в тренажёре.</p>
+            <p class="small muted mb-0">Порядок тем внутри блока влияет на дорожную карту.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

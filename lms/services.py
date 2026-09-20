@@ -17,7 +17,20 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from .decorators import get_user_role
-from .models import Assignment, Feedback, Profile, Submission, SubmissionEvent
+from .models import (
+    AnswerDraft,
+    Assignment,
+    CardReview,
+    Feedback,
+    Flashcard,
+    FlashcardDeck,
+    Profile,
+    Question,
+    QuizAttempt,
+    Submission,
+    SubmissionEvent,
+)
+from .scoring import answers_summary, score_quiz
 
 logger = logging.getLogger("lms.activity")
 
@@ -111,6 +124,8 @@ def submit_assignment(*, student, assignment_id, expected_version, text_answer, 
             SubmissionEvent.objects.create(
                 submission=attempt, actor=student, action=SubmissionEvent.Action.SUBMITTED
             )
+            # Ответ отправлен — черновик больше не нужен.
+            AnswerDraft.objects.filter(student=student, assignment=assignment).delete()
             transaction.on_commit(
                 lambda: logger.info(
                     "submission.created id=%s version=%s actor=%s",
@@ -188,3 +203,243 @@ def review_submission(
         )
     )
     return feedback
+
+
+# ── Тесты с автопроверкой, черновики и карточки ────────────────────────────
+#
+# Тот же контракт целостности, что и у ручной сдачи: блокировка строки ученика,
+# проверка версии, лимит частоты, одна транзакция на попытку и её результат.
+
+RATING_AGAIN = 1
+RATING_HARD = 2
+RATING_GOOD = 3
+RATING_EASY = 4
+RATING_CHOICES = {
+    "again": RATING_AGAIN,
+    "hard": RATING_HARD,
+    "good": RATING_GOOD,
+    "easy": RATING_EASY,
+}
+
+
+def submit_quiz(*, student, assignment_id, expected_version, answers):
+    """Автопроверяемая попытка: Submission + QuizAttempt + Feedback в одной транзакции."""
+    attempt = None
+    try:
+        with transaction.atomic():
+            student = _lock_student(student.pk)
+            if not student.is_active or get_user_role(student) != Profile.Role.STUDENT:
+                raise PermissionDenied
+            assignment = (
+                Assignment.objects.select_for_update(of=("self",))
+                .select_related("topic__block")
+                .get(pk=assignment_id)
+            )
+            if not assignment.is_visible or not assignment.is_quiz:
+                raise PermissionDenied
+            latest = (
+                Submission.objects.filter(student=student, assignment=assignment)
+                .order_by("-version")
+                .first()
+            )
+            actual_version = latest.version if latest else 0
+            if expected_version != actual_version:
+                raise ConflictError(
+                    "Тест уже отправлен или страница устарела. Обновите её перед новой попыткой."
+                )
+            recent = Submission.objects.filter(
+                student=student, submitted_at__gte=timezone.now() - timedelta(hours=1)
+            ).count()
+            if recent >= settings.LMS_SUBMISSIONS_PER_HOUR:
+                raise RateLimitError("Слишком много отправок. Повторите позже.")
+            questions = list(
+                Question.objects.filter(assignment=assignment)
+                .prefetch_related("choices")
+                .order_by("order", "pk")
+            )
+            if not questions:
+                raise ValidationError("В этом тесте пока нет вопросов. Обратитесь к преподавателю.")
+            result = score_quiz(questions, answers)
+            if assignment.max_points != result["max_score"]:
+                # Инвариант: максимум задания равен сумме баллов вопросов.
+                assignment.max_points = result["max_score"]
+                assignment.save(update_fields=["max_points", "updated_at"])
+            attempt = Submission(
+                student=student,
+                assignment=assignment,
+                version=actual_version + 1,
+                text_answer=answers_summary(questions, result),
+                status=Submission.Status.CHECKED,
+                max_points_snapshot=assignment.max_points,
+                deadline_snapshot=assignment.deadline,
+            )
+            attempt.save(force_insert=True)
+            QuizAttempt.objects.create(
+                submission=attempt,
+                score=result["score"],
+                max_score=result["max_score"],
+                correct_count=result["correct_count"],
+                total_count=result["total_count"],
+                answers=result["details"],
+            )
+            Feedback.objects.create(
+                submission=attempt,
+                teacher=None,
+                decision="checked",
+                grade=result["score"],
+                comment=(
+                    "Автоматическая проверка: "
+                    f"{result['correct_count']} из {result['total_count']} верных ответов."
+                ),
+            )
+            SubmissionEvent.objects.create(
+                submission=attempt, actor=student, action=SubmissionEvent.Action.SUBMITTED
+            )
+            SubmissionEvent.objects.create(
+                submission=attempt,
+                actor=None,
+                action=SubmissionEvent.Action.REVIEWED,
+                decision="checked",
+                grade=result["score"],
+                comment="Автопроверка теста",
+            )
+            AnswerDraft.objects.filter(student=student, assignment=assignment).delete()
+            transaction.on_commit(
+                lambda: logger.info(
+                    "quiz.submitted id=%s version=%s score=%s/%s",
+                    attempt.pk,
+                    attempt.version,
+                    result["score"],
+                    result["max_score"],
+                )
+            )
+        return attempt
+    except Exception as exc:
+        if isinstance(exc, IntegrityError) and (
+            "unique_submission_attempt" in str(exc) or "lms_submission.student_id" in str(exc)
+        ):
+            raise ConflictError("Тест уже отправлен. Обновите страницу.") from exc
+        raise
+
+
+@transaction.atomic
+def save_answer_draft(*, student, assignment_id, text):
+    """Черновик ответа. Существует отдельно от попыток и не нарушает их неизменяемость."""
+    if not student.is_active or get_user_role(student) != Profile.Role.STUDENT:
+        raise PermissionDenied
+    assignment = Assignment.objects.filter(pk=assignment_id).first()
+    if not assignment or not assignment.is_visible or assignment.is_quiz:
+        raise PermissionDenied
+    draft, _ = AnswerDraft.objects.update_or_create(
+        student=student,
+        assignment=assignment,
+        defaults={"text": (text or "")[:20000]},
+    )
+    return draft
+
+
+def apply_sm2(review, rating):
+    """Упрощённый SM-2: оценка < 3 возвращает карточку в очередь через 10 минут."""
+    rating = max(1, min(5, int(rating)))
+    now = timezone.now()
+    if rating < 3:
+        review.repetitions = 0
+        review.interval_days = 0
+        review.lapses += 1
+        review.ease = max(1.3, round(review.ease - 0.2, 3))
+        review.due_at = now + timedelta(minutes=10)
+        return review
+    review.repetitions += 1
+    if review.repetitions == 1:
+        review.interval_days = 1
+    elif review.repetitions == 2:
+        review.interval_days = 6
+    else:
+        review.interval_days = max(1, round(review.interval_days * review.ease))
+    review.ease = min(
+        3.5,
+        max(1.3, round(review.ease + (0.1 - (5 - rating) * (0.08 + (5 - rating) * 0.02)), 3)),
+    )
+    review.due_at = now + timedelta(days=review.interval_days)
+    return review
+
+
+@transaction.atomic
+def review_flashcard(*, student, card_id, rating):
+    if rating not in RATING_CHOICES.values():
+        raise ValidationError({"rating": "Недопустимая оценка повторения."})
+    if not student.is_active or get_user_role(student) != Profile.Role.STUDENT:
+        raise PermissionDenied
+    card = Flashcard.objects.select_related("deck__topic__block").filter(pk=card_id).first()
+    if not card:
+        raise PermissionDenied
+    deck = card.deck
+    if not (deck.is_active and deck.topic.is_active and deck.topic.block.is_active):
+        raise PermissionDenied
+    review, created = CardReview.objects.get_or_create(card=card, student=student)
+    if not created:
+        review = CardReview.objects.select_for_update().get(pk=review.pk)
+    apply_sm2(review, rating)
+    review.save()
+    return review
+
+
+def practice_queue(*, student, deck, limit=20):
+    """Карточки к повтору: сначала просроченные, затем новые. Один запрос на состояние."""
+    cards = list(deck.cards.all())
+    reviews = {
+        review.card_id: review
+        for review in CardReview.objects.filter(student=student, card__deck=deck)
+    }
+    now = timezone.now()
+    due = []
+    fresh = []
+    for card in cards:
+        review = reviews.get(card.pk)
+        if review is None:
+            fresh.append(card)
+        elif review.due_at <= now:
+            due.append((review.due_at, card))
+    due = [card for _, card in sorted(due, key=lambda item: item[0])]
+    queue = (due + fresh)[: max(1, int(limit))]
+    return {
+        "queue": queue,
+        "due": len(due),
+        "fresh": len(fresh),
+        "total": len(cards),
+        "learned": sum(1 for review in reviews.values() if review.interval_days >= 21),
+    }
+
+
+def deck_stats(student):
+    """Сводка по всем активным наборам карточек для домашней страницы ученика.
+
+    Бюджет: 3 запроса (наборы, число карточек, состояния повторений).
+    """
+    now = timezone.now()
+    decks = list(
+        FlashcardDeck.objects.filter(
+            is_active=True, topic__is_active=True, topic__block__is_active=True
+        )
+        .select_related("topic__block")
+        .order_by("topic__block__order", "topic__order", "order", "pk")
+    )
+    totals = {deck.pk: 0 for deck in decks}
+    for deck_id in Flashcard.objects.filter(deck__in=decks).values_list("deck_id", flat=True):
+        totals[deck_id] = totals.get(deck_id, 0) + 1
+    reviewed = {deck.pk: 0 for deck in decks}
+    due = {deck.pk: 0 for deck in decks}
+    for row in CardReview.objects.filter(student=student, card__deck__in=decks).values_list(
+        "card__deck_id", "due_at"
+    ):
+        deck_id, due_at = row
+        reviewed[deck_id] = reviewed.get(deck_id, 0) + 1
+        if due_at <= now:
+            due[deck_id] = due.get(deck_id, 0) + 1
+    for deck in decks:
+        deck.card_total = totals.get(deck.pk, 0)
+        deck.reviewed_count = reviewed.get(deck.pk, 0)
+        deck.due_count = due.get(deck.pk, 0) + max(
+            0, totals.get(deck.pk, 0) - reviewed.get(deck.pk, 0)
+        )
+    return decks

@@ -1,0 +1,42 @@
+{% load lms_tags %}
+<div class="trainer-stage" id="trainer-stage">
+    {% if card %}
+        <p class="tiny muted center">Карточка {{ queue|length }} в очереди · нажмите на карточку, чтобы перевернуть</p>
+        <button type="button" class="flashcard" data-flashcard aria-label="Карточка: {{ card.front }}. Нажмите, чтобы увидеть перевод.">
+            <span class="flashcard-inner">
+                <span class="flashcard-face">
+                    <span class="flashcard-word">{{ card.front }}</span>
+                    <span class="flashcard-hint">Показать ответ</span>
+                </span>
+                <span class="flashcard-back">
+                    <span class="flashcard-word">{{ card.back }}</span>
+                    {% if card.example %}<span class="flashcard-hint">«{{ card.example }}»</span>{% endif %}
+                    <span class="flashcard-hint">Оцените, насколько уверенно вспомнили</span>
+                </span>
+            </span>
+        </button>
+        <form class="rating-row" method="post" action="{% url 'trainer_session' deck.pk %}"
+              hx-post="{% url 'trainer_session' deck.pk %}" hx-target="#trainer-stage" hx-swap="outerHTML">
+            {% csrf_token %}
+            <button class="btn btn-secondary" type="submit" name="rating" value="again">{% icon "refresh" %}Не помню</button>
+            <button class="btn btn-secondary" type="submit" name="rating" value="hard">{% icon "alert" %}С трудом</button>
+            <button class="btn" type="submit" name="rating" value="good">{% icon "check" %}Помню</button>
+            <button class="btn btn-quiet" type="submit" name="rating" value="easy">{% icon "star" %}Легко</button>
+        </form>
+        <p class="tiny muted center mb-0">Клавиши: <kbd>1</kbd> не помню · <kbd>2</kbd> с трудом · <kbd>3</kbd> помню · <kbd>4</kbd> легко · <kbd>Пробел</kbd> перевернуть</p>
+    {% else %}
+        <div class="empty">
+            <div class="empty-icon">{% icon "award" "icon icon-xl" %}</div>
+            <h3>Сессия завершена</h3>
+            <p>Все карточки из очереди повторены. Следующие повторы придут по расписанию интервалов.</p>
+            <div class="row">
+                <a class="btn" href="{% url 'student_trainer' %}">К списку наборов</a>
+                <form method="post" action="{% url 'trainer_session' deck.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="reset" value="1">
+                    <button class="btn btn-secondary" type="submit">{% icon "refresh" %}Новая сессия</button>
+                </form>
+            </div>
+        </div>
+    {% endif %}
+</div>

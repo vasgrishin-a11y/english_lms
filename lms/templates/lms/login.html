@@ -1,13 +1,17 @@
 {% extends "lms/base.html" %}
+{% load lms_tags %}
 {% block title %}Вход — English LMS{% endblock %}
+{% block workspace_class %}workspace-plain{% endblock %}
 {% block content %}
 <div class="card login-card">
+    <div class="brand-mark">{% icon "compass" "icon icon-xl" %}</div>
     <h1>Вход в систему</h1>
-    <form method="post">
+    <p class="muted small center">Учебное пространство: задания, проверка, оценки и тренажёры.</p>
+    <form method="post" class="stack">
         {% csrf_token %}
         {% include "lms/form_fields.html" %}
-        <button class="btn" type="submit">Войти</button>
+        <button class="btn btn-lg btn-block" type="submit">Войти</button>
     </form>
-    <p class="muted small">Учётные записи создаёт администратор. Для восстановления доступа обратитесь к нему.</p>
+    <p class="muted small center mb-0">Учётные записи создаёт администратор. Для восстановления доступа обратитесь к нему.</p>
 </div>
 {% endblock %}

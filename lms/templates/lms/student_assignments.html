@@ -1,60 +1,139 @@
 {% extends "lms/base.html" %}
 {% load lms_tags %}
 
-{% block title %}Мои задания — English LMS{% endblock %}
+{% block title %}Карта курса — English LMS{% endblock %}
+
+{% block rail %}
+<aside class="rail" aria-label="Поиск и сводка по курсу">
+    <form method="get" class="rail-card" role="search">
+        <label for="id_q">Поиск по курсу</label>
+        <div class="search">
+            {% icon "search" %}
+            <input id="id_q" type="search" name="q" maxlength="200" value="{{ query }}" placeholder="Задание, тема, блок…">
+        </div>
+        <input type="hidden" name="mode" value="{{ mode }}">
+        <div class="row" style="margin-top:12px">
+            <button class="btn btn-sm" type="submit">Найти</button>
+            {% if query %}<a class="btn btn-ghost btn-sm" href="{% url 'student_assignments' %}">Сбросить</a>{% endif %}
+        </div>
+    </form>
+
+    <div class="rail-card">
+        <p class="rail-title">Прогресс курса</p>
+        <div class="row row-tight">
+            <div class="ring" style="--value:{{ totals.progress }}" role="img" aria-label="Выполнено {{ totals.progress }} процентов">
+                <span>{{ totals.progress }}%</span>
+            </div>
+            <div class="grow">
+                <p class="small mb-0"><strong class="tnum">{{ totals.done }}</strong> из <span class="tnum">{{ totals.total }}</span> заданий проверено</p>
+                <p class="tiny muted mb-0">{% if totals.waiting %}{{ totals.waiting }} ждут проверки · {% endif %}{{ totals.blocks }} блока · {{ totals.topics }} тем</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="rail-card">
+        <p class="rail-title">Вид</p>
+        <div class="tabs" role="group" aria-label="Вид каталога">
+            <a class="tab{% if mode == 'map' %} is-active{% endif %}"{% if mode == 'map' %} aria-current="page"{% endif %} href="{% querystring mode='map' %}">{% icon "compass" "icon icon-sm" %}Карта</a>
+            <a class="tab{% if mode == 'list' %} is-active{% endif %}"{% if mode == 'list' %} aria-current="page"{% endif %} href="{% querystring mode='list' %}">{% icon "list" "icon icon-sm" %}Список</a>
+        </div>
+        <p class="tiny muted" style="margin-top:12px">Карта группирует задания по блокам и темам — видно, где вы находитесь в курсе.</p>
+    </div>
+
+    <div class="rail-card">
+        <p class="rail-title">Обозначения</p>
+        <ul class="col" style="gap:6px;margin:0;padding:0;list-style:none">
+            <li><span class="badge badge-outline">{% icon "circle-dashed" "icon icon-sm" %}Не сдано</span></li>
+            <li><span class="badge badge-submitted">{% icon "clock" "icon icon-sm" %}Ждёт проверки</span></li>
+            <li><span class="badge badge-needs_revision">{% icon "refresh" "icon icon-sm" %}Нужно доработать</span></li>
+            <li><span class="badge badge-checked">{% icon "check-circle" "icon icon-sm" %}Проверено</span></li>
+        </ul>
+    </div>
+</aside>
+{% endblock %}
 
 {% block content %}
-<h1>Мои задания</h1>
-<form method="get" class="card">
-    <label for="id_q">Найти задание</label>
-    <input id="id_q" type="text" name="q" maxlength="200" value="{{ query }}">
-    <button type="submit" class="btn">Найти</button>
-</form>
+<div class="content-head">
+    <div>
+        <h1>Карта курса</h1>
+        <p class="page-note">Блоки → темы → задания. Статус и оценка — по последней попытке; предыдущие попытки хранятся в истории задания.</p>
+    </div>
+    {% if query %}<span class="badge badge-info">Найдено: {{ page_obj.paginator.count }}</span>{% endif %}
+</div>
 
-{% if not blocks_data %}
+{% if page_obj.object_list %}
+    {% if mode == 'map' %}
+        {% regroup page_obj by topic.block.name as block_groups %}
+        {% for block_group in block_groups %}
+            {% with block=block_group.list.0.topic.block %}
+                <section class="card" aria-labelledby="block-{{ block.pk }}">
+                    <div class="card-head">
+                        <div>
+                            <div class="row row-tight">
+                                {% if block.cefr_level %}<span class="tag tag-cefr">{{ block.cefr_level }}</span>{% endif %}
+                                <h2 id="block-{{ block.pk }}" class="mb-0">{{ block.name }}</h2>
+                            </div>
+                            {% if block.description %}<p class="muted small mb-0">{{ block.description }}</p>{% endif %}
+                        </div>
+                        <span class="tiny muted tnum">{{ block_group.list|length }} задани{{ block_group.list|length|pluralize:"е,я,й" }} на странице</span>
+                    </div>
+
+                    {% regroup block_group.list by topic.title as topic_groups %}
+                    {% for topic_group in topic_groups %}
+                        {% with topic=topic_group.list.0.topic %}
+                            <div class="panel" style="margin-bottom:12px">
+                                <div class="row row-between">
+                                    <h3 class="mb-0">{% icon "book" %} {{ topic.title }}</h3>
+                                    <span class="tiny muted tnum">{{ topic_group.list|length }}</span>
+                                </div>
+                                {% if topic.description %}<p class="muted small">{{ topic.description }}</p>{% endif %}
+                                <ul class="task-list">
+                                    {% for assignment in topic_group.list %}
+                                        {% include "lms/parts/task_item.html" with assignment=assignment state=assignment.state %}
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        {% endwith %}
+                    {% endfor %}
+                </section>
+            {% endwith %}
+        {% endfor %}
+    {% else %}
+        <section class="card">
+            {% for assignment in page_obj %}
+                <div class="row-item" style="margin-bottom:8px">
+                    <span class="row-main">
+                        <a class="row-title" href="{% url 'assignment_detail' assignment.pk %}">{{ assignment.title }}</a>
+                        <span class="row-meta">
+                            <span>{{ assignment.topic.block.name }} · {{ assignment.topic.title }}</span>
+                            <span class="tag">{% icon assignment.assignment_type|type_icon "icon icon-sm" %}{{ assignment.get_assignment_type_display }}</span>
+                            {% if assignment.deadline %}<span>{% icon "calendar" "icon icon-sm" %}{{ assignment.deadline|human_due }}</span>{% endif %}
+                        </span>
+                    </span>
+                    <span class="row-side">
+                        {% if assignment.state.status %}
+                            <span class="badge badge-{{ assignment.state.status }}">{% icon assignment.state.status|status_icon "icon icon-sm" %}{{ assignment.state.status|status_label }}</span>
+                            {% if assignment.state.grade != None %}
+                                <span class="grade-pill tnum {{ assignment.state.grade|grade_class:assignment.state.max_points }}">{{ assignment.state.grade }}<small>/{{ assignment.state.max_points }}</small></span>
+                            {% endif %}
+                        {% else %}
+                            <span class="badge badge-outline">Не сдано</span>
+                        {% endif %}
+                    </span>
+                </div>
+            {% endfor %}
+        </section>
+    {% endif %}
+{% else %}
     <div class="card">
-        <p>Пока нет активных заданий.</p>
+        <div class="empty">
+            <div class="empty-icon">{% icon "search" "icon icon-xl" %}</div>
+            <h3>{% if query %}Ничего не нашлось{% else %}Пока нет опубликованных заданий{% endif %}</h3>
+            <p>{% if query %}Попробуйте другой запрос — например, название темы или блока.{% else %}Как только преподаватель опубликует задания, они появятся на этой странице.{% endif %}</p>
+            {% if query %}<a class="btn btn-secondary" href="{% url 'student_assignments' %}">Показать все задания</a>{% endif %}
+        </div>
     </div>
 {% endif %}
 
-{% for block_item in blocks_data %}
-    <div class="card">
-        <h2>{{ block_item.block.name }}</h2>
-
-        {% if block_item.block.description %}
-            <p class="muted">{{ block_item.block.description }}</p>
-        {% endif %}
-
-        {% for topic_item in block_item.topics %}
-            <h3>{{ topic_item.topic.title }}</h3>
-
-            {% if topic_item.topic.description %}
-                <p class="muted">{{ topic_item.topic.description }}</p>
-            {% endif %}
-
-            <ul>
-                {% for assignment in topic_item.assignments %}
-                    <li>
-                        <a href="{% url 'assignment_detail' assignment.pk %}">
-                            {{ assignment.title }}
-                        </a>
-
-                        <span class="badge">
-                            {{ assignment.get_assignment_type_display }}
-                        </span>
-
-                        <span class="badge badge-{{ assignment.latest_status|default:'new' }}">{{ assignment.latest_status|status_label }}</span>
-                        {% if assignment.latest_grade != None %}<span>Балл: {{ assignment.latest_grade }}</span>{% endif %}
-                        {% if assignment.deadline %}
-                            <span class="muted small">
-                                До: {{ assignment.deadline|date:"d.m.Y H:i" }}
-                            </span>
-                        {% endif %}
-                    </li>
-                {% endfor %}
-            </ul>
-        {% endfor %}
-    </div>
-{% endfor %}
 {% include "lms/pagination.html" %}
 {% endblock %}

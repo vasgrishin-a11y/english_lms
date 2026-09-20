@@ -1,0 +1,54 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}Ученики — English LMS{% endblock %}
+{% block workspace_class %}workspace-wide{% endblock %}
+
+{% block content %}
+<div class="content-head">
+    <div>
+        <h1>Ученики</h1>
+        <p class="page-note">Прогресс считается по опубликованным заданиям ({{ total_assignments }} в курсе) и последним попыткам.</p>
+    </div>
+    <form method="get" class="row row-tight" role="search">
+        <label for="id_q" class="sr-only">Поиск ученика</label>
+        <div class="search">
+            {% icon "search" %}
+            <input type="search" id="id_q" name="q" maxlength="200" value="{{ query }}" placeholder="Имя, логин или Telegram…">
+        </div>
+        <button class="btn btn-secondary btn-sm" type="submit">Найти</button>
+        {% if query %}<a class="btn btn-ghost btn-sm" href="{% url 'teacher_students' %}">Сбросить</a>{% endif %}
+    </form>
+</div>
+
+<section class="card">
+    {% for student in students %}
+        <div class="row-item" style="margin-bottom:8px">
+            <span class="avatar" aria-hidden="true">{{ student|initials }}</span>
+            <span class="row-main">
+                <a class="row-title" href="{% url 'teacher_student_detail' student.pk %}">{{ student.get_full_name|default:student.username }}</a>
+                <span class="row-meta">
+                    <span>@{{ student.username }}</span>
+                    {% if student.profile.telegram %}<span>{% icon "send" "icon icon-sm" %}{{ student.profile.telegram }}</span>{% endif %}
+                    {% if student.stats.last %}<span>{% icon "clock" "icon icon-sm" %}последняя сдача {{ student.stats.last|date:"d.m.Y" }}</span>{% else %}<span>сдач пока нет</span>{% endif %}
+                </span>
+                <div class="progress" role="img" aria-label="Проверено {{ student.stats.checked }} из {{ total_assignments }} заданий">
+                    <span class="progress-bar" style="width:{{ student.stats.progress }}%"></span>
+                </div>
+            </span>
+            <span class="row-side">
+                {% if student.stats.waiting %}<span class="badge badge-submitted">ждут {{ student.stats.waiting }}</span>{% endif %}
+                {% if student.stats.revision %}<span class="badge badge-needs_revision">доработка {{ student.stats.revision }}</span>{% endif %}
+                {% if student.stats.average != None %}<span class="grade-pill tnum {{ student.stats.average|grade_class }}">{{ student.stats.average|floatformat:0 }}<small>%</small></span>{% endif %}
+                <a class="btn btn-sm" href="{% url 'teacher_student_detail' student.pk %}">Открыть</a>
+            </span>
+        </div>
+    {% empty %}
+        <div class="empty">
+            <div class="empty-icon">{% icon "users" "icon icon-xl" %}</div>
+            <h3>Ученики не найдены</h3>
+            <p>{% if query %}Попробуйте изменить поисковый запрос.{% else %}Создайте учётные записи учеников в административной панели.{% endif %}</p>
+        </div>
+    {% endfor %}
+</section>
+{% endblock %}

@@ -1,0 +1,95 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}Вопросы теста: {{ assignment.title }} — English LMS{% endblock %}
+{% block workspace_class %}workspace-wide{% endblock %}
+
+{% block content %}
+<nav aria-label="Хлебные крошки">
+    <ol class="crumbs">
+        <li><a href="{% url 'teacher_curriculum' %}">Карта курса</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_assignment_form' assignment.pk %}">{{ assignment.title }}</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">Вопросы</span></li>
+    </ol>
+</nav>
+
+<div class="content-head">
+    <div>
+        <h1>Вопросы теста</h1>
+        <p class="page-note">Максимум баллов задания пересчитывается автоматически по сумме вопросов: сейчас <strong class="tnum">{{ total_points }}</strong> из {{ questions|length }} вопросов.</p>
+    </div>
+    <div class="row">
+        <a class="btn btn-secondary" href="{% url 'teacher_assignment_preview' assignment.pk %}?answers=1">{% icon "eye" %}Предпросмотр с ответами</a>
+        <a class="btn btn-ghost" href="{% url 'teacher_assignment_form' assignment.pk %}">{% icon "pencil" %}Настройки задания</a>
+    </div>
+</div>
+
+<div class="split">
+    <div class="split-main">
+        <section class="card">
+            <div class="card-head"><h2 class="card-title">{% icon "list" %}Список вопросов</h2></div>
+            {% if questions %}
+                <ol class="col" style="padding:0;list-style:none;margin:0">
+                    {% for question in questions %}
+                        <li class="panel" style="margin-bottom:8px">
+                            <div class="row row-tight">
+                                <strong>{{ forloop.counter }}. {{ question.text }}</strong>
+                                <span class="tag">{{ question.get_kind_display }}</span>
+                                <span class="tiny muted tnum">{{ question.points }} б.</span>
+                            </div>
+                            {% if question.kind == 'mcq' or question.kind == 'multi' %}
+                                <ul class="col" style="padding-left:18px;margin:8px 0 0">
+                                    {% for choice in question.choices.all %}
+                                        <li{% if choice.is_correct %} class="is-correct"{% endif %}>{{ choice.text }}{% if choice.is_correct %} — верный{% endif %}</li>
+                                    {% endfor %}
+                                </ul>
+                            {% elif question.kind == 'match' %}
+                                <ul class="col" style="padding-left:18px;margin:8px 0 0">
+                                    {% for pair in question.pairs %}<li>{{ pair.term }} → {{ pair.definition }}</li>{% endfor %}
+                                </ul>
+                            {% elif question.kind == 'gap' %}
+                                <p class="small mb-0" style="margin-top:8px">Пропуски: <strong>{{ question.gaps|join:", " }}</strong></p>
+                            {% endif %}
+                            {% if question.explanation %}<p class="tiny muted mb-0" style="margin-top:6px">{% icon "lightbulb" "icon icon-sm" %} {{ question.explanation }}</p>{% endif %}
+                            <div class="row" style="margin-top:8px">
+                                <a class="btn btn-secondary btn-sm" href="{% url 'teacher_question_edit' question.pk %}">{% icon "pencil" %}Изменить</a>
+                                <form method="post" action="{% url 'teacher_question_delete' question.pk %}" data-confirm="Удалить вопрос «{{ question.text|truncatechars:60 }}»?">
+                                    {% csrf_token %}
+                                    <button class="btn btn-danger-ghost btn-sm" type="submit">{% icon "trash" %}Удалить</button>
+                                </form>
+                            </div>
+                        </li>
+                    {% endfor %}
+                </ol>
+            {% else %}
+                <div class="empty">
+                    <div class="empty-icon">{% icon "list" "icon icon-xl" %}</div>
+                    <h3>Вопросов пока нет</h3>
+                    <p>Добавьте первый вопрос справа. Тест без вопросов ученик сдать не сможет.</p>
+                </div>
+            {% endif %}
+        </section>
+    </div>
+
+    <div class="split-side">
+        <section class="card card-pad-sm">
+            <div class="card-head" style="margin-bottom:12px"><h2 class="card-title">{% icon "plus" %}Новый вопрос</h2></div>
+            <form method="post" novalidate>
+                {% csrf_token %}
+                {% include "lms/form_fields.html" %}
+                <button class="btn btn-block" type="submit">{% icon "plus" %}Добавить вопрос</button>
+            </form>
+        </section>
+        <div class="card card-pad-sm">
+            <p class="rail-title">Форматы ответов</p>
+            <ul class="col tiny muted" style="padding-left:18px;margin:0">
+                <li><strong>Один вариант</strong> — по варианту в строке, верный помечается <code>*</code>.</li>
+                <li><strong>Несколько вариантов</strong> — то же, но <code>*</code> можно поставить у нескольких.</li>
+                <li><strong>Пропуски</strong> — в тексте задания используйте <code>___</code>, а в поле ответов перечислите верные слова через запятую.</li>
+                <li><strong>Соответствия</strong> — пары в формате <code>термин | определение</code>, по одной на строку.</li>
+            </ul>
+            <p class="tiny muted">Один вариант оценивается целиком; в тесте на несколько вариантов балл делится между верными; в соответствиях — по числу верных пар.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

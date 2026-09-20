@@ -1,14 +1,47 @@
+{% load lms_tags %}
 {% for attempt in page_obj %}
 <article class="attempt">
-    <h3>Попытка {{ attempt.version }}</h3>
-    <p><span class="badge badge-{{ attempt.status }}">{{ attempt.get_status_display }}</span> · {{ attempt.submitted_at|date:"d.m.Y H:i" }} {% if attempt.is_late %}<strong>— после дедлайна</strong>{% endif %}</p>
+    <div class="attempt-head">
+        <h3 class="mb-0">Попытка {{ attempt.version }}</h3>
+        <span class="badge badge-{{ attempt.status }}">{% icon attempt.status|status_icon "icon icon-sm" %}{{ attempt.get_status_display }}</span>
+        <span class="tiny muted tnum">{{ attempt.submitted_at|date:"d.m.Y H:i" }}</span>
+        {% if attempt.is_late %}<span class="badge badge-needs_revision">после дедлайна</span>{% endif %}
+        {% if attempt.feedback and attempt.feedback.grade != None %}
+            <span class="grade-pill tnum {{ attempt.feedback.grade|grade_class:attempt.max_points_snapshot }}">{{ attempt.feedback.grade }}<small>/{{ attempt.max_points_snapshot }}</small></span>
+        {% endif %}
+    </div>
     {% if attempt.text_answer %}<pre>{{ attempt.text_answer }}</pre>{% endif %}
-    {% if attempt.file_answer %}<p><a href="{{ attempt.file_answer.url }}">Скачать файл попытки {{ attempt.version }}</a></p>{% endif %}
-    {% if attempt.feedback %}
-        <p><strong>{{ attempt.feedback.get_decision_display }}</strong>. {% if attempt.feedback.grade != None %}Балл: {{ attempt.feedback.grade }} из {{ attempt.max_points_snapshot }}.{% else %}Балл не выставлен.{% endif %}</p>
-        {{ attempt.feedback.comment|linebreaks }}
+    {% if attempt.file_answer %}
+        <div class="media-frame">
+            {% if attempt.file_answer.name|media_kind == 'image' %}
+                <img src="{% url 'media_preview' attempt.file_answer.name %}" alt="Файл попытки {{ attempt.version }}" loading="lazy">
+            {% elif attempt.file_answer.name|media_kind == 'audio' %}
+                <audio controls preload="none" src="{% url 'media_preview' attempt.file_answer.name %}"></audio>
+            {% endif %}
+            <a class="btn btn-secondary btn-sm" href="{{ attempt.file_answer.url }}">{% icon "download" %}Скачать файл попытки {{ attempt.version }}</a>
+        </div>
     {% endif %}
-    {% if user.is_superuser or user.profile.role == 'teacher' %}<p><a href="{% url 'teacher_submission_review' attempt.pk %}">Открыть попытку {{ attempt.version }} и историю проверки</a></p>{% endif %}
+    {% if attempt.feedback %}
+        <div class="callout {% if attempt.feedback.decision == 'needs_revision' %}callout-warning{% endif %}" style="margin-top:12px">
+            {% icon "quote" %}
+            <div>
+                <p class="mb-0 strong">{{ attempt.feedback.get_decision_display }}
+                    {% if attempt.feedback.grade != None %}· {{ attempt.feedback.grade }} из {{ attempt.max_points_snapshot }}{% else %}· балл не выставлен{% endif %}
+                </p>
+                {{ attempt.feedback.comment|linebreaks }}
+                {% if attempt.feedback.teacher %}<p class="tiny mb-0">{{ attempt.feedback.teacher.get_full_name|default:attempt.feedback.teacher.username }} · {{ attempt.feedback.updated_at|date:"d.m.Y H:i" }}</p>{% else %}<p class="tiny mb-0">Автоматическая проверка</p>{% endif %}
+            </div>
+        </div>
+    {% endif %}
+    {% if is_teacher %}
+        <p class="small"><a href="{% url 'teacher_submission_review' attempt.pk %}">Открыть попытку {{ attempt.version }} и историю проверки</a></p>
+    {% endif %}
 </article>
-{% empty %}<p class="muted">Пока нет отправленных попыток.</p>{% endfor %}
+{% empty %}
+<div class="empty">
+    <div class="empty-icon">{% icon "file-text" "icon icon-xl" %}</div>
+    <h3>Пока нет отправленных попыток</h3>
+    <p>Как только вы отправите ответ, здесь появятся все попытки с оценками и комментариями.</p>
+</div>
+{% endfor %}
 {% include "lms/pagination.html" %}

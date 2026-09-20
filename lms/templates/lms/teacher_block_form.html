@@ -1,0 +1,40 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}{% if form.instance.pk %}Блок: {{ form.instance.name }}{% else %}Новый блок{% endif %} — English LMS{% endblock %}
+{% block workspace_class %}workspace-plain{% endblock %}
+
+{% block content %}
+<nav aria-label="Хлебные крошки">
+    <ol class="crumbs">
+        <li><a href="{% url 'teacher_curriculum' %}">Карта курса</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">{% if form.instance.pk %}{{ form.instance.name }}{% else %}Новый блок{% endif %}</span></li>
+    </ol>
+</nav>
+
+<div class="split">
+    <div class="split-main">
+        <section class="card">
+            <h1 class="card-title">{% if form.instance.pk %}Изменить блок{% else %}Новый блок{% endif %}</h1>
+            <form method="post" novalidate>
+                {% csrf_token %}
+                {% include "lms/form_fields.html" %}
+                <div class="row">
+                    <button class="btn" type="submit">{% icon "save" %}Сохранить блок</button>
+                    <a class="btn btn-secondary" href="{% url 'teacher_curriculum' %}">Отмена</a>
+                    {% if form.instance.pk %}
+                        <a class="btn btn-ghost" href="{% url 'teacher_topic_new' %}?block={{ form.instance.pk }}">{% icon "plus" %}Добавить тему</a>
+                    {% endif %}
+                </div>
+            </form>
+        </section>
+    </div>
+    <div class="split-side">
+        <div class="card card-pad-sm">
+            <p class="rail-title">Подсказка</p>
+            <p class="small muted">Блок — крупный раздел курса (например, «Reading B2» или «Модуль 1 ОГЭ»). Порядок блоков задаёт последовательность дорожной карты у учеников.</p>
+            <p class="small muted mb-0">Уровень CEFR показывает ученику сложность раздела и используется в аналитике.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

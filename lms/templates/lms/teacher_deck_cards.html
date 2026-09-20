@@ -1,0 +1,84 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}Карточки: {{ deck.title }} — English LMS{% endblock %}
+{% block workspace_class %}workspace-wide{% endblock %}
+
+{% block content %}
+<nav aria-label="Хлебные крошки">
+    <ol class="crumbs">
+        <li><a href="{% url 'teacher_curriculum' %}">Карта курса</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_deck_edit' deck.pk %}">{{ deck.title }}</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">Карточки</span></li>
+    </ol>
+</nav>
+
+<div class="content-head">
+    <div>
+        <h1>{{ deck.title }}</h1>
+        <p class="page-note">{{ deck.topic.block.name }} · {{ deck.topic.title }} · {{ cards|length }} карточек · тренировали {{ learners }} учеников</p>
+    </div>
+    <div class="row">
+        <a class="btn btn-secondary" href="{% url 'teacher_deck_edit' deck.pk %}">{% icon "pencil" %}Настройки набора</a>
+        <form method="post" action="{% url 'teacher_deck_delete' deck.pk %}" data-confirm="Удалить набор «{{ deck.title }}» вместе с карточками?">
+            {% csrf_token %}
+            <button class="btn btn-danger-ghost" type="submit">{% icon "trash" %}Удалить набор</button>
+        </form>
+    </div>
+</div>
+
+<div class="split">
+    <div class="split-main">
+        <section class="card">
+            <div class="card-head"><h2 class="card-title">{% icon "cards" %}Карточки набора</h2></div>
+            {% if cards %}
+                <ul class="card-grid">
+                    {% for card in cards %}
+                        <li>
+                            <div class="panel" style="height:100%;display:flex;flex-direction:column;gap:6px">
+                                <strong class="flashcard-word" style="font-size:var(--fs-18)">{{ card.front }}</strong>
+                                <span class="small">{{ card.back }}</span>
+                                {% if card.example %}<span class="tiny muted">«{{ card.example }}»</span>{% endif %}
+                                <span class="row row-tight" style="margin-top:auto">
+                                    <span class="tag tnum">№ {{ card.order }}</span>
+                                    <form method="post" action="{% url 'teacher_card_delete' card.pk %}" data-confirm="Удалить карточку «{{ card.front }}»?">
+                                        {% csrf_token %}
+                                        <button class="btn btn-danger-ghost btn-sm icon-only" type="submit" aria-label="Удалить карточку {{ card.front }}">{% icon "trash" %}</button>
+                                    </form>
+                                </span>
+                            </div>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <div class="empty">
+                    <div class="empty-icon">{% icon "cards" "icon icon-xl" %}</div>
+                    <h3>Карточек пока нет</h3>
+                    <p>Добавьте первую карточку или вставьте сразу список — по одной паре «слово | перевод» на строку.</p>
+                </div>
+            {% endif %}
+        </section>
+    </div>
+
+    <div class="split-side">
+        <section class="card card-pad-sm">
+            <div class="card-head" style="margin-bottom:12px"><h2 class="card-title">{% icon "plus" %}Одна карточка</h2></div>
+            <form method="post" novalidate>
+                {% csrf_token %}
+                {% include "lms/form_fields.html" with form=card_form %}
+                <button class="btn btn-block" type="submit" name="_single" value="1">{% icon "plus" %}Добавить карточку</button>
+            </form>
+        </section>
+
+        <section class="card card-pad-sm">
+            <div class="card-head" style="margin-bottom:12px"><h2 class="card-title">{% icon "list" %}Массовый импорт</h2></div>
+            <form method="post" novalidate>
+                {% csrf_token %}
+                {% include "lms/form_fields.html" with form=bulk_form %}
+                <button class="btn btn-secondary btn-block" type="submit" name="_bulk" value="1">{% icon "upload" %}Импортировать список</button>
+            </form>
+            <p class="tiny muted mb-0">Формат: <code>front | back</code> или <code>front | back | example</code>, по одной карточке на строку. Пустые строки пропускаются.</p>
+        </section>
+    </div>
+</div>
+{% endblock %}

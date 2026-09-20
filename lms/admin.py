@@ -6,7 +6,24 @@ from django.forms.models import BaseInlineFormSet, construct_instance
 from django.urls import reverse
 from django.utils.html import format_html
 
-from .models import Assignment, Block, Feedback, Profile, Submission, SubmissionEvent, Topic
+from .models import (
+    AnswerDraft,
+    Assignment,
+    Block,
+    CardReview,
+    Choice,
+    CommentSnippet,
+    Feedback,
+    Flashcard,
+    FlashcardDeck,
+    Profile,
+    Question,
+    QuizAttempt,
+    Skill,
+    Submission,
+    SubmissionEvent,
+    Topic,
+)
 
 User = get_user_model()
 
@@ -103,14 +120,34 @@ class AssignmentAdmin(admin.ModelAdmin):
         "title",
         "topic",
         "assignment_type",
+        "status",
         "deadline",
         "max_points",
         "is_active",
         "submissions_count",
+        "console_link",
     )
+    actions = ("publish_now", "unpublish")
+
+    @admin.display(description="Консоль")
+    def console_link(self, obj):
+        return format_html(
+            '<a href="{}">Открыть</a>', reverse("teacher_assignment_form", args=[obj.pk])
+        )
+
+    @admin.action(description="Опубликовать выбранные задания")
+    def publish_now(self, request, queryset):
+        updated = queryset.update(status=Assignment.Publication.PUBLISHED, publish_at=None)
+        self.message_user(request, f"Опубликовано заданий: {updated}")
+
+    @admin.action(description="Вернуть выбранные задания в черновики")
+    def unpublish(self, request, queryset):
+        updated = queryset.update(status=Assignment.Publication.DRAFT)
+        self.message_user(request, f"Черновиков: {updated}")
+
     autocomplete_fields = ("topic",)
     search_fields = ("title", "description", "topic__title", "topic__block__name")
-    list_filter = ("assignment_type", "is_active", "topic__block", "topic")
+    list_filter = ("assignment_type", "status", "is_active", "topic__block", "topic")
     date_hierarchy = "deadline"
     list_editable = ("max_points", "is_active")
 
@@ -205,3 +242,130 @@ class SubmissionEventAdmin(ReadOnlyRecordsAdmin):
     list_filter = ("action", "decision")
     search_fields = ("submission__student__username", "submission__assignment__title")
     list_select_related = ("submission__student", "submission__assignment", "actor")
+
+
+# ── Учебный контент и обучение: консоль преподавателя — основной инструмент ──
+#
+# Django Admin остаётся системным журналом: контент редактируется в консоли,
+# а результаты тестов, черновики и состояния повторений доступны только для чтения.
+
+
+@admin.register(Skill)
+class SkillAdmin(admin.ModelAdmin):
+    list_display = ("name", "kind", "slug", "order")
+    list_editable = ("order",)
+    prepopulated_fields = {"slug": ("name",)}
+    search_fields = ("name", "slug")
+
+
+@admin.register(CommentSnippet)
+class CommentSnippetAdmin(admin.ModelAdmin):
+    list_display = ("title", "code", "author", "is_shared", "usage_count", "updated_at")
+    list_filter = ("is_shared",)
+    search_fields = ("title", "code", "text")
+    list_select_related = ("author",)
+
+
+class ChoiceInline(admin.TabularInline):
+    model = Choice
+    extra = 0
+    fields = ("text", "match_text", "is_correct", "order")
+
+
+@admin.register(Question)
+class QuestionAdmin(admin.ModelAdmin):
+    list_display = ("text_preview", "assignment", "kind", "points", "order", "console_link")
+    list_filter = ("kind", "assignment__topic__block")
+    search_fields = ("text", "assignment__title")
+    list_select_related = ("assignment",)
+    readonly_fields = tuple(field.name for field in Question._meta.fields)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @admin.display(description="Вопрос")
+    def text_preview(self, obj):
+        return obj.text[:80]
+
+    @admin.display(description="Редактор теста")
+    def console_link(self, obj):
+        return format_html(
+            '<a href="{}">Открыть в консоли</a>',
+            reverse("teacher_questions", args=[obj.assignment_id]),
+        )
+
+
+@admin.register(Choice)
+class ChoiceAdmin(ReadOnlyRecordsAdmin):
+    list_display = ("text", "question", "is_correct", "order")
+    search_fields = ("text", "match_text")
+    list_select_related = ("question",)
+
+
+class FlashcardInline(admin.TabularInline):
+    model = Flashcard
+    extra = 0
+    fields = ("front", "back", "example", "order")
+
+
+@admin.register(FlashcardDeck)
+class FlashcardDeckAdmin(admin.ModelAdmin):
+    list_display = ("title", "topic", "cards_count", "order", "is_active", "console_link")
+    list_filter = ("is_active", "topic__block")
+    search_fields = ("title", "description", "topic__title")
+    list_select_related = ("topic",)
+    inlines = (FlashcardInline,)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).annotate(_cards=Count("cards"))
+
+    @admin.display(description="Карточек", ordering="_cards")
+    def cards_count(self, obj):
+        return obj._cards
+
+    @admin.display(description="Карточки")
+    def console_link(self, obj):
+        return format_html(
+            '<a href="{}">Открыть в консоли</a>', reverse("teacher_deck_cards", args=[obj.pk])
+        )
+
+
+@admin.register(Flashcard)
+class FlashcardAdmin(admin.ModelAdmin):
+    list_display = ("front", "back", "deck", "order")
+    list_filter = ("deck__topic__block", "deck")
+    search_fields = ("front", "back", "example")
+    list_select_related = ("deck",)
+    autocomplete_fields = ("deck",)
+
+
+@admin.register(QuizAttempt)
+class QuizAttemptAdmin(ReadOnlyRecordsAdmin):
+    list_display = (
+        "submission",
+        "score",
+        "max_score",
+        "correct_count",
+        "total_count",
+        "created_at",
+    )
+    list_select_related = ("submission__student", "submission__assignment")
+    search_fields = ("submission__student__username", "submission__assignment__title")
+
+
+@admin.register(AnswerDraft)
+class AnswerDraftAdmin(ReadOnlyRecordsAdmin):
+    list_display = ("student", "assignment", "updated_at")
+    list_select_related = ("student", "assignment")
+    search_fields = ("student__username", "assignment__title")
+
+
+@admin.register(CardReview)
+class CardReviewAdmin(ReadOnlyRecordsAdmin):
+    list_display = ("student", "card", "interval_days", "ease", "due_at", "lapses")
+    list_filter = ("card__deck",)
+    list_select_related = ("student", "card__deck")
+    search_fields = ("student__username", "card__front", "card__back")

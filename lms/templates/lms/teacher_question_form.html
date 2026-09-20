@@ -1,0 +1,55 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}Вопрос {{ question.order }} — {{ assignment.title }} — English LMS{% endblock %}
+{% block workspace_class %}workspace-plain{% endblock %}
+
+{% block content %}
+<nav aria-label="Хлебные крошки">
+    <ol class="crumbs">
+        <li><a href="{% url 'teacher_curriculum' %}">Карта курса</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_questions' assignment.pk %}">Вопросы</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">Вопрос {{ question.order }}</span></li>
+    </ol>
+</nav>
+
+<div class="split">
+    <div class="split-main">
+        <section class="card">
+            <h1 class="card-title">Изменить вопрос</h1>
+            <p class="tiny muted">{{ assignment.title }} · {{ assignment.topic.block.name }} · {{ assignment.topic.title }}</p>
+            <form method="post" novalidate>
+                {% csrf_token %}
+                {% include "lms/form_fields.html" %}
+                <div class="row">
+                    <button class="btn" type="submit">{% icon "save" %}Сохранить вопрос</button>
+                    <a class="btn btn-secondary" href="{% url 'teacher_questions' assignment.pk %}">Отмена</a>
+                </div>
+            </form>
+            <form method="post" action="{% url 'teacher_question_delete' question.pk %}" data-confirm="Удалить этот вопрос?" style="margin-top:12px">
+                {% csrf_token %}
+                <button class="btn btn-danger-ghost btn-sm" type="submit">{% icon "trash" %}Удалить вопрос</button>
+            </form>
+        </section>
+    </div>
+    <div class="split-side">
+        <div class="card card-pad-sm">
+            <p class="rail-title">Текущие варианты</p>
+            {% if question.choices.exists %}
+                <ul class="col" style="padding-left:18px;margin:0">
+                    {% for choice in question.choices.all %}
+                        <li class="small{% if choice.is_correct %} is-correct{% endif %}">{{ choice.text }}{% if choice.is_correct %} — верный{% endif %}</li>
+                    {% endfor %}
+                </ul>
+                <p class="tiny muted">Поле «Варианты» полностью заменяет список: оставьте все нужные строки, верные помечайте <code>*</code>.</p>
+            {% else %}
+                <p class="small muted mb-0">Вариантов нет — заполните поле в соответствии с типом вопроса.</p>
+            {% endif %}
+        </div>
+        <div class="card card-pad-sm">
+            <p class="rail-title">Пояснение</p>
+            <p class="small muted mb-0">Текст из поля «Пояснение» ученик увидит в разборе после отправки теста — это снижает число повторных вопросов в чате.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

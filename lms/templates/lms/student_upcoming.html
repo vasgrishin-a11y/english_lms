@@ -1,0 +1,47 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}Сроки — English LMS{% endblock %}
+{% block workspace_class %}workspace-plain{% endblock %}
+
+{% block content %}
+<div class="content-head">
+    <div>
+        <h1>Сроки сдачи</h1>
+        <p class="page-note">Только задания без завершённой проверки. Поздние ответы принимаются, но помечаются.</p>
+    </div>
+    <div class="row row-tight">
+        {% if overdue %}<span class="badge badge-needs_revision">Просрочено: {{ overdue|length }}</span>{% endif %}
+        {% if week %}<span class="badge badge-submitted">На этой неделе: {{ week|length }}</span>{% endif %}
+    </div>
+</div>
+
+{% if overdue %}
+<section class="card">
+    <h2 class="card-title">{% icon "alert" %}Просрочено</h2>
+    <ul class="task-list">
+        {% for assignment in overdue %}{% include "lms/parts/task_item.html" with assignment=assignment state=assignment.state %}{% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+{% if week %}
+<section class="card">
+    <h2 class="card-title">{% icon "calendar" %}Ближайшие 7 дней</h2>
+    <ul class="task-list">
+        {% for assignment in week %}{% include "lms/parts/task_item.html" with assignment=assignment state=assignment.state %}{% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+<section class="card">
+    <h2 class="card-title">{% icon "clock" %}Дальше</h2>
+    <ul class="task-list">
+        {% for assignment in items %}
+            {% if assignment.hours_left > 168 %}
+                {% include "lms/parts/task_item.html" with assignment=assignment state=assignment.state %}
+            {% endif %}
+        {% endfor %}
+    </ul>
+</section>
+{% endblock %}

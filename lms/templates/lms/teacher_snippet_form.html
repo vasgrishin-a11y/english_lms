@@ -1,0 +1,43 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}{% if snippet %}Шаблон: {{ snippet.title }}{% else %}Новый шаблон комментария{% endif %} — English LMS{% endblock %}
+{% block workspace_class %}workspace-plain{% endblock %}
+
+{% block content %}
+<nav aria-label="Хлебные крошки">
+    <ol class="crumbs">
+        <li><a href="{% url 'teacher_settings' %}">Настройки консоли</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">{% if snippet %}{{ snippet.title }}{% else %}Новый шаблон{% endif %}</span></li>
+    </ol>
+</nav>
+
+<div class="split">
+    <div class="split-main">
+        <section class="card">
+            <h1 class="card-title">{% if snippet %}Изменить шаблон комментария{% else %}Новый шаблон комментария{% endif %}</h1>
+            <form method="post" novalidate>
+                {% csrf_token %}
+                {% include "lms/form_fields.html" %}
+                <div class="row">
+                    <button class="btn" type="submit">{% icon "save" %}Сохранить шаблон</button>
+                    <a class="btn btn-secondary" href="{% url 'teacher_settings' %}">Отмена</a>
+                </div>
+            </form>
+            {% if snippet %}
+                <form method="post" action="{% url 'teacher_snippet_delete' snippet.pk %}" data-confirm="Удалить шаблон «{{ snippet.title }}»?" style="margin-top:12px">
+                    {% csrf_token %}
+                    <button class="btn btn-danger-ghost btn-sm" type="submit">{% icon "trash" %}Удалить шаблон</button>
+                </form>
+            {% endif %}
+        </section>
+    </div>
+    <div class="split-side">
+        <div class="card card-pad-sm">
+            <p class="rail-title">Как это работает</p>
+            <p class="small muted">Шаблон появляется в правой колонке страницы проверки. Нажатие добавляет текст в поле комментария — можно дописать детали перед сохранением.</p>
+            <p class="tiny muted mb-0">Совет: начинайте комментарий с конкретного наблюдения, а шаблон используйте как каркас. Ученики видят текст дословно.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

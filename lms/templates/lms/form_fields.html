@@ -1,13 +1,19 @@
-{% if form.non_field_errors %}<div class="alert alert-danger" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+{% if form.non_field_errors %}
+    <div class="alert alert-danger" role="alert">{% load lms_tags %}{% icon "alert" %}<span>{{ form.non_field_errors }}</span></div>
+{% endif %}
 {% for field in form.hidden_fields %}
     {{ field }}
     {% if field.errors %}<div class="alert alert-danger" role="alert">{{ field.errors }}</div>{% endif %}
 {% endfor %}
 {% for field in form.visible_fields %}
-    <div class="form-field">
-        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-        {{ field }}
-        {% if field.help_text %}<div class="muted help-text" id="{{ field.auto_id }}_helptext">{{ field.help_text }}</div>{% endif %}
+    <div class="form-field{% if field.errors %} field-error{% endif %}{% if field.field.widget.input_type == 'checkbox' %} checkline{% endif %}">
+        {% if field.field.widget.input_type == 'checkbox' %}
+            {{ field }}<label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {% else %}
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+        {% endif %}
+        {% if field.help_text %}<div class="help-text" id="{{ field.auto_id }}_helptext">{{ field.help_text }}</div>{% endif %}
         {{ field.errors }}
     </div>
 {% endfor %}

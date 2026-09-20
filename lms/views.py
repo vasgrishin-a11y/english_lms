@@ -1,25 +1,55 @@
+"""Общие представления: маршрутизация по ролям, защищённые файлы, здоровье.
+
+Файлы никогда не отдаются по сырому пути из URL: имя сначала разрешается в
+запись БД, затем проверяется роль и принадлежность, и только потом открывается
+файл. Скачивание — всегда attachment; inline-превью разрешено только для
+изображений и аудио с повторной проверкой сигнатуры.
+"""
+
 import logging
 import tempfile
 from pathlib import Path
 
 from django.conf import settings
-from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import ValidationError
-from django.core.paginator import Paginator
 from django.db import connection
-from django.db.models import OuterRef, Q, Subquery
 from django.http import FileResponse, Http404, JsonResponse
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import redirect
 from django.views.decorators.cache import never_cache
-from django.views.decorators.http import require_GET, require_http_methods, require_safe
+from django.views.decorators.http import require_GET
 
-from .decorators import get_user_role, student_required, teacher_required
-from .forms import ReviewForm, SubmissionForm
+from .decorators import get_user_role
 from .models import Assignment, Profile, Submission
-from .services import ConflictError, RateLimitError, review_submission, submit_assignment
 
 logger = logging.getLogger(__name__)
+
+IMAGE_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
+AUDIO_TYPES = {
+    ".mp3": "audio/mpeg",
+    ".wav": "audio/wav",
+    ".m4a": "audio/mp4",
+    ".aac": "audio/aac",
+    ".ogg": "audio/ogg",
+}
+PREVIEW_TYPES = {**IMAGE_TYPES, **AUDIO_TYPES}
+PREVIEW_SIGNATURES = {
+    ".png": (b"\x89PNG\r\n\x1a\n",),
+    ".jpg": (b"\xff\xd8\xff",),
+    ".jpeg": (b"\xff\xd8\xff",),
+    ".gif": (b"GIF87a", b"GIF89a"),
+    ".webp": (b"RIFF",),
+    ".wav": (b"RIFF",),
+    ".mp3": (b"ID3", b"\xff\xfb", b"\xff\xf3", b"\xff\xf2", b"\xff\xe3"),
+    ".m4a": (b"ftyp",),
+    ".aac": (b"\xff\xf1", b"\xff\xf9", b"ID3", b"ftyp"),
+    ".ogg": (b"OggS",),
+}
 
 
 def _add_validation_errors(form, error):
@@ -31,260 +61,102 @@ def _add_validation_errors(form, error):
 
 
 @login_required
-@require_safe
+@require_GET
 def dashboard(request):
-    return redirect(
-        "teacher_submissions"
-        if get_user_role(request.user) == Profile.Role.TEACHER
-        else "student_assignments"
-    )
+    """Единая точка входа: учитель попадает в консоль проверки, ученик — на свою главную."""
+    if get_user_role(request.user) == Profile.Role.TEACHER:
+        return redirect("teacher_review_queue")
+    return redirect("student_home")
 
 
-@student_required
-@require_safe
-def student_assignments(request):
-    latest = Submission.objects.filter(student=request.user, assignment=OuterRef("pk")).order_by(
-        "-version"
-    )
-    query = request.GET.get("q", "").strip()[:200]
-    assignments = (
-        Assignment.objects.filter(
-            is_active=True, topic__is_active=True, topic__block__is_active=True
-        )
-        .select_related("topic__block")
-        .annotate(
-            latest_status=Subquery(latest.values("status")[:1]),
-            latest_grade=Subquery(latest.values("feedback__grade")[:1]),
-        )
-        .order_by(
-            "topic__block__order",
-            "topic__block__name",
-            "topic__order",
-            "topic__title",
-            "order",
-            "pk",
-        )
-    )
-    if query:
-        assignments = assignments.filter(
-            Q(title__icontains=query)
-            | Q(topic__title__icontains=query)
-            | Q(topic__block__name__icontains=query)
-        )
-    page = Paginator(assignments, settings.LMS_PAGE_SIZE).get_page(request.GET.get("page"))
-    blocks_data = []
-    for assignment in page:
-        if not blocks_data or blocks_data[-1]["block"].pk != assignment.topic.block_id:
-            blocks_data.append({"block": assignment.topic.block, "topics": []})
-        topics = blocks_data[-1]["topics"]
-        if not topics or topics[-1]["topic"].pk != assignment.topic_id:
-            topics.append({"topic": assignment.topic, "assignments": []})
-        topics[-1]["assignments"].append(assignment)
-    return render(
-        request,
-        "lms/student_assignments.html",
-        {"blocks_data": blocks_data, "page_obj": page, "query": query},
-    )
-
-
-@student_required
-@require_http_methods(["GET", "POST"])
-def assignment_detail(request, pk):
-    assignment = get_object_or_404(
-        Assignment.objects.select_related("topic__block"),
-        pk=pk,
-        is_active=True,
-        topic__is_active=True,
-        topic__block__is_active=True,
-    )
-    attempts = (
-        Submission.objects.filter(student=request.user, assignment=assignment)
-        .select_related("feedback__teacher")
-        .order_by("-version")
-    )
-    submission = attempts.first()
-    form = SubmissionForm(
-        request.POST if request.method == "POST" else None,
-        request.FILES if request.method == "POST" else None,
-        assignment=assignment,
-        submission=submission,
-    )
-    status = 200
-    if request.method == "POST" and form.is_valid():
-        try:
-            submit_assignment(
-                student=request.user, assignment_id=assignment.pk, **form.cleaned_data
-            )
-        except ConflictError as exc:
-            form.add_error(None, str(exc))
-            status = 409
-        except RateLimitError as exc:
-            form.add_error(None, str(exc))
-            status = 429
-        except ValidationError as exc:
-            _add_validation_errors(form, exc)
-        else:
-            messages.success(
-                request,
-                "Новая попытка отправлена на проверку. Предыдущие ответы сохранены в истории.",
-            )
-            return redirect("assignment_detail", pk=assignment.pk)
-    history = Paginator(attempts, settings.LMS_PAGE_SIZE).get_page(request.GET.get("page"))
-    response = render(
-        request,
-        "lms/assignment_detail.html",
-        {
-            "assignment": assignment,
-            "submission": submission,
-            "form": form,
-            "page_obj": history,
-            "conflict": status == 409,
-        },
-        status=status,
-    )
-    if status == 429:
-        response["Retry-After"] = "3600"
-    return response
-
-
-QUEUE_CHOICES = [
-    ("pending", "На проверке"),
-    ("revision", "Ожидают доработки"),
-    ("checked", "Проверенные"),
-    ("all", "Все последние попытки"),
-]
-
-
-@teacher_required
-@require_safe
-def teacher_submissions(request):
-    queue = request.GET.get("status", "pending")
-    if queue not in dict(QUEUE_CHOICES):
-        queue = "pending"
-    submissions = (
-        Submission.objects.latest_attempts()
-        .select_related("student", "assignment__topic__block", "feedback")
-        .order_by("-submitted_at", "-pk")
-    )
-    filters = {
-        "pending": [Submission.Status.SUBMITTED, Submission.Status.IN_REVIEW],
-        "revision": [Submission.Status.NEEDS_REVISION],
-        "checked": [Submission.Status.CHECKED],
-    }
-    if queue in filters:
-        submissions = submissions.filter(status__in=filters[queue])
-    query = request.GET.get("q", "").strip()[:200]
-    if query:
-        submissions = submissions.filter(
-            Q(student__username__icontains=query)
-            | Q(student__first_name__icontains=query)
-            | Q(student__last_name__icontains=query)
-            | Q(assignment__title__icontains=query)
-            | Q(assignment__topic__title__icontains=query)
-            | Q(assignment__topic__block__name__icontains=query)
-        )
-    page = Paginator(submissions, settings.LMS_PAGE_SIZE).get_page(request.GET.get("page"))
-    return render(
-        request,
-        "lms/teacher_submissions.html",
-        {
-            "submissions": page,
-            "page_obj": page,
-            "query": query,
-            "queue": queue,
-            "queue_choices": QUEUE_CHOICES,
-        },
-    )
-
-
-@teacher_required
-@require_http_methods(["GET", "POST"])
-def teacher_submission_review(request, pk):
-    submission = get_object_or_404(
-        Submission.objects.select_related(
-            "student", "assignment__topic__block", "feedback__teacher"
-        ),
-        pk=pk,
-    )
-    attempts = (
-        Submission.objects.filter(student=submission.student, assignment=submission.assignment)
-        .select_related("feedback__teacher")
-        .order_by("-version")
-    )
-    latest = attempts.first()
-    is_latest = latest.pk == submission.pk
-    feedback = getattr(submission, "feedback", None)
-    form = ReviewForm(
-        request.POST if request.method == "POST" else None, submission=submission, feedback=feedback
-    )
-    status = 200
-    if request.method == "POST" and form.is_valid():
-        try:
-            review_submission(
-                teacher=request.user, submission_id=submission.pk, **form.cleaned_data
-            )
-        except ConflictError as exc:
-            form.add_error(None, str(exc))
-            status = 409
-        except ValidationError as exc:
-            _add_validation_errors(form, exc)
-        else:
-            messages.success(request, "Проверка сохранена для выбранной попытки.")
-            return redirect("teacher_submission_review", pk=submission.pk)
-    return render(
-        request,
-        "lms/teacher_submission_review.html",
-        {
-            "submission": submission,
-            "feedback": feedback,
-            "form": form,
-            "is_latest": is_latest,
-            "latest": latest,
-            "conflict": status == 409,
-            "page_obj": Paginator(attempts, settings.LMS_PAGE_SIZE).get_page(
-                request.GET.get("page")
-            ),
-            "events": submission.events.select_related("actor").order_by("-created_at", "-pk")[:20],
-        },
-        status=status,
-    )
-
-
-@login_required
-@require_safe
-@never_cache
-def private_file(request, name):
-    """Resolve only DB-referenced names, then authorize; never join raw URL paths."""
+def _resolve_private_file(request, name):
+    """Найти файл по имени из БД и проверить доступ. Возвращает FileField или None."""
     teacher = get_user_role(request.user) == Profile.Role.TEACHER
     materials = Assignment.objects.filter(material_file=name)
     attempts = Submission.objects.filter(file_answer=name)
     if not teacher:
-        materials = materials.filter(
-            is_active=True, topic__is_active=True, topic__block__is_active=True
-        )
+        visible = Assignment.objects.visible()
+        materials = materials.filter(pk__in=visible)
         attempts = attempts.filter(
             student=request.user,
-            assignment__is_active=True,
-            assignment__topic__is_active=True,
-            assignment__topic__block__is_active=True,
+            assignment__in=visible,
         )
     material = materials.first()
     attempt = None if material else attempts.first()
-    file = material.material_file if material else attempt.file_answer if attempt else None
-    if not file:
-        raise Http404
+    return material.material_file if material else attempt.file_answer if attempt else None
+
+
+def _signature_matches(name, file):
+    extension = Path(name).suffix.lower()
+    expected = PREVIEW_SIGNATURES.get(extension)
+    if not expected:
+        return False
+    position = file.tell()
+    try:
+        file.seek(0)
+        header = file.read(16)
+    finally:
+        file.seek(position)
+    if any(header.startswith(prefix) for prefix in expected):
+        return True
+    # MP4-контейнер: 'ftyp' находится на смещении 4.
+    return extension in {".m4a", ".aac"} and header[4:8] == b"ftyp"
+
+
+def _file_response(file, *, inline, content_type):
     try:
         response = FileResponse(
             file.open("rb"),
-            as_attachment=True,
+            as_attachment=not inline,
             filename=Path(file.name).name,
-            content_type="application/octet-stream",
+            content_type=content_type,
         )
     except FileNotFoundError as exc:
         raise Http404 from exc
     response["Cache-Control"] = "private, no-store"
     response["X-Content-Type-Options"] = "nosniff"
+    response["X-Frame-Options"] = "DENY"
+    response["Referrer-Policy"] = "no-referrer"
+    if inline:
+        # Превью не исполняет ничего: ни скриптов, ни внешних ресурсов.
+        response["Content-Security-Policy"] = (
+            "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox"
+        )
+        response["Content-Disposition"] = f'inline; filename="{Path(file.name).name}"'
     return response
+
+
+@login_required
+@never_cache
+def private_file(request, name):
+    """Скачивание: только имена из БД, только с проверкой роли и принадлежности."""
+    file = _resolve_private_file(request, name)
+    if not file:
+        raise Http404
+    return _file_response(file, inline=False, content_type="application/octet-stream")
+
+
+@login_required
+@require_GET
+@never_cache
+def media_preview(request, name):
+    """Inline-превью изображения или аудио. SVG, PDF и HTML не превьюируются никогда."""
+    extension = Path(name).suffix.lower()
+    content_type = PREVIEW_TYPES.get(extension)
+    if not content_type:
+        raise Http404
+    file = _resolve_private_file(request, name)
+    if not file:
+        raise Http404
+    if file.size > settings.LMS_MAX_FILE_BYTES:
+        raise Http404
+    try:
+        with file.open("rb") as handle:
+            if not _signature_matches(name, handle):
+                raise Http404
+    except FileNotFoundError as exc:
+        raise Http404 from exc
+    return _file_response(file, inline=True, content_type=content_type)
 
 
 @require_GET

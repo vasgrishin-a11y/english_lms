@@ -86,6 +86,15 @@ class AdminTests(LMSCase):
             "submission",
             "feedback",
             "submissionevent",
+            "skill",
+            "commentsnippet",
+            "question",
+            "choice",
+            "quizattempt",
+            "answerdraft",
+            "flashcarddeck",
+            "flashcard",
+            "cardreview",
         ):
             with self.subTest(model=model):
                 self.assertEqual(self.admin_client.get(f"/admin/lms/{model}/").status_code, 200)

@@ -1,0 +1,51 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}Мои оценки — English LMS{% endblock %}
+{% block workspace_class %}workspace-plain{% endblock %}
+
+{% block content %}
+<div class="content-head">
+    <div>
+        <h1>Мои оценки</h1>
+        <p class="page-note">Последняя попытка по каждому заданию. История всех попыток доступна внутри задания.</p>
+    </div>
+    {% if average != None %}<span class="grade-pill tnum">Средний результат {{ average }}%</span>{% endif %}
+</div>
+
+<div class="stats" style="margin-bottom:20px">
+    <div class="stat stat-accent"><div class="stat-value tnum">{{ checked }}</div><div class="stat-label">{% icon "check-circle" "icon icon-sm" %}Проверенных работ</div></div>
+    <div class="stat"><div class="stat-value tnum">{{ page_obj.paginator.count }}</div><div class="stat-label">{% icon "file-text" "icon icon-sm" %}Заданий с ответами</div></div>
+    <div class="stat"><div class="stat-value tnum">{% if average != None %}{{ average }}%{% else %}—{% endif %}</div><div class="stat-label">{% icon "percent" "icon icon-sm" %}Средний процент</div></div>
+</div>
+
+<section class="card">
+    {% for attempt in attempts %}
+        <div class="row-item" style="margin-bottom:8px">
+            <span class="row-main">
+                <a class="row-title" href="{% url 'assignment_detail' attempt.assignment_id %}">{{ attempt.assignment.title }}</a>
+                <span class="row-meta">
+                    <span>{{ attempt.assignment.topic.block.name }} · {{ attempt.assignment.topic.title }}</span>
+                    <span>Попытка {{ attempt.version }} · {{ attempt.submitted_at|date:"d.m.Y H:i" }}</span>
+                    {% if attempt.is_late %}<span class="badge badge-needs_revision">после дедлайна</span>{% endif %}
+                </span>
+                {% if attempt.feedback.comment %}<p class="small muted mb-0" style="margin-top:6px">{{ attempt.feedback.comment|truncatechars:220 }}</p>{% endif %}
+            </span>
+            <span class="row-side">
+                <span class="badge badge-{{ attempt.status }}">{% icon attempt.status|status_icon "icon icon-sm" %}{{ attempt.get_status_display }}</span>
+                {% if attempt.feedback and attempt.feedback.grade != None %}
+                    <span class="grade-pill tnum {{ attempt.feedback.grade|grade_class:attempt.max_points_snapshot }}">{{ attempt.feedback.grade }}<small>/{{ attempt.max_points_snapshot }}</small></span>
+                {% endif %}
+            </span>
+        </div>
+    {% empty %}
+        <div class="empty">
+            <div class="empty-icon">{% icon "award" "icon icon-xl" %}</div>
+            <h3>Оценок пока нет</h3>
+            <p>Отправьте первую работу — оценка и комментарий преподавателя появятся здесь.</p>
+            <a class="btn" href="{% url 'student_assignments' %}">К заданиям</a>
+        </div>
+    {% endfor %}
+    {% include "lms/pagination.html" %}
+</section>
+{% endblock %}
