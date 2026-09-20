@@ -28,6 +28,8 @@
                 <label class="sr-only" for="q_{{ question.pk }}">Ваш ответ</label>
                 <input type="text" id="q_{{ question.pk }}" name="q_{{ question.pk }}" maxlength="500" autocomplete="off" placeholder="Впишите ответ">
             {% else %}
+                <div class="table-scroll" role="region" tabindex="0"
+                     aria-label="Соответствие: термин и определение, прокручивается по горизонтали">
                 <table class="table-tight" style="margin-top:8px">
                     <caption class="sr-only">Соответствие: термин и определение</caption>
                     <thead><tr><th scope="col">Термин</th><th scope="col">Определение</th></tr></thead>
@@ -48,6 +50,7 @@
                         {% endfor %}
                     </tbody>
                 </table>
+                </div>
             {% endif %}
         </div>
     {% endfor %}

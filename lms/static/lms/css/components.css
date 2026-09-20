@@ -863,7 +863,7 @@ a.row-title:hover {
 }
 
 .crumbs .sep {
-    color: var(--border-strong);
+    color: var(--text-subtle);  /* aria-hidden, но видимый разделитель */
     flex: 0 0 auto;
 }
 
@@ -1497,13 +1497,13 @@ audio {
 .btn-danger-ghost {
     background: transparent;
     border: 1px solid var(--border);
-    color: var(--danger);
+    color: var(--danger-ink);
 }
 
 .btn-danger-ghost:hover,
 .btn-danger-ghost:focus-visible {
-    background: color-mix(in srgb, var(--danger) 8%, transparent);
-    border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+    background: color-mix(in srgb, var(--danger-ink) 8%, transparent);
+    border-color: color-mix(in srgb, var(--danger-ink) 40%, var(--border));
 }
 
 .check {
@@ -1522,7 +1522,7 @@ audio {
 }
 
 .is-correct {
-    color: var(--success);
+    color: var(--success-ink);
     font-weight: 600;
 }
 
@@ -1553,7 +1553,7 @@ audio {
 }
 
 .grade-pill-muted {
-    background: var(--surface-2);
+    background: var(--surface-sunken);
     color: var(--text-muted);
     border-color: var(--border);
 }
@@ -1568,7 +1568,7 @@ table .sticky-col {
 }
 
 table thead .sticky-col {
-    background: var(--surface-2);
+    background: var(--surface-sunken);
     z-index: 2;
 }
 
@@ -1585,9 +1585,9 @@ table .grade-col {
     min-width: 26px;
     height: 26px;
     padding: 0 6px;
-    border-radius: var(--radius-sm);
+    border-radius: var(--r-sm);
     background: color-mix(in srgb, var(--accent) 12%, var(--surface));
-    color: var(--accent-strong);
+    color: var(--accent-800);
     font-size: var(--fs-13);
     font-weight: 700;
     font-variant-numeric: tabular-nums;
@@ -1597,8 +1597,8 @@ table .grade-col {
     margin: 8px 0 0;
     padding: 8px 10px;
     border-left: 3px solid var(--accent-200);
-    background: var(--surface-2);
-    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    background: var(--surface-sunken);
+    border-radius: 0 var(--r-sm) var(--r-sm) 0;
     overflow-wrap: anywhere;
 }
 

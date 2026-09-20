@@ -14,10 +14,12 @@
     --border: #e7e3db;
     --border-strong: #d9d4ca;
 
-    /* Текст */
-    --text: #2a2e35;          /* 12.9:1 на canvas */
-    --text-muted: #6e675f;    /* 5.3:1 на canvas */
-    --text-subtle: #8c857a;   /* только крупный текст и иконки-декор */
+    /* Текст. Все три ступени проходят WCAG AA (4.5:1) для мелкого текста на любой
+       светлой поверхности проекта, включая тинты статусов — axe проверяет это в CI.
+       Минимумы: text 11.4:1, muted 6.2:1, subtle 4.7:1 (худший фон — accent-100). */
+    --text: #2a2e35;          /* 13.0:1 на canvas, 13.6:1 на surface */
+    --text-muted: #5b554c;    /* 7.0:1 на canvas, 7.4:1 на surface */
+    --text-subtle: #6e675f;   /* 5.3:1 на canvas — AA даже для 11px подписей */
     --text-inverse: #ffffff;
     --link: #35614a;          /* 6.7:1 на canvas */
     --link-hover: #264634;

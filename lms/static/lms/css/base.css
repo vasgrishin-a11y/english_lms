@@ -83,7 +83,7 @@ li {
 }
 
 li::marker {
-    color: var(--accent-400);
+    color: var(--accent-500);   /* декор, но держит порог графики 3:1 */
 }
 
 hr {
