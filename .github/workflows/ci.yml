@@ -135,7 +135,10 @@ jobs:
           test "$(docker exec lms id -u)" = 10001
           curl --fail --retry 20 --retry-delay 3 --retry-all-errors http://127.0.0.1:8000/health/ready/
           curl --fail -H 'X-Forwarded-Proto: https' http://127.0.0.1:8000/accounts/login/
-          curl --fail -H 'X-Forwarded-Proto: https' http://127.0.0.1:8000/static/lms/app.css
+          # Редизайн: монолитный app.css заменён дизайн-системой (css/*.css) + вендоренным htmx.
+          curl --fail -H 'X-Forwarded-Proto: https' http://127.0.0.1:8000/static/lms/css/base.css
+          curl --fail -H 'X-Forwarded-Proto: https' http://127.0.0.1:8000/static/lms/css/components.css
+          curl --fail -H 'X-Forwarded-Proto: https' http://127.0.0.1:8000/static/lms/vendor/htmx.min.js
           docker exec lms python manage.py check --deploy --fail-level WARNING
       - name: Container logs
         if: always()
