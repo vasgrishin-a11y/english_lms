@@ -108,6 +108,18 @@ class StudentHomeTests(LMSCase):
         self.assertEqual(response.context["recent"][0].pk, attempt.pk)
         self.assertContains(response, "Доработайте времена")
 
+    def test_assignment_page_shows_teacher_comment_once(self):
+        """Комментарий живёт в карточке попытки и не дублируется в боковой панели.
+
+        Дубль ломает не только чтение с экрана, но и локаторы браузерных тестов
+        (strict mode violation), поэтому проверяем количество вхождений.
+        """
+        attempt = self.submit()
+        self.review(attempt, grade=85, comment="Отличная работа над временами")
+        html = self.student_client.get(self.url).content.decode()
+        self.assertEqual(html.count("Отличная работа над временами"), 1)
+        self.assertContains(self.student_client.get(self.url), "Решение преподавателя")
+
     def test_checked_work_does_not_nag_about_deadline(self):
         attempt = self.submit()
         self.review(attempt, grade=90)

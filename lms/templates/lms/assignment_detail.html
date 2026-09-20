@@ -159,7 +159,7 @@
                             <span class="badge badge-{{ submission.status }}">{{ submission.feedback.get_decision_display }}</span>
                         {% endif %}
                     </p>
-                    {% if submission.feedback.comment %}{{ submission.feedback.comment|linebreaks }}{% endif %}
+                    {# Комментарий намеренно не дублируем: он показан в карточке попытки ниже. #}
                     {% if submission.feedback.teacher %}<p class="tiny muted mb-0">{{ submission.feedback.teacher.get_full_name|default:submission.feedback.teacher.username }} · {{ submission.feedback.updated_at|date:"d.m.Y H:i" }}</p>{% endif %}
                 {% elif submission.assignment.is_quiz == False %}
                     <p class="small muted mb-0">Работа ждёт проверки преподавателем.</p>
