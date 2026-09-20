@@ -98,7 +98,15 @@ jobs:
       - run: python -m pip install --require-hashes -r requirements-dev.txt
       - run: npm ci --ignore-scripts
       - run: python -m playwright install --with-deps chromium
-      - run: python manage.py test lms.tests.test_browser --verbosity 2
+      - name: Browser workflow and axe accessibility
+        run: |
+          if ! python manage.py test lms.tests.test_browser --verbosity 2 > browser-output.log 2>&1; then
+            cat browser-output.log
+            # Состав axe-нарушений дублируем в Checks API: log-blob и артефакты доступны не всегда.
+            python scripts/report_test_failure.py browser-output.log
+            exit 1
+          fi
+          cat browser-output.log
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: failure()
         with:
