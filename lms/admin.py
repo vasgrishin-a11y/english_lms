@@ -63,6 +63,23 @@ class CustomUserAdmin(UserAdmin):
         profile = getattr(obj, "profile", None)
         return profile.get_role_display() if profile else "—"
 
+    def save_model(self, request, obj, form, change):
+        """Сохраняем пользователя, затем обновляем профиль из inline-формы."""
+        super().save_model(request, obj, form, change)
+        # Профиль уже создан сигналом post_save, теперь обновляем его из формы
+        if hasattr(form, "cleaned_data"):
+            profile_data = form.cleaned_data.get("profile_set", [])
+            for profile_form in profile_data:
+                if profile_form and hasattr(profile_form, "cleaned_data"):
+                    profile = obj.profile
+                    if "role" in profile_form.cleaned_data:
+                        profile.role = profile_form.cleaned_data["role"]
+                    if "telegram" in profile_form.cleaned_data:
+                        profile.telegram = profile_form.cleaned_data["telegram"]
+                    if "comment" in profile_form.cleaned_data:
+                        profile.comment = profile_form.cleaned_data["comment"]
+                    profile.save()
+
 
 admin.site.unregister(User)
 admin.site.register(User, CustomUserAdmin)

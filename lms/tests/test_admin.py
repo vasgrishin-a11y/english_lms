@@ -19,7 +19,6 @@ class AdminTests(LMSCase):
                 "profile-MIN_NUM_FORMS": "0",
                 "profile-MAX_NUM_FORMS": "1",
                 "profile-0-id": "",
-                "profile-0-user": "",
                 "profile-0-role": role,
                 "profile-0-telegram": telegram,
                 "profile-0-comment": comment,
