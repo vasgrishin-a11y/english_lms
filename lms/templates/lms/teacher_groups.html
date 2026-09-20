@@ -1,0 +1,71 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}Группы — English LMS{% endblock %}
+{% block workspace_class %}workspace-wide{% endblock %}
+
+{% block content %}
+<div class="content-head">
+    <div>
+        <h1>Группы</h1>
+        <p class="page-note">Учебные группы для разделения учеников и назначения заданий.</p>
+    </div>
+    <div class="row row-gap">
+        <form method="get" class="row row-tight" role="search">
+            <label for="id_q" class="sr-only">Поиск группы</label>
+            <div class="search">
+                {% icon "search" %}
+                <input type="search" id="id_q" name="q" maxlength="200" value="{{ query }}" placeholder="Название или описание…">
+            </div>
+            <button class="btn btn-secondary btn-sm" type="submit">Найти</button>
+            {% if query %}<a class="btn btn-ghost btn-sm" href="{% url 'teacher_groups' %}">Сбросить</a>{% endif %}
+        </form>
+        <a class="btn btn-primary btn-sm" href="{% url 'teacher_group_new' %}">
+            {% icon "plus" "icon icon-sm" %}
+            Создать группу
+        </a>
+    </div>
+</div>
+
+<section class="card">
+    {% for group in groups %}
+        <div class="row-item" style="margin-bottom:8px">
+            <span class="avatar avatar-group" aria-hidden="true">{% icon "users" %}</span>
+            <span class="row-main">
+                <a class="row-title" href="{% url 'teacher_group_edit' group.pk %}">{{ group.name }}</a>
+                <span class="row-meta">
+                    {% if group.cefr_level %}<span class="badge badge-level">{{ group.get_cefr_level_display }}</span>{% endif %}
+                    {% if group.teacher %}<span>{% icon "user" "icon icon-sm" %}{{ group.teacher.get_full_name|default:group.teacher.username }}</span>{% endif %}
+                    <span>{% icon "users" "icon icon-sm" %}{{ group.student_count }} учеников</span>
+                    <span>{% icon "book" "icon icon-sm" %}{{ group.assignment_count }} заданий</span>
+                </span>
+                {% if group.description %}
+                    <p class="row-desc">{{ group.description|truncatewords:15 }}</p>
+                {% endif %}
+            </span>
+            <span class="row-side">
+                <span class="badge {% if group.is_active %}badge-checked{% else %}badge-muted{% endif %}">
+                    {% if group.is_active %}Активна{% else %}Архив{% endif %}
+                </span>
+                <a class="btn btn-sm" href="{% url 'teacher_group_edit' group.pk %}">Редактировать</a>
+                <form method="post" action="{% url 'teacher_group_delete' group.pk %}" style="display:inline" onsubmit="return confirm('Удалить группу «{{ group.name }}»? Это нельзя отменить.')">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-danger">Удалить</button>
+                </form>
+            </span>
+        </div>
+    {% empty %}
+        <div class="empty">
+            <div class="empty-icon">{% icon "users" "icon icon-xl" %}</div>
+            <h3>Группы не найдены</h3>
+            <p>{% if query %}Попробуйте изменить поисковый запрос.{% else %}Создайте первую учебную группу для разделения учеников.{% endif %}</p>
+            {% if not query %}
+                <a class="btn btn-primary" href="{% url 'teacher_group_new' %}">
+                    {% icon "plus" %}
+                    Создать группу
+                </a>
+            {% endif %}
+        </div>
+    {% endfor %}
+</section>
+{% endblock %}
