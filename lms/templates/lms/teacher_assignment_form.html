@@ -22,9 +22,70 @@
                     <span class="badge badge-{{ assignment.status }}">{% icon assignment.status|status_icon "icon icon-sm" %}{{ assignment.get_status_display }}</span>
                 {% endif %}
             </div>
+            
+            <!-- Блок статусов и публикации -->
+            <div class="alert alert-info" style="margin-bottom: 16px;">
+                <strong>Статус задания:</strong>
+                {% if assignment %}
+                    {% if assignment.status == 'draft' %}
+                        📝 Черновик — ученики не видят
+                    {% elif assignment.publish_at and assignment.publish_at > now %}
+                        ⏰ Отложено до {{ assignment.publish_at|date:"d.m.Y H:i" }}
+                    {% else %}
+                        ✅ Опубликовано — ученики видят
+                    {% endif %}
+                {% else %}
+                    Новое задание по умолчанию будет черновиком
+                {% endif %}
+            </div>
+            
             <form method="post" enctype="multipart/form-data" novalidate>
                 {% csrf_token %}
-                {% include "lms/form_fields.html" %}
+                
+                <!-- Группа полей публикации -->
+                <div class="form-group" style="background: var(--tint); padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+                    <legend style="font-weight: 600; margin-bottom: 12px;">Публикация и доступ</legend>
+                    
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                        {{ form.publish_now }}
+                        <label for="{{ form.publish_now.id_for_label }}" style="cursor: pointer; font-weight: 500;">
+                            {{ form.publish_now.label }}
+                        </label>
+                    </div>
+                    {% if form.publish_now.help_text %}
+                        <p class="help-text" style="margin-left: 24px; font-size: 0.875rem; color: var(--muted);">{{ form.publish_now.help_text }}</p>
+                    {% endif %}
+                    
+                    <div id="publish_at_container" style="margin-top: 12px; margin-left: 24px;">
+                        <label for="{{ form.publish_at.id_for_label }}" style="display: block; margin-bottom: 4px; font-weight: 500;">
+                            {{ form.publish_at.label }}
+                        </label>
+                        {{ form.publish_at }}
+                        {% if form.publish_at.help_text %}
+                            <p class="help-text" style="font-size: 0.875rem; color: var(--muted);">{{ form.publish_at.help_text }}</p>
+                        {% endif %}
+                        {% if form.publish_at.errors %}
+                            <ul class="errorlist">{% for error in form.publish_at.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+                        {% endif %}
+                    </div>
+                    
+                    <div style="margin-top: 12px; margin-left: 24px;">
+                        <label for="{{ form.group.id_for_label }}" style="display: block; margin-bottom: 4px; font-weight: 500;">
+                            {{ form.group.label }}
+                        </label>
+                        {{ form.group }}
+                        {% if form.group.help_text %}
+                            <p class="help-text" style="font-size: 0.875rem; color: var(--muted);">{{ form.group.help_text }}</p>
+                        {% endif %}
+                        {% if form.group.errors %}
+                            <ul class="errorlist">{% for error in form.group.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- Остальные поля формы -->
+                {% include "lms/form_fields.html" with exclude_fields="publish_now,publish_at,group" %}
+                
                 <div class="row" style="margin-top:8px">
                     <button class="btn" type="submit">{% icon "save" %}Сохранить</button>
                     {% if assignment and assignment.is_quiz %}
@@ -40,11 +101,12 @@
         <div class="card card-pad-sm">
             <p class="rail-title">Как собрать задание</p>
             <ol class="col tiny muted" style="padding-left:18px;margin:0">
-                <li>Выберите тип: тест проверяется автоматически, письменные и аудио — вручную.</li>
+                <li><strong>Выберите группу:</strong> если не указать — задание будет общим для всех.</li>
+                <li><strong>Опубликовать сразу:</strong> снимите галочку, чтобы сохранить как черновик или отложить.</li>
+                <li><strong>Тип ответа:</strong> тест проверяется автоматически, письменные и аудио — вручную.</li>
                 <li>Для теста нажмите «Сохранить и перейти к вопросам» — там добавляются задания с вариантами, пропусками и соответствиями.</li>
                 <li>Прикрепите материалы (текст, аудио, фото) — ученик увидит их прямо в карточке задания.</li>
                 <li>Укажите дедлайн и максимум баллов; баллы теста считаются из вопросов автоматически.</li>
-                <li>Сохраните как черновик, проверьте предпросмотр и опубликуйте.</li>
             </ol>
         </div>
         {% if assignment %}
@@ -58,9 +120,40 @@
                         {% csrf_token %}
                         <button class="btn btn-ghost btn-sm btn-block" type="submit">{% icon "copy" %}Создать копию</button>
                     </form>
+                    <!-- Быстрая публикация / снятие с публикации -->
+                    <form method="post" action="{% url 'teacher_assignment_publish' assignment.pk %}" style="margin-top: 8px;">
+                        {% csrf_token %}
+                        {% if assignment.status == 'draft' %}
+                            <button class="btn btn-success btn-sm btn-block" type="submit" name="publish" value="1">{% icon "rocket" %}Опубликовать</button>
+                        {% else %}
+                            <button class="btn btn-warning btn-sm btn-block" type="submit" name="publish" value="0">{% icon "archive" %}В черновики</button>
+                        {% endif %}
+                    </form>
                 </div>
             </div>
         {% endif %}
     </div>
 </div>
+
+<script>
+// Скрываем поле publish_at если выбрано "Опубликовать сразу"
+(function() {
+    var checkbox = document.getElementById('{{ form.publish_now.id_for_label }}');
+    var container = document.getElementById('publish_at_container');
+    
+    function togglePublishAt() {
+        if (checkbox && checkbox.checked) {
+            container.style.display = 'none';
+        } else if (container) {
+            container.style.display = 'block';
+        }
+    }
+    
+    if (checkbox) {
+        checkbox.addEventListener('change', togglePublishAt);
+        // Инициализация при загрузке
+        togglePublishAt();
+    }
+})();
+</script>
 {% endblock %}

@@ -3,6 +3,7 @@ import uuid
 from django import forms
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 from django.utils.text import slugify
 
 from .models import (
@@ -13,6 +14,7 @@ from .models import (
     Feedback,
     Flashcard,
     FlashcardDeck,
+    Group,
     Profile,
     Question,
     Skill,
@@ -195,10 +197,19 @@ class TopicForm(SluglessModelForm):
 
 
 class AssignmentForm(forms.ModelForm):
+    # Поле публикации как переключатель (удобнее для учителя)
+    publish_now = forms.BooleanField(
+        required=False,
+        initial=True,
+        label="Опубликовать сразу",
+        help_text="Снимите галочку, чтобы сохранить как черновик или отложить публикацию",
+    )
+    
     class Meta:
         model = Assignment
         fields = [
             "topic",
+            "group",
             "title",
             "description",
             "assignment_type",
@@ -206,12 +217,14 @@ class AssignmentForm(forms.ModelForm):
             "max_points",
             "deadline",
             "publish_at",
-            "status",
             "order",
             "material_file",
             "is_active",
+            "publish_now",
         ]
         widgets = {
+            "topic": forms.Select(attrs={"class": "form-select"}),
+            "group": forms.Select(attrs={"class": "form-select"}),
             "title": forms.TextInput(
                 attrs={"placeholder": "Например: Опишите свою обычную субботу"}
             ),
@@ -224,6 +237,9 @@ class AssignmentForm(forms.ModelForm):
             "deadline": _datetime_widget(),
             "publish_at": _datetime_widget(),
             "skills": forms.CheckboxSelectMultiple,
+            "assignment_type": forms.Select(attrs={"class": "form-select"}),
+            "is_active": forms.CheckboxInput(),
+            "order": forms.NumberInput(attrs={"min": "0", "step": "1"}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -231,13 +247,27 @@ class AssignmentForm(forms.ModelForm):
         self.fields["deadline"].input_formats = DATETIME_FORMATS
         self.fields["publish_at"].input_formats = DATETIME_FORMATS
         self.fields["skills"].queryset = Skill.objects.all()
+        self.fields["group"].queryset = Group.objects.filter(is_active=True).order_by("name")
+        self.fields["group"].empty_label = "Все группы (общее задание)"
         self.fields[
             "max_points"
         ].help_text = "Для теста максимум считается автоматически как сумма баллов вопросов."
         self.fields[
             "publish_at"
-        ].help_text = "Оставьте пустым, чтобы опубликовать сразу. Черновик ученикам не виден."
-        self.fields["status"].widget = forms.RadioSelect()
+        ].help_text = "Отложите публикацию на будущее. Работает только если снята галочка «Опубликовать сразу»."
+        
+        # Устанавливаем начальное значение publish_now
+        if self.instance.pk:
+            # Для существующих заданий: опубликовано ли сейчас?
+            is_published = (
+                self.instance.status == Assignment.Publication.PUBLISHED
+                and (not self.instance.publish_at or self.instance.publish_at <= timezone.now())
+            )
+            self.initial["publish_now"] = is_published
+            self.initial["publish_at"] = self.instance.publish_at
+        
+        # Делаем publish_at необязательным и скрываем подсказку о статусе
+        self.fields["publish_at"].required = False
 
 
 class QuestionForm(forms.ModelForm):

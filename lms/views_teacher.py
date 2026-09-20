@@ -452,7 +452,34 @@ def assignment_form(request, pk=None):
         request.POST or None, request.FILES or None, instance=assignment, initial=initial or None
     )
     if request.method == "POST" and form.is_valid():
-        instance = form.save()
+        # Обрабатываем публикацию через publish_now
+        instance = form.save(commit=False)
+        
+        # Логика публикации:
+        # 1. Если publish_now=True → опубликовать сразу (publish_at=None)
+        # 2. Если publish_now=False и указан publish_at → отложить до даты
+        # 3. Если publish_now=False и publish_at не указан → черновик
+        publish_now = form.cleaned_data.get("publish_now", True)
+        publish_at = form.cleaned_data.get("publish_at")
+        
+        if publish_now:
+            instance.status = Assignment.Publication.PUBLISHED
+            instance.publish_at = None  # Сбрасываем, чтобы было доступно сразу
+        else:
+            if publish_at and publish_at > timezone.now():
+                # Отложенная публикация
+                instance.status = Assignment.Publication.PUBLISHED
+                instance.publish_at = publish_at
+            else:
+                # Черновик
+                instance.status = Assignment.Publication.DRAFT
+                instance.publish_at = publish_at
+        
+        instance.save()
+        
+        # Сохраняем many-to-many связи (skills)
+        form.save_m2m()
+        
         messages.success(
             request,
             "Задание сохранено как черновик — ученикам пока не видно."
@@ -471,10 +498,10 @@ def assignment_form(request, pk=None):
             "topics": Topic.objects.select_related("block").order_by(
                 "block__order", "order", "title"
             ),
-            "groups": Group.objects.filter(is_active=True).order_by("name"),
             "workspace": "curriculum",
         },
     )
+
 
 
 @teacher_required
