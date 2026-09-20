@@ -45,6 +45,7 @@ from .models import (
     CommentSnippet,
     Flashcard,
     FlashcardDeck,
+    Group,
     Profile,
     Question,
     Submission,
@@ -470,6 +471,7 @@ def assignment_form(request, pk=None):
             "topics": Topic.objects.select_related("block").order_by(
                 "block__order", "order", "title"
             ),
+            "groups": Group.objects.filter(is_active=True).order_by("name"),
             "workspace": "curriculum",
         },
     )

@@ -45,6 +45,13 @@ class Profile(models.Model):
     )
     telegram = models.CharField(max_length=100, blank=True, verbose_name="Telegram")
     comment = models.TextField(blank=True, verbose_name="Комментарий преподавателя")
+    
+    # Геймификация (мягкая)
+    streak_days = models.PositiveIntegerField(default=0, verbose_name="Серия дней")
+    streak_last_date = models.DateField(null=True, blank=True, verbose_name="Последний день активности")
+    xp_total = models.PositiveIntegerField(default=0, verbose_name="Всего XP")
+    badges = models.JSONField(default=list, blank=True, verbose_name="Бейджи")
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -62,6 +69,54 @@ def create_user_profile(sender, instance, created, **kwargs):
     if created and not kwargs.get("raw"):
         role = Profile.Role.TEACHER if instance.is_superuser else Profile.Role.STUDENT
         Profile.objects.get_or_create(user=instance, defaults={"role": role})
+
+
+class Group(models.Model):
+    """Учебная группа/класс для разделения учеников."""
+    
+    name = models.CharField(max_length=100, verbose_name="Название группы")
+    slug = models.SlugField(unique=True, verbose_name="URL")
+    description = models.TextField(blank=True, verbose_name="Описание")
+    cefr_level = models.CharField(
+        max_length=2,
+        choices=[
+            ("A1", "A1 — Начальный"),
+            ("A2", "A2 — Элементарный"),
+            ("B1", "B1 — Средний"),
+            ("B2", "B2 — Выше среднего"),
+            ("C1", "C1 — Продвинутый"),
+            ("C2", "C2 — В совершенстве"),
+        ],
+        blank=True,
+        verbose_name="Уровень CEFR",
+    )
+    teacher = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="taught_groups",
+        verbose_name="Преподаватель",
+        limit_choices_to={'profile__role': 'teacher'},
+    )
+    students = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name="student_groups",
+        verbose_name="Ученики",
+        limit_choices_to={'profile__role': 'student'},
+    )
+    is_active = models.BooleanField(default=True, verbose_name="Активна")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Группа"
+        verbose_name_plural = "Группы"
+        ordering = ["name"]
+    
+    def __str__(self):
+        return self.name
 
 
 class CefrLevel(models.TextChoices):
@@ -130,15 +185,24 @@ class Topic(models.Model):
 
 
 class AssignmentQuerySet(models.QuerySet):
-    def visible(self, at=None):
-        """Всё, что реально видит ученик: активно, опубликовано, срок публикации наступил."""
+    def visible(self, user=None, at=None):
+        """Всё, что реально видит ученик: активно, опубликовано, срок публикации наступил.
+        Если передан user, фильтруем по группе ученика."""
         moment = at or timezone.now()
-        return self.filter(
+        qs = self.filter(
             is_active=True,
             status=self.model.Publication.PUBLISHED,
             topic__is_active=True,
             topic__block__is_active=True,
         ).filter(Q(publish_at__isnull=True) | Q(publish_at__lte=moment))
+        
+        # Если пользователь указан и у него есть группы, показываем задания для его групп
+        # или задания без привязки к группе (общие)
+        if user and hasattr(user, 'student_groups'):
+            user_groups = user.student_groups.all()
+            qs = qs.filter(Q(group__isnull=True) | Q(group__in=user_groups))
+        
+        return qs
 
 
 class Skill(models.Model):
@@ -185,6 +249,15 @@ class Assignment(models.Model):
         on_delete=models.CASCADE,
         related_name="assignments",
         verbose_name="Тема",
+    )
+    group = models.ForeignKey(
+        "Group",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assignments",
+        verbose_name="Группа",
+        help_text="Если указано, задание доступно только ученикам этой группы",
     )
     title = models.CharField(max_length=200, verbose_name="Название задания")
     description = models.TextField(verbose_name="Условия задания")
