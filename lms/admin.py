@@ -48,6 +48,7 @@ class ProfileInline(admin.StackedInline):
     fk_name = "user"
     extra = 1
     max_num = 1
+    fields = ("role", "telegram", "comment")
 
 
 class CustomUserAdmin(UserAdmin):
