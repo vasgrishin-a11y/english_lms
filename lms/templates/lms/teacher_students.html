@@ -10,15 +10,21 @@
         <h1>Ученики</h1>
         <p class="page-note">Прогресс считается по опубликованным заданиям ({{ total_assignments }} в курсе) и последним попыткам.</p>
     </div>
-    <form method="get" class="row row-tight" role="search">
-        <label for="id_q" class="sr-only">Поиск ученика</label>
-        <div class="search">
-            {% icon "search" %}
-            <input type="search" id="id_q" name="q" maxlength="200" value="{{ query }}" placeholder="Имя, логин или Telegram…">
-        </div>
-        <button class="btn btn-secondary btn-sm" type="submit">Найти</button>
-        {% if query %}<a class="btn btn-ghost btn-sm" href="{% url 'teacher_students' %}">Сбросить</a>{% endif %}
-    </form>
+    <div class="row row-gap">
+        <form method="get" class="row row-tight" role="search">
+            <label for="id_q" class="sr-only">Поиск ученика</label>
+            <div class="search">
+                {% icon "search" %}
+                <input type="search" id="id_q" name="q" maxlength="200" value="{{ query }}" placeholder="Имя, логин или Telegram…">
+            </div>
+            <button class="btn btn-secondary btn-sm" type="submit">Найти</button>
+            {% if query %}<a class="btn btn-ghost btn-sm" href="{% url 'teacher_students' %}">Сбросить</a>{% endif %}
+        </form>
+        <a class="btn btn-primary btn-sm" href="{% url 'teacher_student_create' %}">
+            {% icon "plus" "icon icon-sm" %}
+            Создать ученика
+        </a>
+    </div>
 </div>
 
 <section class="card">
@@ -31,6 +37,9 @@
                     <span>@{{ student.username }}</span>
                     {% if student.profile.telegram %}<span>{% icon "send" "icon icon-sm" %}{{ student.profile.telegram }}</span>{% endif %}
                     {% if student.stats.last %}<span>{% icon "clock" "icon icon-sm" %}последняя сдача {{ student.stats.last|date:"d.m.Y" }}</span>{% else %}<span>сдач пока нет</span>{% endif %}
+                    {% if student.student_groups.all %}
+                        <span>{% icon "users" "icon icon-sm" %}{{ student.student_groups.count }} групп</span>
+                    {% endif %}
                 </span>
                 <div class="progress" role="img" aria-label="Проверено {{ student.stats.checked }} из {{ total_assignments }} заданий">
                     <span class="progress-bar" style="width:{{ student.stats.progress }}%"></span>
@@ -47,7 +56,13 @@
         <div class="empty">
             <div class="empty-icon">{% icon "users" "icon icon-xl" %}</div>
             <h3>Ученики не найдены</h3>
-            <p>{% if query %}Попробуйте изменить поисковый запрос.{% else %}Создайте учётные записи учеников в административной панели.{% endif %}</p>
+            <p>{% if query %}Попробуйте изменить поисковый запрос.{% else %}Создайте первую учётную запись ученика.{% endif %}</p>
+            {% if not query %}
+                <a class="btn btn-primary" href="{% url 'teacher_student_create' %}">
+                    {% icon "plus" %}
+                    Создать ученика
+                </a>
+            {% endif %}
         </div>
     {% endfor %}
 </section>

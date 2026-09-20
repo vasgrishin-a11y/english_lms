@@ -32,8 +32,11 @@ from .forms import (
     FlashcardBulkForm,
     FlashcardDeckForm,
     FlashcardForm,
+    GroupForm,
     QuestionForm,
     ReviewForm,
+    StudentCreateForm,
+    StudentEditForm,
     TeacherProfileForm,
     TopicForm,
 )
@@ -1001,3 +1004,195 @@ def snippet_delete(request, pk):
     snippet.delete()
     messages.success(request, "Шаблон комментария удалён.")
     return redirect("teacher_settings")
+
+
+# ── Управление группами ───────────────────────────────────────────────────────
+
+@teacher_required
+@require_GET
+def groups_list(request):
+    """Список всех групп учителя."""
+    query = request.GET.get("q", "").strip()[:200]
+    groups = Group.objects.filter(
+        Q(teacher=request.user) | Q(teacher__isnull=True)
+    ).select_related("teacher").prefetch_related("students").order_by("name")
+    
+    if query:
+        groups = groups.filter(
+            Q(name__icontains=query)
+            | Q(description__icontains=query)
+            | Q(slug__icontains=query)
+        )
+    
+    # Считаем количество учеников и заданий в каждой группе
+    for group in groups:
+        group.student_count = group.students.count()
+        group.assignment_count = group.assignments.count()
+    
+    return render(
+        request,
+        "lms/teacher_groups.html",
+        {
+            "groups": groups,
+            "query": query,
+            "workspace": "groups",
+        },
+    )
+
+
+@teacher_required
+@require_http_methods(["GET", "POST"])
+def group_form(request, pk=None):
+    """Создание или редактирование группы."""
+    group = get_object_or_404(Group, pk=pk) if pk else None
+    
+    # Проверка прав: учитель может редактировать только свои группы
+    if group and group.teacher_id and group.teacher_id != request.user.id and not request.user.is_superuser:
+        raise PermissionDenied
+    
+    if request.method == "POST":
+        form = GroupForm(request.POST, instance=group)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            # Если группа создается и учитель не указан, ставим текущего
+            if not obj.pk and not obj.teacher_id:
+                obj.teacher = request.user
+            obj.save()
+            form.save_m2m()  # Сохраняем связь ManyToMany для студентов
+            
+            action = "создана" if not pk else "обновлена"
+            messages.success(request, f"Группа «{obj.name}» {action}.")
+            return redirect("teacher_groups")
+    else:
+        form = GroupForm(instance=group)
+    
+    return render(
+        request,
+        "lms/teacher_group_form.html",
+        {
+            "form": form,
+            "group": group,
+            "title": "Редактировать группу" if group else "Создать группу",
+            "workspace": "groups",
+        },
+    )
+
+
+@teacher_required
+@require_POST
+def group_delete(request, pk):
+    """Удаление группы."""
+    group = get_object_or_404(Group, pk=pk)
+    
+    # Проверка прав
+    if group.teacher_id and group.teacher_id != request.user.id and not request.user.is_superuser:
+        raise PermissionDenied
+    
+    try:
+        name = group.name
+        group.delete()
+        messages.success(request, f"Группа «{name}» удалена.")
+    except ProtectedError:
+        messages.error(request, "Нельзя удалить группу, к которой привязаны задания.")
+    
+    return redirect("teacher_groups")
+
+
+# ── Управление учениками ──────────────────────────────────────────────────────
+
+@teacher_required
+@require_http_methods(["GET", "POST"])
+def student_create(request):
+    """Создание нового ученика с генерацией пароля."""
+    if request.method == "POST":
+        form = StudentCreateForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            # Показываем пароль только один раз
+            messages.success(
+                request,
+                f"Ученик «{user.first_name} {user.last_name}» создан. "
+                f"Логин: {user.username}, Пароль: {form.generated_password}. "
+                "Сообщите пароль ученику!"
+            )
+            return redirect("teacher_students")
+    else:
+        form = StudentCreateForm()
+    
+    return render(
+        request,
+        "lms/teacher_student_form.html",
+        {
+            "form": form,
+            "student": None,
+            "title": "Создать ученика",
+            "workspace": "students",
+        },
+    )
+
+
+@teacher_required
+@require_http_methods(["GET", "POST"])
+def student_edit(request, pk):
+    """Редактирование ученика."""
+    student = get_object_or_404(User, pk=pk, profile__role=Profile.Role.STUDENT)
+    
+    if request.method == "POST":
+        form = StudentEditForm(request.POST, instance=student)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f"Данные ученика «{student.first_name} {student.last_name}» обновлены.")
+            return redirect("teacher_students")
+    else:
+        form = StudentEditForm(instance=student)
+    
+    return render(
+        request,
+        "lms/teacher_student_form.html",
+        {
+            "form": form,
+            "student": student,
+            "title": "Редактировать ученика",
+            "workspace": "students",
+        },
+    )
+
+
+@teacher_required
+@require_POST
+def student_delete(request, pk):
+    """Удаление ученика."""
+    student = get_object_or_404(User, pk=pk, profile__role=Profile.Role.STUDENT)
+    
+    # Нельзя удалить самого себя
+    if student.pk == request.user.pk:
+        messages.error(request, "Нельзя удалить самого себя.")
+        return redirect("teacher_students")
+    
+    try:
+        name = student.get_full_name() or student.username
+        student.delete()
+        messages.success(request, f"Ученик «{name}» удалён.")
+    except ProtectedError:
+        messages.error(request, "Нельзя удалить ученика, у которого есть сдачи работ.")
+    
+    return redirect("teacher_students")
+
+
+@teacher_required
+@require_POST
+def student_reset_password(request, pk):
+    """Сброс пароля ученика с генерацией нового."""
+    import secrets
+    student = get_object_or_404(User, pk=pk, profile__role=Profile.Role.STUDENT)
+    
+    new_password = secrets.token_urlsafe(12)
+    student.set_password(new_password)
+    student.save()
+    
+    messages.success(
+        request,
+        f"Пароль ученика «{student.get_full_name() or student.username}» сброшен. "
+        f"Новый пароль: {new_password}"
+    )
+    return redirect("teacher_students")

@@ -2,6 +2,7 @@ import uuid
 
 from django import forms
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.utils.text import slugify
 
@@ -13,12 +14,15 @@ from .models import (
     Feedback,
     Flashcard,
     FlashcardDeck,
+    Group,
     Profile,
     Question,
     Skill,
     Submission,
     Topic,
 )
+
+User = get_user_model()
 from .validators import ALLOWED_FILE_EXTENSIONS, AUDIO_EXTENSIONS, validate_answer, validate_upload
 
 
@@ -478,4 +482,190 @@ class TeacherProfileForm(forms.Form):
         profile.telegram = data["telegram"][:100]
         profile.comment = data["comment"]
         profile.save(update_fields=["telegram", "comment", "updated_at"])
+        return user
+
+
+# ── Управление группами и учениками ───────────────────────────────────────────
+
+class GroupForm(forms.ModelForm):
+    """Форма создания/редактирования учебной группы."""
+    
+    student_ids = forms.ModelMultipleChoiceField(
+        queryset=None,
+        required=False,
+        label="Ученики в группе",
+        widget=forms.CheckboxSelectMultiple,
+        help_text="Выберите учеников для добавления в группу"
+    )
+    
+    class Meta:
+        model = Group
+        fields = ["name", "slug", "description", "cefr_level", "teacher", "is_active"]
+        widgets = {
+            "name": forms.TextInput(attrs={"placeholder": "Например: Группа A2-1, 2024"}),
+            "slug": forms.TextInput(attrs={"placeholder": "a2-1-2024"}),
+            "description": forms.Textarea(attrs={"rows": 3, "placeholder": "Описание группы"}),
+            "cefr_level": forms.Select(),
+            "teacher": forms.Select(),
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Показываем только учеников
+        self.fields["student_ids"].queryset = Profile.objects.filter(
+            role=Profile.Role.STUDENT
+        ).select_related("user").order_by("user__last_name", "user__first_name")
+        
+        # Показываем только учителей
+        self.fields["teacher"].queryset = Profile.objects.filter(
+            role=Profile.Role.TEACHER
+        ).select_related("user").order_by("user__last_name", "user__first_name")
+        self.fields["teacher"].empty_label = "Не назначен"
+        
+        # Если редактируем существующую группу, устанавливаем текущих студентов
+        if self.instance.pk:
+            self.fields["student_ids"].initial = self.instance.students.all()
+    
+    def save(self, commit=True):
+        instance = super().save(commit=commit)
+        if commit:
+            # Сохраняем связь ManyToMany
+            instance.students.set(self.cleaned_data["student_ids"])
+        return instance
+    
+    def clean_slug(self):
+        slug = self.cleaned_data.get("slug")
+        if not slug:
+            from django.utils.text import slugify
+            name = self.cleaned_data.get("name", "")
+            slug = slugify(name, allow_unicode=True) or uuid.uuid4().hex[:8]
+        return slug
+
+
+class StudentCreateForm(forms.ModelForm):
+    """Форма создания нового ученика с генерацией пароля."""
+    
+    first_name = forms.CharField(max_length=150, required=True, label="Имя")
+    last_name = forms.CharField(max_length=150, required=True, label="Фамилия")
+    email = forms.EmailField(required=False, label="Email")
+    username = forms.CharField(max_length=150, required=True, label="Логин")
+    
+    # Поле для отображения сгенерированного пароля (не сохраняется в БД)
+    generated_password = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={"readonly": True, "class": "password-display"}),
+        label="Сгенерированный пароль"
+    )
+    
+    group_ids = forms.ModelMultipleChoiceField(
+        queryset=None,
+        required=False,
+        label="Группы",
+        widget=forms.CheckboxSelectMultiple,
+        help_text="Выберите группы, куда добавить ученика"
+    )
+    
+    telegram = forms.CharField(max_length=100, required=False, label="Telegram")
+    comment = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 2}), label="Комментарий")
+    
+    class Meta:
+        model = None  # Кастомная форма
+        fields = ["username", "first_name", "last_name", "email", "group_ids", "telegram", "comment"]
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Показываем только активные группы
+        self.fields["group_ids"].queryset = Group.objects.filter(is_active=True).order_by("name")
+    
+    def clean_username(self):
+        username = self.cleaned_data.get("username")
+        if User.objects.filter(username=username).exists():
+            raise forms.ValidationError("Пользователь с таким логином уже существует")
+        return username
+    
+    def clean_email(self):
+        email = self.cleaned_data.get("email")
+        if email and User.objects.filter(email=email).exists():
+            raise forms.ValidationError("Пользователь с таким email уже существует")
+        return email
+    
+    def save(self, commit=True):
+        # Генерируем случайный пароль
+        import secrets
+        password = secrets.token_urlsafe(12)
+        self.generated_password = password
+        
+        # Создаем пользователя
+        user = User(
+            username=self.cleaned_data["username"],
+            first_name=self.cleaned_data["first_name"],
+            last_name=self.cleaned_data["last_name"],
+            email=self.cleaned_data.get("email", ""),
+        )
+        user.set_password(password)
+        if commit:
+            user.save()
+            # Создаем профиль
+            profile, _ = Profile.objects.get_or_create(user=user)
+            profile.role = Profile.Role.STUDENT
+            profile.telegram = self.cleaned_data.get("telegram", "")
+            profile.comment = self.cleaned_data.get("comment", "")
+            profile.save()
+            
+            # Добавляем в выбранные группы
+            if self.cleaned_data.get("group_ids"):
+                user.student_groups.set(self.cleaned_data["group_ids"])
+        
+        return user
+
+
+class StudentEditForm(forms.ModelForm):
+    """Форма редактирования ученика."""
+    
+    first_name = forms.CharField(max_length=150, required=True, label="Имя")
+    last_name = forms.CharField(max_length=150, required=True, label="Фамилия")
+    email = forms.EmailField(required=False, label="Email")
+    
+    group_ids = forms.ModelMultipleChoiceField(
+        queryset=None,
+        required=False,
+        label="Группы",
+        widget=forms.CheckboxSelectMultiple,
+        help_text="Выберите группы, куда добавить ученика"
+    )
+    
+    telegram = forms.CharField(max_length=100, required=False, label="Telegram")
+    comment = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 2}), label="Комментарий")
+    
+    class Meta:
+        model = None  # Кастомная форма
+        fields = ["first_name", "last_name", "email", "group_ids", "telegram", "comment"]
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Показываем только активные группы
+        self.fields["group_ids"].queryset = Group.objects.filter(is_active=True).order_by("name")
+        
+        # Если редактируем, устанавливаем текущие группы
+        if self.instance.pk and hasattr(self.instance, 'student_groups'):
+            self.fields["group_ids"].initial = self.instance.student_groups.all()
+    
+    def clean_email(self):
+        email = self.cleaned_data.get("email")
+        if email and User.objects.filter(email=email).exclude(pk=self.instance.pk).exists():
+            raise forms.ValidationError("Пользователь с таким email уже существует")
+        return email
+    
+    def save(self, commit=True):
+        user = super().save(commit=commit)
+        if commit:
+            profile, _ = Profile.objects.get_or_create(user=user)
+            profile.telegram = self.cleaned_data.get("telegram", "")
+            profile.comment = self.cleaned_data.get("comment", "")
+            profile.save()
+            
+            # Обновляем группы
+            if self.cleaned_data.get("group_ids") is not None:
+                user.student_groups.set(self.cleaned_data["group_ids"])
+        
         return user

@@ -1,0 +1,79 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}{{ title }} — English LMS{% endblock %}
+{% block workspace_class %}workspace-narrow{% endblock %}
+
+{% block content %}
+<div class="content-head">
+    <h1>{{ title }}</h1>
+    <p class="page-note">Заполните информацию о группе и выберите учеников.</p>
+</div>
+
+<form method="post" class="card form-stack" novalidate>
+    {% csrf_token %}
+    
+    <fieldset class="form-section">
+        <legend>Основная информация</legend>
+        
+        <div class="form-group">
+            <label for="{{ form.name.id_for_label }}">Название группы *</label>
+            {{ form.name }}
+            {% if form.name.errors %}<div class="form-error">{{ form.name.errors.0 }}</div>{% endif %}
+            <small class="form-help">Например: A2-1, 2024 или Business English Group</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="{{ form.slug.id_for_label }}">URL (слаг)</label>
+            {{ form.slug }}
+            {% if form.slug.errors %}<div class="form-error">{{ form.slug.errors.0 }}</div>{% endif %}
+            <small class="form-help">Латиницей, без пробелов. Например: a2-1-2024</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="{{ form.description.id_for_label }}">Описание</label>
+            {{ form.description }}
+            {% if form.description.errors %}<div class="form-error">{{ form.description.errors.0 }}</div>{% endif %}
+        </div>
+        
+        <div class="form-row">
+            <div class="form-group">
+                <label for="{{ form.cefr_level.id_for_label }}">Уровень CEFR</label>
+                {{ form.cefr_level }}
+                {% if form.cefr_level.errors %}<div class="form-error">{{ form.cefr_level.errors.0 }}</div>{% endif %}
+            </div>
+            
+            <div class="form-group">
+                <label for="{{ form.teacher.id_for_label }}">Преподаватель</label>
+                {{ form.teacher }}
+                {% if form.teacher.errors %}<div class="form-error">{{ form.teacher.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label for="{{ form.is_active.id_for_label }}">
+                {{ form.is_active }}
+                Группа активна
+            </label>
+            {% if form.is_active.errors %}<div class="form-error">{{ form.is_active.errors.0 }}</div>{% endif %}
+            <small class="form-help">Неактивные группы скрыты из списков и не доступны для новых заданий.</small>
+        </div>
+    </fieldset>
+    
+    <fieldset class="form-section">
+        <legend>Ученики в группе</legend>
+        
+        <div class="form-group">
+            <label>{{ form.student_ids.label }}</label>
+            {{ form.student_ids }}
+            {% if form.student_ids.errors %}<div class="form-error">{{ form.student_ids.errors.0 }}</div>{% endif %}
+            <small class="form-help">{{ form.student_ids.help_text }}</small>
+        </div>
+    </fieldset>
+    
+    <div class="form-actions">
+        <a href="{% url 'teacher_groups' %}" class="btn btn-ghost">Отмена</a>
+        <button type="submit" class="btn btn-primary">Сохранить группу</button>
+    </div>
+</form>
+{% endblock %}

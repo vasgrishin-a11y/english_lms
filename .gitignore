@@ -1,48 +1,39 @@
-```
-# Python
+```gitignore
+# Python cache
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.Python
-env/
-venv/
-.venv/
-.ENV
-.venv.bak/
-pip-log.txt
-pip-delete-this-directory.txt
-.tox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
+
+# Django specific
+*.sqlite3
 *.log
-*.pot
-*.pyc
-*.pyo
-*.pyd
-.MF
-.tags*
-TAGS
+
+# Dependencies
+.venv/
+venv/
+env/
+.env
+.env.local
+.env.*
+
+# IDE and editor files
+.vscode/
+.idea/
 *.swp
 *.swo
-*~
-.pytest_cache/
-.mypy_cache/
-.coverage*
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Coverage reports
+.coverage
 htmlcov/
+coverage/
 
-# Django
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-media/
-staticfiles/
-.env
-
-# Migration files are intentionally not ignored since they're part of the source
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
 ```
