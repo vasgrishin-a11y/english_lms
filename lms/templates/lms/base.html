@@ -25,6 +25,9 @@
     <nav class="topbar-nav" aria-label="Основная навигация">
         {% if user.is_authenticated %}
             {% if is_teacher %}
+                <a class="nav-link" href="{% url 'teacher_home' %}"{% if workspace == 'home' %} aria-current="page"{% endif %}>
+                    {% icon "grid" %}<span class="label">Консоль</span>
+                </a>
                 <a class="nav-link" href="{% url 'teacher_review_queue' %}"{% if workspace == 'review' %} aria-current="page"{% endif %}>
                     {% icon "check-circle" %}<span class="label">Проверка</span>
                     {% if pending_count %}<span class="nav-count tnum">{{ pending_count }}</span>{% endif %}
@@ -34,6 +37,9 @@
                 </a>
                 <a class="nav-link" href="{% url 'teacher_students' %}"{% if workspace == 'students' %} aria-current="page"{% endif %}>
                     {% icon "users" %}<span class="label">Ученики</span>
+                </a>
+                <a class="nav-link" href="{% url 'teacher_groups' %}"{% if workspace == 'groups' %} aria-current="page"{% endif %}>
+                    {% icon "users" %}<span class="label">Группы</span>
                 </a>
                 <a class="nav-link" href="{% url 'teacher_analytics' %}"{% if workspace == 'analytics' %} aria-current="page"{% endif %}>
                     {% icon "chart" %}<span class="label">Аналитика</span>
@@ -96,9 +102,11 @@
 <nav class="mobile-nav" aria-label="Навигация на маленьком экране">
     <ul>
         {% if is_teacher %}
+            <li><a href="{% url 'teacher_home' %}"{% if workspace == 'home' %} aria-current="page"{% endif %}>{% icon "grid" %}Консоль</a></li>
             <li><a href="{% url 'teacher_review_queue' %}"{% if workspace == 'review' %} aria-current="page"{% endif %}>{% icon "check-circle" %}Проверка</a></li>
             <li><a href="{% url 'teacher_curriculum' %}"{% if workspace == 'curriculum' %} aria-current="page"{% endif %}>{% icon "layers" %}Курс</a></li>
             <li><a href="{% url 'teacher_students' %}"{% if workspace == 'students' %} aria-current="page"{% endif %}>{% icon "users" %}Ученики</a></li>
+            <li><a href="{% url 'teacher_groups' %}"{% if workspace == 'groups' %} aria-current="page"{% endif %}>{% icon "users" %}Группы</a></li>
             <li><a href="{% url 'teacher_analytics' %}"{% if workspace == 'analytics' %} aria-current="page"{% endif %}>{% icon "chart" %}Аналитика</a></li>
         {% else %}
             <li><a href="{% url 'student_home' %}"{% if workspace == 'home' %} aria-current="page"{% endif %}>{% icon "home" %}Главная</a></li>
