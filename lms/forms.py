@@ -199,6 +199,7 @@ class AssignmentForm(forms.ModelForm):
         model = Assignment
         fields = [
             "topic",
+            "group",
             "title",
             "description",
             "assignment_type",
@@ -224,6 +225,8 @@ class AssignmentForm(forms.ModelForm):
             "deadline": _datetime_widget(),
             "publish_at": _datetime_widget(),
             "skills": forms.CheckboxSelectMultiple,
+            "group": forms.Select(attrs={"class": "form-select"}),
+            "status": forms.Select(attrs={"class": "form-select"}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -237,7 +240,25 @@ class AssignmentForm(forms.ModelForm):
         self.fields[
             "publish_at"
         ].help_text = "Оставьте пустым, чтобы опубликовать сразу. Черновик ученикам не виден."
-        self.fields["status"].widget = forms.RadioSelect()
+        
+        # Улучшаем отображение поля статуса
+        self.fields["status"].label = "Статус публикации"
+        self.fields["status"].help_text = "Черновик виден только вам. Опубликованное задание доступно ученикам."
+        self.fields["status"].widget = forms.Select(
+            choices=[
+                (Assignment.Publication.DRAFT, "📝 Черновик — скрыто от учеников"),
+                (Assignment.Publication.PUBLISHED, "✅ Опубликовано — видно ученикам"),
+            ]
+        )
+        
+        # Улучшаем отображение поля группы
+        self.fields["group"].label = "Группа назначения"
+        self.fields["group"].help_text = "Если не выбрано, задание доступно всем ученикам. Выберите группу для ограничения доступа."
+        self.fields["group"].empty_label = "Все ученики (общее задание)"
+        self.fields["group"].queryset = Group.objects.filter(is_active=True).order_by("name")
+        
+        # Скрываем is_active из формы, так как это техническое поле
+        self.fields["is_active"].widget = forms.HiddenInput()
 
 
 class QuestionForm(forms.ModelForm):
