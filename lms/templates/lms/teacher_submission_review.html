@@ -1,38 +1,222 @@
 {% extends "lms/base.html" %}
+{% load lms_tags %}
+
 {% block title %}Проверка попытки {{ submission.version }} — English LMS{% endblock %}
+{% block workspace_class %}workspace-wide{% endblock %}
+
 {% block content %}
-<p><a href="{% url 'teacher_submissions' %}">← К списку сдач</a></p>
-<section class="card">
-    <h1>Проверка: попытка {{ submission.version }}</h1>
-    <p><strong>Ученик:</strong> {{ submission.student.get_full_name|default:submission.student.username }}</p>
-    <p><strong>Блок / тема:</strong> {{ submission.assignment.topic.block.name }} / {{ submission.assignment.topic.title }}</p>
-    <p><strong>Задание:</strong> {{ submission.assignment.title }}</p>
-    <p><span class="badge badge-{{ submission.status }}">{{ submission.get_status_display }}</span></p>
-    <p>Отправлено: {{ submission.submitted_at|date:"d.m.Y H:i" }}{% if submission.is_late %} <strong>— после дедлайна</strong>{% endif %}</p>
-    {% if submission.deadline_snapshot %}<p>Дедлайн этой попытки: {{ submission.deadline_snapshot|date:"d.m.Y H:i" }}</p>{% endif %}
-    <p>Максимум баллов этой попытки: {{ submission.max_points_snapshot }}</p>
-    <h2>Условия задания</h2>
-    {{ submission.assignment.description|linebreaks }}
-    {% if submission.assignment.material_file %}<p><a href="{{ submission.assignment.material_file.url }}">Скачать материалы задания</a></p>{% endif %}
-</section>
-<section class="card">
-    <h2>Ответ ученика</h2>
-    {% if submission.text_answer %}<pre>{{ submission.text_answer }}</pre>{% else %}<p class="muted">Текстовый ответ не отправлен.</p>{% endif %}
-    {% if submission.file_answer %}<p><a href="{{ submission.file_answer.url }}">Скачать файл ответа</a></p>{% endif %}
-</section>
-<section class="card">
-    <h2>Решение преподавателя</h2>
-    {% if conflict %}<p role="alert">Проверка не сохранена: данные изменились. <a href="{% url 'teacher_submission_review' latest.pk %}">Открыть актуальную попытку</a>.</p>{% endif %}
-    {% if is_latest %}
-        <form method="post">{% csrf_token %}{% include "lms/form_fields.html" %}<button class="btn" type="submit">Сохранить проверку</button></form>
-    {% else %}
-        <p>Это историческая попытка. Изменение проверки закрыто. <a href="{% url 'teacher_submission_review' latest.pk %}">Открыть последнюю попытку</a>.</p>
-        {% if feedback %}<p>{{ feedback.get_decision_display }}{% if feedback.grade != None %} — {{ feedback.grade }} из {{ submission.max_points_snapshot }}{% endif %}</p>{{ feedback.comment|linebreaks }}{% endif %}
-    {% endif %}
-</section>
-<section class="card">
-    <h2>Последние события этой попытки</h2>
-    <ul>{% for event in events %}<li>{{ event.created_at|date:"d.m.Y H:i" }} — {{ event.get_action_display }}{% if event.actor %}, {{ event.actor.get_full_name|default:event.actor.username }}{% endif %}{% if event.grade != None %}; балл {{ event.grade }}{% endif %}{{ event.comment|linebreaks }}</li>{% empty %}<li>Нет событий.</li>{% endfor %}</ul>
-</section>
-<section class="card"><h2>Все попытки ученика</h2>{% include "lms/attempt_history.html" %}</section>
+<nav aria-label="Хлебные крошки">
+    <ol class="crumbs">
+        <li><a href="{% url 'teacher_review_queue' %}{% querystring %}">Проверка</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_student_detail' submission.student_id %}">{{ submission.student.get_full_name|default:submission.student.username }}</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span>{{ submission.assignment.topic.title }}</span></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">Попытка {{ submission.version }}</span></li>
+    </ol>
+</nav>
+
+<div class="review-nav" data-review
+     data-next="{% if nav.next %}{% url 'teacher_submission_review' nav.next %}{% querystring %}{% endif %}"
+     data-prev="{% if nav.prev %}{% url 'teacher_submission_review' nav.prev %}{% querystring %}{% endif %}"
+     data-hotkeys="{{ ui_hotkeys|yesno:'1,0' }}"
+     data-max-points="{{ submission.max_points_snapshot }}">
+    <span class="row row-tight">
+        <span class="avatar">{{ submission.student|initials }}</span>
+        <span>
+            <strong>{{ submission.student.get_full_name|default:submission.student.username }}</strong>
+            <span class="tiny muted"> · {{ submission.assignment.title }}</span>
+        </span>
+    </span>
+    <span class="row row-tight">
+        {% if nav.prev %}<a class="btn btn-secondary btn-sm" href="{% url 'teacher_submission_review' nav.prev %}{% querystring %}" data-nav-prev>{% icon "chevron-left" %}K</a>{% endif %}
+        <span class="position">{% if nav.position %}{{ nav.position }}{% else %}—{% endif %}</span>
+        {% if nav.next %}<a class="btn btn-secondary btn-sm" href="{% url 'teacher_submission_review' nav.next %}{% querystring %}" data-nav-next>J {% icon "chevron-right" %}</a>{% endif %}
+        <a class="btn btn-ghost btn-sm" href="{% url 'teacher_review_queue' %}{% querystring %}">{% icon "list" %}К очереди</a>
+    </span>
+</div>
+
+<div class="split">
+    <div class="split-main">
+        {% if not is_latest %}
+            <div class="alert alert-warning" role="alert">
+                {% icon "alert" %}
+                <span>Это историческая попытка {{ submission.version }}. Изменение проверки закрыто — решение сохраняется только для последней попытки. <a href="{% url 'teacher_submission_review' latest.pk %}">Открыть последнюю попытку</a>.</span>
+            </div>
+        {% endif %}
+        {% if conflict %}
+            <div class="alert alert-danger" role="alert">
+                {% icon "alert" %}
+                <span>Проверка не сохранена: данные изменились. <a href="{% url 'teacher_submission_review' latest.pk %}">Открыть актуальную попытку</a>.</span>
+            </div>
+        {% endif %}
+
+        <section class="card">
+            <div class="card-head">
+                <h2 class="card-title">{% icon "file-text" %}Условия задания</h2>
+                <span class="row row-tight">
+                    <span class="badge badge-accent">{% icon submission.assignment.assignment_type|type_icon "icon icon-sm" %}{{ submission.assignment.get_assignment_type_display }}</span>
+                    <span class="pill-note tnum">максимум {{ submission.max_points_snapshot }}</span>
+                </span>
+            </div>
+            <p class="tiny muted">{{ submission.assignment.topic.block.name }} · {{ submission.assignment.topic.title }}</p>
+            <h1 class="mb-0" style="font-size:var(--fs-20)">{{ submission.assignment.title }}</h1>
+            {{ submission.assignment.description|linebreaks }}
+            {% if submission.assignment.material_file %}
+                <div class="media-frame">
+                    <p class="strong mb-0">{% icon "file-text" %} Материалы задания</p>
+                    {% if submission.assignment.material_file.name|media_kind == 'image' %}
+                        <img src="{% url 'media_preview' submission.assignment.material_file.name %}" alt="Материал задания" loading="lazy">
+                    {% elif submission.assignment.material_file.name|media_kind == 'audio' %}
+                        <audio controls preload="none" src="{% url 'media_preview' submission.assignment.material_file.name %}"></audio>
+                    {% endif %}
+                    <a class="btn btn-secondary btn-sm" href="{{ submission.assignment.material_file.url }}">{% icon "download" %}Скачать материалы</a>
+                </div>
+            {% endif %}
+            <p class="small mb-0" style="margin-top:12px">
+                <a href="{% url 'teacher_assignment_form' submission.assignment_id %}">{% icon "pencil" "icon icon-sm" %}Изменить задание</a>
+                · <a href="{% url 'teacher_assignment_preview' submission.assignment_id %}">{% icon "eye" "icon icon-sm" %}Предпросмотр</a>
+            </p>
+        </section>
+
+        <section class="card">
+            <div class="card-head">
+                <h2 class="card-title">{% icon "quote" %}Ответ ученика</h2>
+                <span class="row row-tight">
+                    <span class="badge badge-{{ submission.status }}">{% icon submission.status|status_icon "icon icon-sm" %}{{ submission.get_status_display }}</span>
+                    <span class="tiny muted tnum">{{ submission.submitted_at|date:"d.m.Y H:i" }}</span>
+                    {% if submission.is_late %}<span class="badge badge-needs_revision">после дедлайна</span>{% endif %}
+                </span>
+            </div>
+            {% if submission.text_answer %}
+                <div class="answer-body" id="answer-text">{{ submission.text_answer }}</div>
+            {% else %}
+                <p class="muted">Текстовый ответ не отправлен.</p>
+            {% endif %}
+            {% if submission.file_answer %}
+                <div class="media-frame" style="margin-top:12px">
+                    <p class="strong mb-0">{% icon "file-text" %} Файл ответа</p>
+                    {% if submission.file_answer.name|media_kind == 'image' %}
+                        <img src="{% url 'media_preview' submission.file_answer.name %}" alt="Файл ответа ученика" loading="lazy">
+                    {% elif submission.file_answer.name|media_kind == 'audio' %}
+                        <audio controls preload="metadata" src="{% url 'media_preview' submission.file_answer.name %}"></audio>
+                    {% endif %}
+                    <a class="btn btn-secondary btn-sm" href="{{ submission.file_answer.url }}">{% icon "download" %}Скачать файл ответа</a>
+                </div>
+            {% endif %}
+        </section>
+
+        {% if quiz %}
+            <section class="card">
+                <div class="card-head">
+                    <h2 class="card-title">{% icon "target" %}Автопроверка теста</h2>
+                    <span class="grade-pill tnum {{ quiz.score|grade_class:quiz.max_score }}">{{ quiz.score }}<small>/{{ quiz.max_score }}</small></span>
+                </div>
+                <p class="muted small">Верных ответов: {{ quiz.correct_count }} из {{ quiz.total_count }}. Балл выставлен автоматически; вы можете изменить его и добавить комментарий.</p>
+                <ol class="col" style="padding:0;list-style:none;margin:0">
+                    {% for question in questions %}
+                        {% with detail=quiz.answers|dictkey:question.pk %}
+                            <li class="panel" style="margin-bottom:8px">
+                                <div class="row row-tight">
+                                    {% if detail.correct %}<span class="badge badge-checked">{% icon "check" "icon icon-sm" %}Верно</span>
+                                    {% elif detail.partially %}<span class="badge badge-submitted">{% icon "percent" "icon icon-sm" %}Частично</span>
+                                    {% else %}<span class="badge badge-needs_revision">{% icon "x" "icon icon-sm" %}Ошибка</span>{% endif %}
+                                    <span class="grow strong">{{ forloop.counter }}. {{ question.text }}</span>
+                                    <span class="tiny muted tnum">{{ detail.points }}/{{ question.points }} б.</span>
+                                </div>
+                                {% if detail.expected %}<p class="small mb-0" style="margin-top:6px"><span class="muted">Правильный ответ:</span> {{ detail.expected }}</p>{% endif %}
+                                {% if question.explanation %}<p class="tiny muted mb-0" style="margin-top:4px">{% icon "lightbulb" "icon icon-sm" %} {{ question.explanation }}</p>{% endif %}
+                            </li>
+                        {% endwith %}
+                    {% endfor %}
+                </ol>
+            </section>
+        {% endif %}
+
+        <section class="card">
+            <div class="card-head"><h2 class="card-title">{% icon "clock" %}События этой попытки</h2></div>
+            <ul class="timeline">
+                {% for event in events %}
+                    <li>
+                        <span class="timeline-time tnum">{{ event.created_at|date:"d.m.Y H:i" }}</span>
+                        <span class="timeline-body">
+                            <strong>{{ event.get_action_display }}</strong>
+                            {% if event.actor %} · {{ event.actor.get_full_name|default:event.actor.username }}{% else %} · автоматически{% endif %}
+                            {% if event.grade != None %} · балл {{ event.grade }}{% endif %}
+                            {% if event.comment %}<br><span class="muted small">{{ event.comment|linebreaksbr }}</span>{% endif %}
+                        </span>
+                    </li>
+                {% empty %}
+                    <li><span class="timeline-body muted">Нет событий.</span></li>
+                {% endfor %}
+            </ul>
+        </section>
+
+        <section class="card">
+            <div class="card-head"><h2 class="card-title">{% icon "layers" %}Все попытки ученика</h2></div>
+            {% include "lms/attempt_history.html" %}
+        </section>
+    </div>
+
+    <div class="split-side">
+        <section class="card card-pad-sm">
+            <div class="card-head" style="margin-bottom:12px">
+                <h2 class="card-title">{% icon "save" %}Решение</h2>
+            </div>
+            {% if is_latest %}
+                <form method="post" data-review-form>
+                    {% csrf_token %}
+                    <input type="hidden" name="snippet_used" id="id_snippet_used" value="">
+                    <div class="score-presets" style="margin-bottom:12px" data-grade-presets>
+                        <button type="button" class="chip" data-grade-preset="100">100%</button>
+                        <button type="button" class="chip" data-grade-preset="85">85%</button>
+                        <button type="button" class="chip" data-grade-preset="70">70%</button>
+                        <button type="button" class="chip" data-grade-preset="50">50%</button>
+                        <button type="button" class="chip" data-grade-preset="0">0</button>
+                    </div>
+                    {% include "lms/form_fields.html" %}
+                    {% if snippets %}
+                        <p class="rail-title" style="margin-top:8px">Банк комментариев</p>
+                        <ul class="snippet-list">
+                            {% for snippet in snippets %}
+                                <li>
+                                    <button type="button" class="snippet" data-snippet="{{ snippet.text|escapejs }}" data-snippet-id="{{ snippet.pk }}">
+                                        {% if snippet.code %}<code>{{ snippet.code }}</code>{% endif %}
+                                        <span>{{ snippet.text|truncatechars:90 }}</span>
+                                    </button>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% endif %}
+                    <div class="col" style="margin-top:16px">
+                        <button class="btn btn-block" type="submit" name="next" value="1">{% icon "arrow-right" %}Сохранить и к следующей</button>
+                        <button class="btn btn-secondary btn-block" type="submit">Сохранить проверку</button>
+                    </div>
+                    <p class="tiny muted mb-0 center"><kbd>Ctrl</kbd>+<kbd>↵</kbd> — сохранить и перейти к следующей работе</p>
+                </form>
+            {% else %}
+                <p class="small muted">Изменение проверки закрыто для исторической попытки.</p>
+                {% if feedback %}
+                    <p class="mb-0"><strong>{{ feedback.get_decision_display }}</strong>{% if feedback.grade != None %} · {{ feedback.grade }} из {{ submission.max_points_snapshot }}{% endif %}</p>
+                    {{ feedback.comment|linebreaks }}
+                {% endif %}
+                <a class="btn btn-block" href="{% url 'teacher_submission_review' latest.pk %}">Открыть последнюю попытку</a>
+            {% endif %}
+        </section>
+
+        <section class="card card-pad-sm">
+            <p class="rail-title">Контекст</p>
+            <p class="small mb-0"><strong>{{ submission.assignment.title }}</strong></p>
+            <p class="tiny muted">{{ submission.assignment.topic.block.name }} · {{ submission.assignment.topic.title }}</p>
+            {% if submission.deadline_snapshot %}
+                <p class="tiny muted mb-0">Дедлайн попытки: {{ submission.deadline_snapshot|date:"d.m.Y H:i" }}</p>
+            {% endif %}
+            <p class="tiny muted">Максимум баллов этой попытки: <strong class="tnum">{{ submission.max_points_snapshot }}</strong></p>
+            <div class="row" style="margin-top:8px">
+                <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_student_detail' submission.student_id %}">{% icon "user" %}Карточка ученика</a>
+            </div>
+            <div class="row" style="margin-top:8px">
+                <a class="btn btn-ghost btn-sm btn-block" href="{% url 'teacher_review_queue' %}{% querystring assignment=submission.assignment_id %}">{% icon "filter" %}Работы этого задания</a>
+            </div>
+        </section>
+    </div>
+</div>
 {% endblock %}

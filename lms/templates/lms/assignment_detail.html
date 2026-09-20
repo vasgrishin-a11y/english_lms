@@ -1,28 +1,199 @@
 {% extends "lms/base.html" %}
+{% load lms_tags %}
+
 {% block title %}{{ assignment.title }} — English LMS{% endblock %}
+{% block workspace_class %}workspace-wide{% endblock %}
+
 {% block content %}
-<p><a href="{% url 'student_assignments' %}">← Ко всем заданиям</a></p>
-<section class="card">
-    <h1>{{ assignment.title }}</h1>
-    <p class="muted">Блок: {{ assignment.topic.block.name }} / Тема: {{ assignment.topic.title }}</p>
-    <p>Тип ответа: <span class="badge">{{ assignment.get_assignment_type_display }}</span></p>
-    {% if assignment.deadline %}<p>Дедлайн: <strong>{{ assignment.deadline|date:"d.m.Y H:i" }}</strong>. Поздние попытки принимаются с отметкой о просрочке.</p>{% endif %}
-    <p>Максимум баллов новой попытки: <strong>{{ assignment.max_points }}</strong></p>
-    <h2>Условия задания</h2>
-    {{ assignment.description|linebreaks }}
-    {% if assignment.material_file %}<p><a href="{{ assignment.material_file.url }}">Скачать материалы задания</a></p>{% endif %}
-</section>
-<section class="card">
-    <h2>{% if submission %}Отправить новую попытку{% else %}Отправить ответ{% endif %}</h2>
-    <p class="muted">Отправленные ответы не изменяются. Оценка каждой попытки хранится отдельно.</p>
-    {% if conflict %}<p><a href="{% url 'assignment_detail' assignment.pk %}">Загрузить актуальную страницу</a> — сначала скопируйте введённый текст.</p>{% endif %}
-    <form method="post" enctype="multipart/form-data">
-        {% csrf_token %}{% include "lms/form_fields.html" %}
-        <button class="btn" type="submit">Отправить на проверку</button>
-    </form>
-</section>
-<section class="card">
-    <h2>История попыток</h2>
-    {% include "lms/attempt_history.html" %}
-</section>
+<nav aria-label="Хлебные крошки">
+    <ol class="crumbs">
+        <li><a href="{% url 'student_assignments' %}">Курс</a></li>
+        <li>
+            <span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span>
+            <a href="{% url 'student_assignments' %}?q={{ assignment.topic.block.name|urlencode }}">{{ assignment.topic.block.name }}</a>
+        </li>
+        <li>
+            <span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span>
+            <a href="{% url 'student_assignments' %}?q={{ assignment.topic.title|urlencode }}">{{ assignment.topic.title }}</a>
+        </li>
+        <li>
+            <span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span>
+            <span aria-current="page">{{ assignment.title }}</span>
+        </li>
+    </ol>
+</nav>
+
+<div class="split">
+    <div class="split-main">
+        <section class="card">
+            <div class="card-head">
+                <div>
+                    <div class="row row-tight" style="margin-bottom:8px">
+                        <span class="badge badge-accent">{% icon assignment.assignment_type|type_icon "icon icon-sm" %}{{ assignment.get_assignment_type_display }}</span>
+                        {% if assignment.topic.block.cefr_level %}<span class="tag tag-cefr">{{ assignment.topic.block.cefr_level }}</span>{% endif %}
+                        {% for skill in assignment.skills.all %}<span class="tag tag-skill">{% icon skill.kind|skill_icon "icon icon-sm" %}{{ skill.name }}</span>{% endfor %}
+                    </div>
+                    <h1 class="mb-0">{{ assignment.title }}</h1>
+                </div>
+                <div class="row row-tight">
+                    <span class="pill-note tnum">{% icon "star" "icon icon-sm" %}{{ assignment.max_points }} баллов</span>
+                </div>
+            </div>
+
+            {{ assignment.description|linebreaks }}
+
+            {% if assignment.material_file %}
+                <div class="media-frame">
+                    <p class="strong mb-0">{% icon "file-text" %} Материалы задания</p>
+                    {% if assignment.material_file.name|media_kind == 'image' %}
+                        <img src="{% url 'media_preview' assignment.material_file.name %}" alt="Материал задания: {{ assignment.title }}" loading="lazy">
+                    {% elif assignment.material_file.name|media_kind == 'audio' %}
+                        <audio controls preload="none" src="{% url 'media_preview' assignment.material_file.name %}"></audio>
+                    {% endif %}
+                    <a class="btn btn-secondary btn-sm" href="{{ assignment.material_file.url }}">{% icon "download" %}Скачать материалы</a>
+                </div>
+            {% endif %}
+
+            <div class="callout" style="margin-top:16px">
+                {% icon "info" %}
+                <div>
+                    <p class="mb-0 strong">Как сдавать</p>
+                    <p class="mb-0 small">Отправленный ответ изменить нельзя — каждая отправка создаёт новую попытку, а прежние оценки и файлы сохраняются в истории. Текст ответа сохраняется в черновик автоматически.</p>
+                </div>
+            </div>
+        </section>
+
+        {% if assignment.is_quiz %}
+            {% if submission and quiz_result %}
+                {% include "lms/parts/quiz_result.html" %}
+            {% endif %}
+            <section class="card">
+                <div class="card-head">
+                    <h2 class="card-title">{% icon "target" %}{% if submission %}Пройти тест заново{% else %}Ответить на вопросы{% endif %}</h2>
+                    <span class="tiny muted">Проверяется автоматически сразу после отправки</span>
+                </div>
+                {% if conflict %}<p class="alert alert-danger" role="alert">{% icon "alert" %}<span>Страница устарела: кто-то (или вы в другой вкладке) уже отправил тест. Обновите страницу.</span></p>{% endif %}
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="expected_version" value="{{ submission.version|default:0 }}">
+                    {% include "lms/parts/quiz_form.html" %}
+                    <button class="btn btn-lg" type="submit">{% icon "send" %}Отправить и проверить</button>
+                </form>
+            </section>
+        {% else %}
+            <section class="card">
+                <div class="card-head">
+                    <h2 class="card-title">{% icon "pencil" %}{% if submission %}Отправить новую попытку{% else %}Отправить ответ{% endif %}</h2>
+                    <span id="draft-state" aria-live="polite">
+                        {% include "lms/parts/draft_state.html" %}
+                    </span>
+                </div>
+                {% if conflict %}
+                    <p class="alert alert-danger" role="alert">{% icon "alert" %}<span>Ответ не отправлен: страница устарела. <a href="{% url 'assignment_detail' assignment.pk %}">Откройте актуальную версию</a> — введённый текст сохранён в черновике.</span></p>
+                {% endif %}
+                {% if form.non_field_errors %}
+                    <div class="alert alert-danger" role="alert">{% icon "alert" %}<span>{{ form.non_field_errors }}</span></div>
+                {% endif %}
+                <form method="post" enctype="multipart/form-data"
+                      data-draft-url="{% url 'student_save_draft' assignment.pk %}" data-draft-target="#draft-state">
+                    {% csrf_token %}
+                    {{ form.expected_version }}
+                    {% if form.text_answer %}
+                        <div class="form-field{% if form.text_answer.errors %} field-error{% endif %}">
+                            <label for="{{ form.text_answer.id_for_label }}">{{ form.text_answer.label }}</label>
+                            {{ form.text_answer }}
+                            {% if form.text_answer.help_text %}<div class="help-text" id="{{ form.text_answer.auto_id }}_helptext">{{ form.text_answer.help_text }}</div>{% endif %}
+                            {{ form.text_answer.errors }}
+                        </div>
+                    {% endif %}
+                    {% if assignment.assignment_type == 'audio' or assignment.assignment_type == 'mixed' %}
+                        <div class="panel" data-recorder data-input="{{ form.file_answer.id_for_label }}" style="margin-bottom:16px">
+                            <div class="row row-between">
+                                <p class="strong mb-0">{% icon "mic" %} Запись ответа в браузере</p>
+                                <span class="pill-note" data-recorder-status>Микрофон не активен</span>
+                            </div>
+                            <p class="tiny muted">Запись сохраняется в WAV и подставляется в поле файла. Перед отправкой послушайте себя.</p>
+                            <div class="row">
+                                <button type="button" class="btn btn-secondary btn-sm" data-recorder-toggle>{% icon "mic" %} Начать запись</button>
+                                <button type="button" class="btn btn-ghost btn-sm hidden" data-recorder-stop>{% icon "stop" %} Остановить</button>
+                                <audio controls preload="none" class="hidden" data-recorder-preview></audio>
+                            </div>
+                            <p class="tiny muted mb-0" data-recorder-error role="status"></p>
+                        </div>
+                    {% endif %}
+                    {% if form.file_answer %}
+                        <div class="form-field{% if form.file_answer.errors %} field-error{% endif %}">
+                            <label for="{{ form.file_answer.id_for_label }}">{{ form.file_answer.label }}</label>
+                            {{ form.file_answer }}
+                            {% if form.file_answer.help_text %}<div class="help-text" id="{{ form.file_answer.auto_id }}_helptext">{{ form.file_answer.help_text }}</div>{% endif %}
+                            {{ form.file_answer.errors }}
+                        </div>
+                    {% endif %}
+                    <button class="btn btn-lg" type="submit">{% icon "send" %}Отправить на проверку</button>
+                </form>
+            </section>
+        {% endif %}
+
+        <section class="card">
+            <div class="card-head">
+                <h2 class="card-title">{% icon "clock" %}История попыток</h2>
+                <span class="tiny muted">Оценка каждой попытки хранится отдельно</span>
+            </div>
+            {% include "lms/attempt_history.html" %}
+        </section>
+    </div>
+
+    <div class="split-side">
+        <section class="card card-pad-sm">
+            <p class="rail-title">Статус</p>
+            {% if submission %}
+                <p class="mb-0"><span class="badge badge-{{ submission.status }}">{% icon submission.status|status_icon "icon icon-sm" %}{{ submission.get_status_display }}</span></p>
+                <p class="small muted">Попытка {{ submission.version }} · {{ submission.submitted_at|date:"d.m.Y H:i" }}{% if submission.is_late %} · <strong>после дедлайна</strong>{% endif %}</p>
+                {% if submission.feedback %}
+                    <div class="divider"></div>
+                    <p class="rail-title">Решение преподавателя</p>
+                    <p class="mb-0">
+                        {% if submission.feedback.grade != None %}
+                            <span class="grade-pill tnum {{ submission.feedback.grade|grade_class:submission.max_points_snapshot }}">{{ submission.feedback.grade }}<small>/{{ submission.max_points_snapshot }}</small></span>
+                        {% else %}
+                            <span class="badge badge-{{ submission.status }}">{{ submission.feedback.get_decision_display }}</span>
+                        {% endif %}
+                    </p>
+                    {# Комментарий намеренно не дублируем: он показан в карточке попытки ниже. #}
+                    {% if submission.feedback.teacher %}<p class="tiny muted mb-0">{{ submission.feedback.teacher.get_full_name|default:submission.feedback.teacher.username }} · {{ submission.feedback.updated_at|date:"d.m.Y H:i" }}</p>{% endif %}
+                {% elif submission.assignment.is_quiz == False %}
+                    <p class="small muted mb-0">Работа ждёт проверки преподавателем.</p>
+                {% endif %}
+            {% else %}
+                <p class="small muted mb-0">Ответ ещё не отправлен.</p>
+            {% endif %}
+        </section>
+
+        {% if assignment.deadline %}
+            <section class="card card-pad-sm">
+                <p class="rail-title">Срок</p>
+                <p class="strong mb-0">{{ assignment.deadline|date:"d.m.Y H:i" }}</p>
+                <p class="small muted mb-0">{{ assignment.deadline|human_due }}</p>
+                {% if assignment.deadline|due_state == 'late' %}
+                    <p class="tiny mb-0">Поздние ответы принимаются, но помечаются как отправленные после дедлайна.</p>
+                {% endif %}
+            </section>
+        {% endif %}
+
+        <section class="card card-pad-sm">
+            <p class="rail-title">Тема</p>
+            <p class="small mb-0"><strong>{{ assignment.topic.title }}</strong></p>
+            <p class="tiny muted mb-0">{{ assignment.topic.block.name }}{% if assignment.topic.block.cefr_level %} · {{ assignment.topic.block.cefr_level }}{% endif %}</p>
+            {% for deck in assignment.topic.decks.all %}
+                <a class="chip" style="margin-top:8px" href="{% url 'trainer_session' deck.pk %}">{% icon "cards" "icon icon-sm" %}{{ deck.title }}</a>
+            {% empty %}
+                <p class="tiny muted mb-0" style="margin-top:8px">Наборов карточек для этой темы пока нет.</p>
+            {% endfor %}
+        </section>
+
+        <section class="card card-pad-sm">
+            <a class="btn btn-secondary btn-block btn-sm" href="{% url 'student_assignments' %}">{% icon "arrow-left" %}К карте курса</a>
+        </section>
+    </div>
+</div>
 {% endblock %}

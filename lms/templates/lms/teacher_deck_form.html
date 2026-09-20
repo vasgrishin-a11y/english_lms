@@ -1,0 +1,38 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}{% if deck %}Квизлет: {{ deck.title }}{% else %}Новый квизлет{% endif %} — English LMS{% endblock %}
+{% block workspace_class %}workspace-plain{% endblock %}
+
+{% block content %}
+<nav aria-label="Хлебные крошки">
+    <ol class="crumbs">
+        <li><a href="{% url 'teacher_curriculum' %}">Карта курса</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">{% if deck %}{{ deck.title }}{% else %}Новый квизлет{% endif %}</span></li>
+    </ol>
+</nav>
+
+<div class="split">
+    <div class="split-main">
+        <section class="card">
+            <h1 class="card-title">{% if deck %}Изменить набор карточек{% else %}Новый набор карточек{% endif %}</h1>
+            <form method="post" novalidate>
+                {% csrf_token %}
+                {% include "lms/form_fields.html" %}
+                <div class="row">
+                    <button class="btn" type="submit">{% icon "save" %}Сохранить и перейти к карточкам</button>
+                    <a class="btn btn-secondary" href="{% url 'teacher_curriculum' %}">Отмена</a>
+                    {% if deck %}<a class="btn btn-ghost" href="{% url 'teacher_deck_cards' deck.pk %}">К карточкам</a>{% endif %}
+                </div>
+            </form>
+        </section>
+    </div>
+    <div class="split-side">
+        <div class="card card-pad-sm">
+            <p class="rail-title">Зачем квизлеты</p>
+            <p class="small muted">Набор карточек привязывается к теме: ученик видит его в карточке задания и в тренажёре, где повтор идёт по интервалам.</p>
+            <p class="small muted mb-0">После сохранения откроется страница карточек — там можно добавить одну карточку или сразу список.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,43 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}Тренажёр слов — English LMS{% endblock %}
+{% block workspace_class %}workspace-plain{% endblock %}
+
+{% block content %}
+<div class="content-head">
+    <div>
+        <h1>Тренажёр слов</h1>
+        <p class="page-note">Карточки повторяются по интервальной схеме: чем увереннее ответ, тем позже карточка вернётся. Сессия занимает 3–7 минут.</p>
+    </div>
+    {% if due_total %}<span class="badge badge-submitted">{% icon "clock" "icon icon-sm" %}К повтору: {{ due_total }}</span>{% endif %}
+</div>
+
+{% for deck in decks %}
+    <div class="row-item" style="margin-bottom:12px">
+        <span class="row-main">
+            <span class="row-title">{{ deck.title }}</span>
+            <span class="row-meta">
+                <span>{{ deck.topic.block.name }} · {{ deck.topic.title }}</span>
+                <span class="tnum">{{ deck.card_total }} карточек</span>
+                {% if deck.due_count %}<span class="badge badge-submitted">к повтору {{ deck.due_count }}</span>
+                {% else %}<span class="badge badge-checked">{% icon "check" "icon icon-sm" %}повторено</span>{% endif %}
+            </span>
+        </span>
+        <span class="row-side">
+            <a class="btn btn-sm" href="{% url 'trainer_session' deck.pk %}">
+                {% icon "play" %}{% if deck.due_count %}Повторить{% else %}Открыть{% endif %}
+            </a>
+        </span>
+    </div>
+{% empty %}
+    <div class="card">
+        <div class="empty">
+            <div class="empty-icon">{% icon "cards" "icon icon-xl" %}</div>
+            <h3>Наборов карточек пока нет</h3>
+            <p>Как только преподаватель добавит квизлеты к темам, они появятся здесь — с повторением по интервалам.</p>
+            <a class="btn btn-secondary" href="{% url 'student_assignments' %}">Перейти к заданиям</a>
+        </div>
+    </div>
+{% endfor %}
+{% endblock %}

@@ -1,0 +1,115 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}Предпросмотр: {{ assignment.title }} — English LMS{% endblock %}
+{% block workspace_class %}workspace-plain{% endblock %}
+
+{% block content %}
+<nav aria-label="Хлебные крошки">
+    <ol class="crumbs">
+        <li><a href="{% url 'teacher_curriculum' %}">Карта курса</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_assignment_form' assignment.pk %}">{{ assignment.title }}</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">Предпросмотр</span></li>
+    </ol>
+</nav>
+
+<div class="alert alert-info" role="status">
+    {% icon "eye" %}
+    <span>Так задание увидит ученик{% if not reveal %} (правильные ответы скрыты){% endif %}.</span>
+</div>
+
+<div class="split">
+    <div class="split-main">
+        <section class="card">
+            <div class="card-head">
+                <h1 class="card-title mb-0">{{ assignment.title }}</h1>
+                <span class="badge badge-accent">{% icon assignment.assignment_type|type_icon "icon icon-sm" %}{{ assignment.get_assignment_type_display }}</span>
+            </div>
+            <p class="tiny muted">{{ assignment.topic.block.name }} · {{ assignment.topic.title }}</p>
+            {{ assignment.description|linebreaks }}
+            {% if assignment.skills.exists %}
+                <p class="row row-tight">
+                    {% for skill in assignment.skills.all %}<span class="tag">{{ skill.name }}</span>{% endfor %}
+                </p>
+            {% endif %}
+            {% if assignment.material_file %}
+                <div class="media-frame">
+                    <p class="strong mb-0">{% icon "file-text" %} Материалы задания</p>
+                    {% if assignment.material_file.name|media_kind == 'image' %}
+                        <img src="{% url 'media_preview' assignment.material_file.name %}" alt="Материал задания" loading="lazy">
+                    {% elif assignment.material_file.name|media_kind == 'audio' %}
+                        <audio controls preload="none" src="{% url 'media_preview' assignment.material_file.name %}"></audio>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </section>
+
+        {% if questions %}
+            <section class="card">
+                <div class="card-head"><h2 class="card-title">{% icon "target" %}Вопросы теста</h2></div>
+                <ol class="col" style="padding:0;list-style:none;margin:0">
+                    {% for question in questions %}
+                        <li class="panel" style="margin-bottom:8px">
+                            <div class="row row-tight">
+                                <strong>{{ forloop.counter }}. {{ question.text }}</strong>
+                                <span class="tag">{{ question.get_kind_display }}</span>
+                                <span class="tiny muted tnum">{{ question.points }} б.</span>
+                            </div>
+                            {% if question.kind == 'mcq' or question.kind == 'multi' %}
+                                <ul class="col" style="padding-left:18px;margin:8px 0 0">
+                                    {% for choice in question.choices.all %}
+                                        <li class="{% if reveal and choice.is_correct %}is-correct{% endif %}">{{ choice.text }}{% if reveal and choice.is_correct %} — верный{% endif %}</li>
+                                    {% endfor %}
+                                </ul>
+                            {% elif question.kind == 'match' %}
+                                <ul class="col" style="padding-left:18px;margin:8px 0 0">
+                                    {% for pair in question.pairs %}<li>{{ pair.term }} → {{ pair.definition }}</li>{% endfor %}
+                                </ul>
+                            {% elif question.kind == 'gap' %}
+                                <p class="small mb-0" style="margin-top:8px">{% if reveal %}Пропуски: {{ question.gaps|join:", " }}{% else %}Пропусков: {{ question.gaps|length }}{% endif %}</p>
+                            {% endif %}
+                            {% if question.explanation %}<p class="tiny muted mb-0" style="margin-top:6px">{% icon "lightbulb" "icon icon-sm" %} {{ question.explanation }}</p>{% endif %}
+                            <p class="tiny" style="margin-top:8px">
+                                <a href="{% url 'teacher_question_edit' question.pk %}">Изменить</a>
+                            </p>
+                        </li>
+                    {% endfor %}
+                </ol>
+                {% if assignment.is_quiz %}
+                    <p class="small muted">Сумма баллов вопросов: <strong class="tnum">{{ assignment.max_points }}</strong>.</p>
+                {% endif %}
+            </section>
+        {% endif %}
+    </div>
+
+    <div class="split-side">
+        <div class="card card-pad-sm">
+            <p class="rail-title">Действия</p>
+            <div class="col" style="gap:8px">
+                <a class="btn btn-secondary btn-sm btn-block" href="{% if reveal %}{% url 'teacher_assignment_preview' assignment.pk %}{% else %}{% url 'teacher_assignment_preview' assignment.pk %}?answers=1{% endif %}">
+                    {% icon "eye" %}{% if reveal %}Скрыть ответы{% else %}Показать ответы{% endif %}
+                </a>
+                <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_assignment_form' assignment.pk %}">{% icon "pencil" %}Изменить задание</a>
+                {% if assignment.is_quiz %}<a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_questions' assignment.pk %}">{% icon "list" %}Вопросы</a>{% endif %}
+                <form method="post" action="{% url 'teacher_assignment_publish' assignment.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="publish" value="{% if assignment.is_published %}0{% else %}1{% endif %}">
+                    <button class="btn btn-sm btn-block" type="submit">
+                        {% icon "send" %}{% if assignment.is_published %}Снять с публикации{% else %}Опубликовать{% endif %}
+                    </button>
+                </form>
+                <form method="post" action="{% url 'teacher_assignment_duplicate' assignment.pk %}">
+                    {% csrf_token %}
+                    <button class="btn btn-ghost btn-sm btn-block" type="submit">{% icon "copy" %}Дублировать</button>
+                </form>
+                <a class="btn btn-ghost btn-sm btn-block" href="{% url 'teacher_curriculum' %}">К карте курса</a>
+            </div>
+        </div>
+        <div class="card card-pad-sm">
+            <p class="rail-title">Требования к ответу</p>
+            <p class="small muted mb-0">{{ assignment.get_assignment_type_display }}: {{ assignment.type_requirements|default:"текстовый ответ" }}</p>
+            <p class="tiny muted">Максимум баллов: <strong class="tnum">{{ assignment.max_points }}</strong>{% if assignment.deadline %} · дедлайн {{ assignment.deadline|date:"d.m.Y H:i" }}{% endif %}</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,9 +1,14 @@
 {% extends "lms/base.html" %}
+{% load lms_tags %}
 {% block title %}Вход временно ограничен — English LMS{% endblock %}
+{% block workspace_class %}workspace-plain{% endblock %}
 {% block content %}
 <div class="card login-card" role="alert">
-    <h1>Слишком много попыток входа</h1>
-    <p>Для этой учётной записи и адреса вход временно ограничен. Подождите и попробуйте снова либо обратитесь к администратору.</p>
-    <a href="{% url 'login' %}">Вернуться ко входу</a>
+    <div class="empty">
+        <div class="empty-icon">{% icon "shield" "icon icon-xl" %}</div>
+        <h1>Слишком много попыток входа</h1>
+        <p>Для этой учётной записи и адреса вход временно ограничен. Подождите и попробуйте снова либо обратитесь к администратору.</p>
+        <a class="btn btn-secondary" href="{% url 'login' %}">Вернуться ко входу</a>
+    </div>
 </div>
 {% endblock %}

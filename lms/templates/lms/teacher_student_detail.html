@@ -1,0 +1,136 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}{{ student.get_full_name|default:student.username }} — ученик{% endblock %}
+{% block workspace_class %}workspace-wide{% endblock %}
+
+{% block content %}
+<nav aria-label="Хлебные крошки">
+    <ol class="crumbs">
+        <li><a href="{% url 'teacher_students' %}">Ученики</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">{{ student.get_full_name|default:student.username }}</span></li>
+    </ol>
+</nav>
+
+<div class="content-head">
+    <div class="row row-tight">
+        <span class="avatar avatar-lg" aria-hidden="true">{{ student|initials }}</span>
+        <div>
+            <h1 class="mb-0">{{ student.get_full_name|default:student.username }}</h1>
+            <p class="page-note mb-0">
+                @{{ student.username }}
+                {% if student.email %} · {{ student.email }}{% endif %}
+                {% if student.profile.telegram %} · Telegram {{ student.profile.telegram }}{% endif %}
+            </p>
+        </div>
+    </div>
+    <div class="row">
+        <a class="btn btn-secondary" href="{% url 'teacher_review_queue' %}?student={{ student.pk }}">{% icon "check-circle" %}Работы ученика</a>
+        <a class="btn btn-ghost" href="{% url 'teacher_analytics' %}">{% icon "grid" %}Журнал</a>
+    </div>
+</div>
+
+<div class="stats" style="margin-bottom:20px">
+    <div class="stat stat-accent"><div class="stat-value tnum">{{ totals.done }}<small class="tiny">/{{ totals.total }}</small></div><div class="stat-label">{% icon "check-circle" "icon icon-sm" %}Проверено заданий</div></div>
+    <div class="stat stat-warning"><div class="stat-value tnum">{{ totals.waiting }}</div><div class="stat-label">{% icon "clock" "icon icon-sm" %}Ждут проверки</div></div>
+    <div class="stat stat-danger"><div class="stat-value tnum">{{ totals.revision }}</div><div class="stat-label">{% icon "refresh" "icon icon-sm" %}На доработке</div></div>
+    <div class="stat"><div class="stat-value tnum">{% if totals.progress != None %}{{ totals.progress }}%{% else %}—{% endif %}</div><div class="stat-label">{% icon "percent" "icon icon-sm" %}Средний результат</div></div>
+    <div class="stat"><div class="stat-value tnum">{{ cards_due }}</div><div class="stat-label">{% icon "cards" "icon icon-sm" %}Карточек к повтору</div></div>
+</div>
+
+<div class="split">
+    <div class="split-main">
+        <section class="card">
+            <div class="card-head"><h2 class="card-title">{% icon "layers" %}Прогресс по блокам</h2></div>
+            {% for block_item in blocks_data %}
+                {% with block=block_item.block %}
+                    <div class="panel" style="margin-bottom:8px">
+                        <div class="row row-tight">
+                            <span class="block-badge">{{ forloop.counter }}</span>
+                            <strong>{{ block.name }}</strong>
+                            {% if block.cefr_level %}<span class="badge badge-accent">{{ block.cefr_level }}</span>{% endif %}
+                            <span class="tiny muted tnum" style="margin-left:auto">{{ block_item.done }}/{{ block_item.total }} проверено · {{ block_item.progress }}%</span>
+                        </div>
+                        <div class="progress" role="img" aria-label="Блок {{ block.name }}: {{ block_item.progress }} процентов">
+                            <span style="width:{{ block_item.progress }}%"></span>
+                        </div>
+                        {% for topic_item in block_item.topics %}
+                            <div class="row-item" style="margin-top:6px">
+                                <span class="row-main">
+                                    <span class="row-title">{{ topic_item.topic.title }}</span>
+                                    <span class="row-meta">
+                                        <span class="tiny muted tnum">{{ topic_item.done }}/{{ topic_item.total }} · {{ topic_item.progress }}%</span>
+                                        {% if topic_item.waiting %}<span class="badge badge-submitted">ждут {{ topic_item.waiting }}</span>{% endif %}
+                                        {% if topic_item.revision %}<span class="badge badge-needs_revision">доработка {{ topic_item.revision }}</span>{% endif %}
+                                    </span>
+                                </span>
+                            </div>
+                        {% empty %}
+                            <p class="tiny muted mb-0" style="margin-top:6px">В блоке нет тем.</p>
+                        {% endfor %}
+                    </div>
+                {% endwith %}
+            {% empty %}
+                <p class="muted small mb-0">В курсе пока нет блоков.</p>
+            {% endfor %}
+        </section>
+
+        <section class="card">
+            <div class="card-head"><h2 class="card-title">{% icon "clock" %}Последние 30 попыток</h2></div>
+            {% for attempt in attempts %}
+                <div class="row-item" style="margin-bottom:8px">
+                    <span class="row-main">
+                        <a class="row-title" href="{% url 'teacher_submission_review' attempt.pk %}">{{ attempt.assignment.title }}</a>
+                        <span class="row-meta">
+                            <span>{{ attempt.assignment.topic.block.name }} · {{ attempt.assignment.topic.title }}</span>
+                            <span>Попытка {{ attempt.version }} · {{ attempt.submitted_at|date:"d.m.Y H:i" }}</span>
+                            {% if attempt.is_late %}<span class="badge badge-needs_revision">после дедлайна</span>{% endif %}
+                        </span>
+                    </span>
+                    <span class="row-side">
+                        <span class="badge badge-{{ attempt.status }}">{% icon attempt.status|status_icon "icon icon-sm" %}{{ attempt.get_status_display }}</span>
+                        {% if attempt.feedback and attempt.feedback.grade != None %}
+                            <span class="grade-pill tnum {{ attempt.feedback.grade|grade_class:attempt.max_points_snapshot }}">{{ attempt.feedback.grade }}<small>/{{ attempt.max_points_snapshot }}</small></span>
+                        {% endif %}
+                    </span>
+                </div>
+            {% empty %}
+                <p class="muted small mb-0">Попыток пока нет.</p>
+            {% endfor %}
+        </section>
+    </div>
+
+    <div class="split-side">
+        <section class="card card-pad-sm">
+            <div class="card-head" style="margin-bottom:12px"><h2 class="card-title">{% icon "target" %}Навыки</h2></div>
+            {% for name, data in skills %}
+                <div style="margin-bottom:10px">
+                    <div class="row row-tight">
+                        <strong class="small">{{ name }}</strong>
+                        <span class="tiny muted tnum" style="margin-left:auto">{{ data.percent }}% · {{ data.count }} работ</span>
+                    </div>
+                    <div class="progress" role="img" aria-label="Навык {{ name }}: {{ data.percent }} процентов">
+                        <span style="width:{{ data.percent }}%"></span>
+                    </div>
+                </div>
+            {% empty %}
+                <p class="small muted mb-0">Нет оценок по навыкам. Привяжите навыки к заданиям — здесь появится срез Reading / Writing / Listening / Speaking.</p>
+            {% endfor %}
+        </section>
+
+        <section class="card card-pad-sm">
+            <p class="rail-title">Профиль</p>
+            <dl class="def-list">
+                <dt>Логин</dt><dd>@{{ student.username }}</dd>
+                <dt>Роль</dt><dd>{{ student.profile.get_role_display }}</dd>
+                <dt>Активен</dt><dd>{% if student.is_active %}да{% else %}нет{% endif %}</dd>
+                <dt>Последний вход</dt><dd class="tnum">{{ student.last_login|date:"d.m.Y H:i"|default:"—" }}</dd>
+            </dl>
+            {% if student.profile.comment %}
+                <p class="rail-title" style="margin-top:12px">Заметка преподавателя</p>
+                <p class="small muted mb-0">{{ student.profile.comment|linebreaksbr }}</p>
+            {% endif %}
+        </section>
+    </div>
+</div>
+{% endblock %}

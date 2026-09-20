@@ -1,0 +1,36 @@
+{% load lms_tags %}
+<section class="card">
+    <div class="card-head">
+        <h2 class="card-title">{% icon "target" %}Результат автопроверки</h2>
+        <span class="grade-pill tnum {{ quiz_result.score|grade_class:quiz_result.max_score }}">{{ quiz_result.score }}<small>/{{ quiz_result.max_score }}</small></span>
+    </div>
+    <p class="muted small">Верных ответов: {{ quiz_result.correct_count }} из {{ quiz_result.total_count }}. Попытка {{ submission.version }}, {{ submission.submitted_at|date:"d.m.Y H:i" }}.</p>
+    <div class="progress" role="img" aria-label="Верно {{ quiz_result.correct_count }} из {{ quiz_result.total_count }}">
+        <span style="width:{{ quiz_result.correct_count|percent_of:quiz_result.total_count }}%"></span>
+    </div>
+    <ol class="col" style="margin-top:16px;padding:0;list-style:none">
+        {% for question in questions %}
+            {% with detail=quiz_result.answers|dictkey:question.pk %}
+                <li class="panel" style="margin-bottom:8px">
+                    <div class="row row-tight">
+                        {% if detail.correct %}
+                            <span class="badge badge-checked">{% icon "check" "icon icon-sm" %}Верно</span>
+                        {% elif detail.partially %}
+                            <span class="badge badge-submitted">{% icon "percent" "icon icon-sm" %}Частично</span>
+                        {% else %}
+                            <span class="badge badge-needs_revision">{% icon "x" "icon icon-sm" %}Ошибка</span>
+                        {% endif %}
+                        <span class="grow strong">{{ forloop.counter }}. {{ question.text }}</span>
+                        <span class="tiny muted tnum">{{ detail.points }}/{{ question.points }} б.</span>
+                    </div>
+                    {% if detail.expected %}
+                        <p class="small mb-0" style="margin-top:8px"><span class="muted">Правильный ответ:</span> {{ detail.expected }}</p>
+                    {% endif %}
+                    {% if question.explanation %}
+                        <p class="small muted mb-0" style="margin-top:4px">{% icon "lightbulb" "icon icon-sm" %} {{ question.explanation }}</p>
+                    {% endif %}
+                </li>
+            {% endwith %}
+        {% endfor %}
+    </ol>
+</section>

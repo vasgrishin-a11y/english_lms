@@ -1,0 +1,57 @@
+{% load lms_tags %}
+<fieldset class="col" style="border:0;padding:0;margin:0">
+    <legend class="sr-only">Вопросы теста</legend>
+    {% for question in questions %}
+        <div class="panel" style="margin-bottom:12px">
+            <p class="strong mb-0">{{ forloop.counter }}. {{ question.text }}</p>
+            <p class="tiny muted">{{ question.points }} б. ·
+                {% if question.kind == 'mcq' %}один правильный ответ
+                {% elif question.kind == 'multi' %}несколько правильных ответов
+                {% elif question.kind == 'gap' %}впишите ответ
+                {% else %}установите соответствие{% endif %}
+            </p>
+            {% if question.kind == 'mcq' %}
+                {% for choice in question.choices.all %}
+                    <label class="checkline" for="q_{{ question.pk }}_{{ choice.pk }}">
+                        <input type="radio" id="q_{{ question.pk }}_{{ choice.pk }}" name="q_{{ question.pk }}" value="{{ choice.pk }}">
+                        <span>{{ choice.text }}</span>
+                    </label>
+                {% endfor %}
+            {% elif question.kind == 'multi' %}
+                {% for choice in question.choices.all %}
+                    <label class="checkline" for="q_{{ question.pk }}_{{ choice.pk }}">
+                        <input type="checkbox" id="q_{{ question.pk }}_{{ choice.pk }}" name="q_{{ question.pk }}" value="{{ choice.pk }}">
+                        <span>{{ choice.text }}</span>
+                    </label>
+                {% endfor %}
+            {% elif question.kind == 'gap' %}
+                <label class="sr-only" for="q_{{ question.pk }}">Ваш ответ</label>
+                <input type="text" id="q_{{ question.pk }}" name="q_{{ question.pk }}" maxlength="500" autocomplete="off" placeholder="Впишите ответ">
+            {% else %}
+                <div class="table-scroll" role="region" tabindex="0"
+                     aria-label="Соответствие: термин и определение, прокручивается по горизонтали">
+                <table class="table-tight" style="margin-top:8px">
+                    <caption class="sr-only">Соответствие: термин и определение</caption>
+                    <thead><tr><th scope="col">Термин</th><th scope="col">Определение</th></tr></thead>
+                    <tbody>
+                        {% for choice in question.choices.all %}
+                            <tr>
+                                <td>{{ choice.text }}</td>
+                                <td>
+                                    <label class="sr-only" for="q_{{ question.pk }}_{{ choice.pk }}">Определение для «{{ choice.text }}»</label>
+                                    <select id="q_{{ question.pk }}_{{ choice.pk }}" name="q_{{ question.pk }}_{{ choice.pk }}">
+                                        <option value="">— выберите —</option>
+                                        {% for option in question.choices.all %}
+                                            <option value="{{ option.pk }}">{{ option.match_text }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                </div>
+            {% endif %}
+        </div>
+    {% endfor %}
+</fieldset>

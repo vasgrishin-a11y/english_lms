@@ -1,0 +1,31 @@
+{% load lms_tags %}
+<li class="task {% if state.status == 'checked' %}is-done{% elif state.status == 'needs_revision' %}is-revision{% elif state.status %}is-waiting{% endif %}">
+    <span class="task-dot" aria-hidden="true">
+        {% if state.status == 'checked' %}{% icon "check" %}
+        {% elif state.status == 'needs_revision' %}{% icon "refresh" %}
+        {% elif state.status %}{% icon "clock" %}
+        {% else %}{% icon "circle-dashed" %}{% endif %}
+    </span>
+    <span class="task-main">
+        <a class="task-title" href="{% url 'assignment_detail' assignment.pk %}">{{ assignment.title }}</a>
+        <span class="task-meta">
+            <span class="tag">{% icon assignment.assignment_type|type_icon "icon icon-sm" %}{{ assignment.get_assignment_type_display }}</span>
+            <span class="tnum">{{ assignment.max_points }} б.</span>
+            {% if assignment.deadline %}
+                <span class="{% if assignment.deadline|due_state == 'late' %}badge badge-needs_revision{% endif %}">
+                    {% icon "calendar" "icon icon-sm" %}{{ assignment.deadline|human_due }}
+                </span>
+            {% endif %}
+        </span>
+    </span>
+    <span class="task-side">
+        {% if state.status %}
+            <span class="badge badge-{{ state.status }}">{% icon state.status|status_icon "icon icon-sm" %}{{ state.status|status_label }}</span>
+            {% if state.grade != None %}
+                <span class="grade-pill tnum {{ state.grade|grade_class:state.max_points }}">{{ state.grade }}<small>/{{ state.max_points }}</small></span>
+            {% endif %}
+        {% else %}
+            <span class="badge badge-outline">Не сдано</span>
+        {% endif %}
+    </span>
+</li>

@@ -1,0 +1,66 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}{% if assignment %}Задание: {{ assignment.title }}{% else %}Новое задание{% endif %} — English LMS{% endblock %}
+{% block workspace_class %}workspace-plain{% endblock %}
+
+{% block content %}
+<nav aria-label="Хлебные крошки">
+    <ol class="crumbs">
+        <li><a href="{% url 'teacher_curriculum' %}">Карта курса</a></li>
+        {% if assignment %}<li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span>{{ assignment.topic.title }}</span></li>{% endif %}
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">{% if assignment %}{{ assignment.title }}{% else %}Новое задание{% endif %}</span></li>
+    </ol>
+</nav>
+
+<div class="split">
+    <div class="split-main">
+        <section class="card">
+            <div class="card-head">
+                <h1 class="card-title mb-0">{% if assignment %}Изменить задание{% else %}Новое задание{% endif %}</h1>
+                {% if assignment %}
+                    <span class="badge badge-{{ assignment.status }}">{% icon assignment.status|status_icon "icon icon-sm" %}{{ assignment.get_status_display }}</span>
+                {% endif %}
+            </div>
+            <form method="post" enctype="multipart/form-data" novalidate>
+                {% csrf_token %}
+                {% include "lms/form_fields.html" %}
+                <div class="row" style="margin-top:8px">
+                    <button class="btn" type="submit">{% icon "save" %}Сохранить</button>
+                    {% if assignment and assignment.is_quiz %}
+                        <button class="btn btn-secondary" type="submit" name="_save_questions" value="1">{% icon "list" %}Сохранить и перейти к вопросам</button>
+                    {% endif %}
+                    <a class="btn btn-ghost" href="{% url 'teacher_curriculum' %}">Отмена</a>
+                </div>
+            </form>
+        </section>
+    </div>
+
+    <div class="split-side">
+        <div class="card card-pad-sm">
+            <p class="rail-title">Как собрать задание</p>
+            <ol class="col tiny muted" style="padding-left:18px;margin:0">
+                <li>Выберите тип: тест проверяется автоматически, письменные и аудио — вручную.</li>
+                <li>Для теста нажмите «Сохранить и перейти к вопросам» — там добавляются задания с вариантами, пропусками и соответствиями.</li>
+                <li>Прикрепите материалы (текст, аудио, фото) — ученик увидит их прямо в карточке задания.</li>
+                <li>Укажите дедлайн и максимум баллов; баллы теста считаются из вопросов автоматически.</li>
+                <li>Сохраните как черновик, проверьте предпросмотр и опубликуйте.</li>
+            </ol>
+        </div>
+        {% if assignment %}
+            <div class="card card-pad-sm">
+                <p class="rail-title">Это задание</p>
+                <div class="col" style="gap:8px">
+                    <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_assignment_preview' assignment.pk %}">{% icon "eye" %}Предпросмотр глазами ученика</a>
+                    {% if assignment.is_quiz %}<a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_questions' assignment.pk %}">{% icon "list" %}Вопросы теста ({{ assignment.questions.count }})</a>{% endif %}
+                    <a class="btn btn-ghost btn-sm btn-block" href="{% url 'teacher_review_queue' %}?assignment={{ assignment.pk }}">{% icon "check-circle" %}Работы учеников</a>
+                    <form method="post" action="{% url 'teacher_assignment_duplicate' assignment.pk %}">
+                        {% csrf_token %}
+                        <button class="btn btn-ghost btn-sm btn-block" type="submit">{% icon "copy" %}Создать копию</button>
+                    </form>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

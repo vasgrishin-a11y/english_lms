@@ -1,28 +1,130 @@
 {% extends "lms/base.html" %}
-{% block title %}Сдачи и проверки — English LMS{% endblock %}
-{% block content %}
-<h1>Сдачи и проверки</h1>
-<div class="card">
-    <form method="get">
-        <p><label for="id_q">Поиск</label><input type="text" id="id_q" name="q" maxlength="200" value="{{ query }}" placeholder="Имя ученика, задание, тема..."></p>
-        <p><label for="id_status">Статус</label><select id="id_status" name="status">{% for value, label in queue_choices %}<option value="{{ value }}"{% if queue == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></p>
-        <button class="btn" type="submit">Показать</button>
-        <a href="{% url 'teacher_submissions' %}">Сбросить фильтры</a>
+{% load lms_tags %}
+
+{% block title %}Очередь проверки — English LMS{% endblock %}
+{% block workspace_class %}workspace-wide{% endblock %}
+
+{% block rail %}
+<aside class="rail" aria-label="Фильтры очереди">
+    <form method="get" class="rail-card" role="search">
+        <label for="id_q">Поиск</label>
+        <div class="search">
+            {% icon "search" %}
+            <input type="search" id="id_q" name="q" maxlength="200" value="{{ query }}" placeholder="Ученик, задание, тема…">
+        </div>
+        <div class="form-field" style="margin-top:12px">
+            <label for="id_status">Статус</label>
+            <select id="id_status" name="status">
+                {% for value, label in queue_choices %}
+                    <option value="{{ value }}"{% if queue == value %} selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-field">
+            <label for="id_order">Порядок</label>
+            <select id="id_order" name="order">
+                {% for value, label in order_choices.items %}
+                    <option value="{{ value }}"{% if order == value %} selected{% endif %}>{{ label.1 }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="row">
+            <button class="btn btn-sm" type="submit">Показать</button>
+            <a class="btn btn-ghost btn-sm" href="{% url 'teacher_submissions' %}">Сбросить</a>
+        </div>
     </form>
+
+    <div class="rail-card">
+        <p class="rail-title">Очередь</p>
+        <ul class="col" style="gap:8px;margin:0;padding:0;list-style:none">
+            <li><a class="chip" href="{% querystring status='pending' %}">{% icon "clock" "icon icon-sm" %}Ждут <span class="count tnum">{{ counts.waiting }}</span></a></li>
+            <li><a class="chip" href="{% querystring status='revision' %}">{% icon "refresh" "icon icon-sm" %}Доработка <span class="count tnum">{{ counts.revision }}</span></a></li>
+            <li><a class="chip" href="{% querystring status='checked' %}">{% icon "check-circle" "icon icon-sm" %}Проверено <span class="count tnum">{{ counts.checked }}</span></a></li>
+            <li><a class="chip" href="{% querystring status='all' %}">{% icon "list" "icon icon-sm" %}Все <span class="count tnum">{{ counts.total }}</span></a></li>
+        </ul>
+    </div>
+
+    <div class="rail-card" id="hotkeys-help">
+        <p class="rail-title">Горячие клавиши</p>
+        <p class="tiny muted mb-0">В карточке работы: <kbd>J</kbd> следующая · <kbd>K</kbd> предыдущая · <kbd>G</kbd> балл · <kbd>C</kbd> комментарий · <kbd>R</kbd> решение · <kbd>Ctrl</kbd>+<kbd>↵</kbd> сохранить и далее.</p>
+        <p class="tiny muted">Список — <kbd>Shift</kbd>+<kbd>?</kbd>. Отключается в настройках консоли.</p>
+    </div>
+</aside>
+{% endblock %}
+
+{% block content %}
+<div class="content-head">
+    <div>
+        <h1>Проверка работ</h1>
+        <p class="page-note">В списке — последние попытки учеников. История всех попыток доступна внутри каждой работы. Порядок «сначала старые» не даёт работам теряться в конце очереди.</p>
+    </div>
+    <div class="tabs" role="group" aria-label="Быстрые фильтры">
+        {% for value, label in queue_choices %}
+            <a class="tab{% if queue == value %} is-active{% endif %}"{% if queue == value %} aria-current="page"{% endif %} href="{% querystring status=value %}">
+                {{ label }}
+                {% if value == 'pending' %}<span class="count tnum">{{ counts.waiting }}</span>
+                {% elif value == 'revision' %}<span class="count tnum">{{ counts.revision }}</span>
+                {% elif value == 'checked' %}<span class="count tnum">{{ counts.checked }}</span>
+                {% else %}<span class="count tnum">{{ counts.total }}</span>{% endif %}
+            </a>
+        {% endfor %}
+    </div>
 </div>
-<p class="muted">В списке — последние попытки. История доступна внутри каждой сдачи.</p>
+
 <div class="table-scroll" role="region" aria-label="Таблица работ, прокручивается по горизонтали" tabindex="0">
 <table>
-    <caption>Работы учеников</caption>
-    <thead><tr><th scope="col">Ученик</th><th scope="col">Блок / тема</th><th scope="col">Задание</th><th scope="col">Статус</th><th scope="col">Отправлено</th><th scope="col">Действие</th></tr></thead>
-    <tbody>{% for submission in submissions %}<tr>
-        <td>{{ submission.student.get_full_name|default:submission.student.username }}</td>
-        <td>{{ submission.assignment.topic.block.name }} / {{ submission.assignment.topic.title }}</td>
-        <td>{{ submission.assignment.title }} · попытка {{ submission.version }}</td>
-        <td><span class="badge badge-{{ submission.status }}">{{ submission.get_status_display }}</span>{% if submission.feedback and submission.feedback.grade != None %} {{ submission.feedback.grade }}/{{ submission.max_points_snapshot }}{% endif %}</td>
-        <td>{{ submission.submitted_at|date:"d.m.Y H:i" }}{% if submission.is_late %}<br>После дедлайна{% endif %}</td>
-        <td><a class="btn" href="{% url 'teacher_submission_review' submission.pk %}">Открыть</a></td>
-    </tr>{% empty %}<tr><td colspan="6">Нет сдач по выбранным фильтрам.</td></tr>{% endfor %}</tbody>
+    <caption>Работы учеников: {{ page_obj.paginator.count }} в выбранном фильтре</caption>
+    <thead>
+        <tr>
+            <th scope="col">Ученик</th>
+            <th scope="col">Блок / тема</th>
+            <th scope="col">Задание</th>
+            <th scope="col">Статус</th>
+            <th scope="col">Отправлено</th>
+            <th scope="col">Действие</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for submission in submissions %}
+            <tr{% if submission.is_late %} class="is-late-row"{% endif %}>
+                <td>
+                    <span class="row row-tight">
+                        <span class="avatar">{{ submission.student|initials }}</span>
+                        <a href="{% url 'teacher_student_detail' submission.student_id %}">{{ submission.student.get_full_name|default:submission.student.username }}</a>
+                    </span>
+                </td>
+                <td>
+                    <span class="tiny muted">{{ submission.assignment.topic.block.name }}</span><br>
+                    {{ submission.assignment.topic.title }}
+                </td>
+                <td>
+                    <a class="row-title" href="{% url 'teacher_submission_review' submission.pk %}">{{ submission.assignment.title }}</a>
+                    <span class="row-meta"><span>попытка {{ submission.version }}</span>
+                        {% if submission.assignment.is_quiz %}<span class="tag">тест</span>{% endif %}
+                    </span>
+                </td>
+                <td>
+                    <span class="badge badge-{{ submission.status }}">{% icon submission.status|status_icon "icon icon-sm" %}{{ submission.get_status_display }}</span>
+                    {% if submission.feedback and submission.feedback.grade != None %}
+                        <span class="grade-pill tnum {{ submission.feedback.grade|grade_class:submission.max_points_snapshot }}">{{ submission.feedback.grade }}<small>/{{ submission.max_points_snapshot }}</small></span>
+                    {% endif %}
+                </td>
+                <td>
+                    <span class="tnum">{{ submission.submitted_at|date:"d.m.Y H:i" }}</span>
+                    {% if submission.is_late %}<br><span class="badge badge-needs_revision">после дедлайна</span>{% endif %}
+                </td>
+                <td><a class="btn btn-sm" href="{% url 'teacher_submission_review' submission.pk %}{% querystring %}">Открыть</a></td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="6">
+                <div class="empty">
+                    <div class="empty-icon">{% icon "check-circle" "icon icon-xl" %}</div>
+                    <h3>Нет сдач по выбранным фильтрам</h3>
+                    <p>Измените статус или сбросьте поиск — либо проверьте черновики заданий в карте курса.</p>
+                </div>
+            </td></tr>
+        {% endfor %}
+    </tbody>
 </table>
 </div>
 {% include "lms/pagination.html" %}

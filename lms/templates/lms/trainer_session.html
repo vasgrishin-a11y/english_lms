@@ -1,0 +1,26 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}{{ deck.title }} — тренажёр{% endblock %}
+{% block workspace_class %}workspace-plain{% endblock %}
+
+{% block content %}
+<nav aria-label="Хлебные крошки">
+    <ol class="crumbs">
+        <li><a href="{% url 'student_trainer' %}">Тренажёр</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">{{ deck.title }}</span></li>
+    </ol>
+</nav>
+
+<section class="card">
+    <div class="card-head">
+        <div>
+            <h1 class="mb-0">{{ deck.title }}</h1>
+            <p class="muted small mb-0">{{ deck.topic.block.name }} · {{ deck.topic.title }}</p>
+        </div>
+        <span class="pill-note tnum">{% icon "cards" "icon icon-sm" %}В очереди: {{ queue|length }}</span>
+    </div>
+    {% if deck.description %}<p class="muted">{{ deck.description }}</p>{% endif %}
+    {% include "lms/parts/trainer_stage.html" %}
+</section>
+{% endblock %}

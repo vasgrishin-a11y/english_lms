@@ -1,0 +1,110 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}Консоль преподавателя — English LMS{% endblock %}
+{% block workspace_class %}workspace-plain{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <div>
+        <h1>Консоль преподавателя</h1>
+        <p class="muted mb-0">Одно пространство для проверки работ и управления курсом: блоки, темы, задания, тесты и карточки.</p>
+        <div class="row" style="margin-top:16px">
+            <a class="btn" href="{% url 'teacher_review_queue' %}">{% icon "check-circle" %}К очереди проверки
+                {% if overview.queue.waiting %}<span class="chip count">{{ overview.queue.waiting }}</span>{% endif %}</a>
+            <a class="btn btn-secondary" href="{% url 'teacher_curriculum' %}">{% icon "layers" %}Карта курса</a>
+            <a class="btn btn-ghost" href="{% url 'teacher_assignment_new' %}">{% icon "plus" %}Новое задание</a>
+        </div>
+    </div>
+    <div class="hero-side">
+        <div class="ring" style="--value:{% if overview.queue.total %}{% widthratio overview.queue.waiting overview.queue.total 100 %}{% else %}0{% endif %}"
+             role="img" aria-label="Ждут проверки {{ overview.queue.waiting }} из {{ overview.queue.total }}">
+            <span class="tnum">{{ overview.queue.waiting }}</span>
+        </div>
+        <div class="hero-progress">
+            <p class="small mb-0"><strong>Ждут проверки</strong></p>
+            <p class="tiny muted mb-0">из {{ overview.queue.total }} последних попыток</p>
+        </div>
+    </div>
+</section>
+
+<div class="stats">
+    <div class="stat stat-warning"><div class="stat-value tnum">{{ overview.queue.waiting }}</div><div class="stat-label">{% icon "clock" "icon icon-sm" %}На проверке</div></div>
+    <div class="stat stat-danger"><div class="stat-value tnum">{{ overview.queue.revision }}</div><div class="stat-label">{% icon "refresh" "icon icon-sm" %}Ждут доработки учениками</div></div>
+    <div class="stat stat-success"><div class="stat-value tnum">{{ overview.queue.checked }}</div><div class="stat-label">{% icon "check-circle" "icon icon-sm" %}Проверено</div></div>
+    <div class="stat stat-accent"><div class="stat-value tnum">{{ overview.students }}</div><div class="stat-label">{% icon "users" "icon icon-sm" %}Учеников сдавали</div></div>
+    <div class="stat"><div class="stat-value tnum">{{ overview.curriculum.assignments|default:0 }}</div><div class="stat-label">{% icon "file-text" "icon icon-sm" %}Заданий в курсе</div></div>
+    <div class="stat"><div class="stat-value tnum">{{ overview.average|default_if_none:"—" }}</div><div class="stat-label">{% icon "percent" "icon icon-sm" %}Средний балл</div></div>
+</div>
+
+<div class="home-grid" style="margin-top:20px">
+    <section class="card">
+        <div class="card-head">
+            <h2 class="card-title">{% icon "clock" %}Самые старые работы</h2>
+            <a class="btn btn-ghost btn-sm" href="{% url 'teacher_review_queue' %}">Вся очередь</a>
+        </div>
+        {% for submission in waiting %}
+            <div class="row-item" style="margin-bottom:8px">
+                <span class="avatar">{{ submission.student|initials }}</span>
+                <span class="row-main">
+                    <a class="row-title" href="{% url 'teacher_submission_review' submission.pk %}">{{ submission.student.get_full_name|default:submission.student.username }}</a>
+                    <span class="row-meta">
+                        <span>{{ submission.assignment.title }}</span>
+                        <span>попытка {{ submission.version }}</span>
+                        <span>{% icon "clock" "icon icon-sm" %}{{ submission.submitted_at|human_due }}</span>
+                    </span>
+                </span>
+                <span class="row-side">
+                    <a class="btn btn-sm" href="{% url 'teacher_submission_review' submission.pk %}">Открыть</a>
+                </span>
+            </div>
+        {% empty %}
+            <div class="empty">
+                <div class="empty-icon">{% icon "check-circle" "icon icon-xl" %}</div>
+                <h3>Очередь пуста</h3>
+                <p>Все работы проверены. Можно заняться курсом или аналитикой.</p>
+            </div>
+        {% endfor %}
+    </section>
+
+    <section class="card">
+        <div class="card-head">
+            <h2 class="card-title">{% icon "pencil" %}Черновики заданий</h2>
+            <a class="btn btn-ghost btn-sm" href="{% url 'teacher_curriculum' %}">Карта курса</a>
+        </div>
+        {% for assignment in drafts %}
+            <div class="row-item" style="margin-bottom:8px">
+                <span class="row-main">
+                    <a class="row-title" href="{% url 'teacher_assignment_form' assignment.pk %}">{{ assignment.title }}</a>
+                    <span class="row-meta">
+                        <span>{{ assignment.topic.block.name }} · {{ assignment.topic.title }}</span>
+                        <span class="badge badge-draft">черновик</span>
+                    </span>
+                </span>
+                <span class="row-side">
+                    <form method="post" action="{% url 'teacher_assignment_publish' assignment.pk %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="publish" value="1">
+                        <button class="btn btn-sm btn-quiet" type="submit">{% icon "send" %}Опубликовать</button>
+                    </form>
+                </span>
+            </div>
+        {% empty %}
+            <p class="muted small mb-0">Черновиков нет. Новое задание можно собрать из файла с помощью AI-помощника или вручную.</p>
+        {% endfor %}
+        <a class="btn btn-secondary btn-sm" href="{% url 'teacher_assignment_new' %}">{% icon "plus" %}Создать задание</a>
+    </section>
+</div>
+
+<section class="card">
+    <div class="card-head"><h2 class="card-title">{% icon "lightbulb" %}Быстрые действия</h2></div>
+    <div class="row">
+        <a class="chip" href="{% url 'teacher_block_new' %}">{% icon "plus" "icon icon-sm" %}Новый блок</a>
+        <a class="chip" href="{% url 'teacher_topic_new' %}">{% icon "plus" "icon icon-sm" %}Новая тема</a>
+        <a class="chip" href="{% url 'teacher_deck_new' %}">{% icon "cards" "icon icon-sm" %}Новый квизлет</a>
+        <a class="chip" href="{% url 'teacher_analytics' %}">{% icon "grid" "icon icon-sm" %}Журнал оценок</a>
+        <a class="chip" href="{% url 'teacher_analytics_export' %}">{% icon "download" "icon icon-sm" %}Выгрузить журнал CSV</a>
+        <a class="chip" href="{% url 'teacher_settings' %}">{% icon "hash" "icon icon-sm" %}Банк комментариев</a>
+    </div>
+</section>
+{% endblock %}

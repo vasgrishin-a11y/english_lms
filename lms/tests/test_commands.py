@@ -7,8 +7,17 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.test import override_settings
 
-from lms.models import Feedback
+from lms.models import (
+    Assignment,
+    Block,
+    CommentSnippet,
+    Feedback,
+    FlashcardDeck,
+    Question,
+    Submission,
+)
 
 from .base import LMSCase
 from .test_files import text_file
@@ -98,3 +107,84 @@ class MaintenanceTests(LMSCase):
         with self.assertRaises(CommandError):
             call_command("audit_legacy_data", stdout=io.StringIO())
         self.assertEqual(Feedback.objects.get().grade, 101)
+
+
+class SeedDemoTests(LMSCase):
+    """Демо-наполнение: безопасно для локального стенда, идемпотентно, без паролей в коде."""
+
+    def counts(self):
+        return (
+            Block.objects.count(),
+            Assignment.objects.count(),
+            Question.objects.count(),
+            Submission.objects.count(),
+            FlashcardDeck.objects.count(),
+            CommentSnippet.objects.count(),
+        )
+
+    def test_refuses_to_run_without_debug(self):
+        with override_settings(DEBUG=False), self.assertRaises(CommandError):
+            call_command("seed_demo", password=self.password, stdout=io.StringIO())
+        self.assertEqual(Block.objects.count(), 1)
+
+    @override_settings(DEBUG=True)
+    def test_creates_course_with_work_in_every_state(self):
+        before = self.counts()
+        out = io.StringIO()
+        call_command("seed_demo", password=self.password, stdout=out)
+        self.assertIn("Демо-данные готовы", out.getvalue())
+
+        # Структура курса: три блока, задания всех типов, тест с вопросами.
+        self.assertEqual(Block.objects.count(), before[0] + 3)
+        self.assertEqual(
+            set(Assignment.objects.values_list("assignment_type", flat=True)),
+            {"text", "file", "audio", "mixed", "quiz"},
+        )
+        quiz = Assignment.objects.get(title="Тест: времена и маркеры")
+        self.assertEqual(quiz.questions.count(), 4)
+        self.assertEqual(quiz.max_points, sum(q.points for q in quiz.questions.all()))
+        self.assertTrue(quiz.questions.get(kind="mcq").choices.filter(is_correct=True).exists())
+
+        # Учебная активность: автопроверка, доработка, проверенная работа, очередь, черновик.
+        anna = get_user_model().objects.get(username="anna")
+        self.assertEqual(anna.profile.role, "student")
+        self.assertTrue(anna.check_password(self.password))
+        statuses = set(
+            Submission.objects.filter(
+                assignment__title__in=[
+                    "Тест: времена и маркеры",
+                    "Conditionals: 12 предложений",
+                    "Аудиоответ: моё путешествие",
+                    "IELTS Task 1: line graph",
+                ]
+            ).values_list("status", flat=True)
+        )
+        self.assertEqual(statuses, {"checked", "needs_revision", "submitted"})
+        self.assertEqual(
+            Submission.objects.get(
+                student=anna, assignment__title="Тест: времена и маркеры"
+            ).quiz_attempt.score,
+            8,
+        )
+        self.assertTrue(anna.answer_drafts.filter(assignment__title="Раскройте скобки").exists())
+        # Черновик задания преподавателя не виден ученику.
+        draft_task = Assignment.objects.get(title="IELTS Task 2: opinion essay")
+        self.assertEqual(draft_task.status, "draft")
+
+    @override_settings(DEBUG=True)
+    def test_second_run_does_not_duplicate_anything(self):
+        call_command("seed_demo", password=self.password, stdout=io.StringIO())
+        after_first = self.counts()
+        submissions = Submission.objects.count()
+        call_command("seed_demo", password=self.password, stdout=io.StringIO())
+        self.assertEqual(self.counts(), after_first)
+        self.assertEqual(Submission.objects.count(), submissions)
+
+    @override_settings(DEBUG=True)
+    def test_existing_users_keep_their_password_and_role(self):
+        teacher_before = self.teacher.password
+        call_command("seed_demo", password=self.password, stdout=io.StringIO())
+        self.teacher.refresh_from_db()
+        self.assertEqual(self.teacher.password, teacher_before)
+        self.assertEqual(self.teacher.profile.role, "teacher")
+        self.assertTrue(self.teacher.check_password(self.password))

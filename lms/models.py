@@ -64,10 +64,27 @@ def create_user_profile(sender, instance, created, **kwargs):
         Profile.objects.get_or_create(user=instance, defaults={"role": role})
 
 
+class CefrLevel(models.TextChoices):
+    """Общеевропейские уровни — общая шкала для блоков и аналитики."""
+
+    A1 = "A1", "A1 — Начальный"
+    A2 = "A2", "A2 — Элементарный"
+    B1 = "B1", "B1 — Средний"
+    B2 = "B2", "B2 — Выше среднего"
+    C1 = "C1", "C1 — Продвинутый"
+    C2 = "C2", "C2 — В совершенстве"
+
+
 class Block(models.Model):
     name = models.CharField(max_length=150, verbose_name="Название блока")
     slug = models.SlugField(unique=True, verbose_name="URL")
     description = models.TextField(blank=True, verbose_name="Описание")
+    cefr_level = models.CharField(
+        max_length=2,
+        choices=CefrLevel.choices,
+        blank=True,
+        verbose_name="Уровень CEFR",
+    )
     order = models.PositiveIntegerField(default=0, verbose_name="Порядок")
     is_active = models.BooleanField(default=True, verbose_name="Активен")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -112,12 +129,56 @@ class Topic(models.Model):
         return f"{self.block.name}: {self.title}"
 
 
+class AssignmentQuerySet(models.QuerySet):
+    def visible(self, at=None):
+        """Всё, что реально видит ученик: активно, опубликовано, срок публикации наступил."""
+        moment = at or timezone.now()
+        return self.filter(
+            is_active=True,
+            status=self.model.Publication.PUBLISHED,
+            topic__is_active=True,
+            topic__block__is_active=True,
+        ).filter(Q(publish_at__isnull=True) | Q(publish_at__lte=moment))
+
+
+class Skill(models.Model):
+    """Навык (третья ось иерархии): Grammar, Vocabulary, Listening…"""
+
+    class Kind(models.TextChoices):
+        GRAMMAR = "grammar", "Грамматика"
+        VOCABULARY = "vocabulary", "Лексика"
+        LISTENING = "listening", "Аудирование"
+        SPEAKING = "speaking", "Говорение"
+        WRITING = "writing", "Письмо"
+        READING = "reading", "Чтение"
+
+    name = models.CharField(max_length=80, verbose_name="Навык")
+    slug = models.SlugField(unique=True, verbose_name="URL")
+    kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.GRAMMAR)
+    order = models.PositiveIntegerField(default=0, verbose_name="Порядок")
+
+    class Meta:
+        verbose_name = "Навык"
+        verbose_name_plural = "Навыки"
+        ordering = ["order", "name"]
+
+    def __str__(self):
+        return self.name
+
+
 class Assignment(models.Model):
     class Type(models.TextChoices):
         TEXT = "text", "Текстовый ответ"
         FILE = "file", "Файл"
         AUDIO = "audio", "Аудио"
         MIXED = "mixed", "Текст + файл/аудио"
+        QUIZ = "quiz", "Тест с автопроверкой"
+
+    class Publication(models.TextChoices):
+        DRAFT = "draft", "Черновик"
+        PUBLISHED = "published", "Опубликовано"
+
+    objects = AssignmentQuerySet.as_manager()
 
     topic = models.ForeignKey(
         Topic,
@@ -132,6 +193,23 @@ class Assignment(models.Model):
         choices=Type.choices,
         default=Type.TEXT,
         verbose_name="Тип ответа",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Publication.choices,
+        default=Publication.PUBLISHED,
+        verbose_name="Публикация",
+    )
+    publish_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Отложить публикацию до",
+    )
+    skills = models.ManyToManyField(
+        Skill,
+        blank=True,
+        related_name="assignments",
+        verbose_name="Навыки",
     )
     material_file = models.FileField(
         upload_to=assignment_upload_to,
@@ -162,6 +240,23 @@ class Assignment(models.Model):
     @property
     def is_overdue(self):
         return bool(self.deadline and timezone.now() > self.deadline)
+
+    @property
+    def is_quiz(self):
+        return self.assignment_type == Assignment.Type.QUIZ
+
+    @property
+    def is_visible(self):
+        """Опубликовано и доступно ученикам прямо сейчас."""
+        return bool(
+            self.is_active
+            and self.status == Assignment.Publication.PUBLISHED
+            and (self.publish_at is None or timezone.now() >= self.publish_at)
+        )
+
+    @property
+    def total_question_points(self):
+        return sum(question.points for question in self.questions.all())
 
 
 class SubmissionQuerySet(models.QuerySet):
@@ -369,3 +464,248 @@ class SubmissionEvent(models.Model):
 
     def __str__(self):
         return f"{self.get_action_display()} #{self.submission_id}"
+
+
+class CommentSnippet(models.Model):
+    """Банк комментариев преподавателя: типовые формулировки вместо ручного ввода."""
+
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="comment_snippets",
+        verbose_name="Автор",
+    )
+    title = models.CharField(max_length=120, verbose_name="Название")
+    code = models.CharField(
+        max_length=24,
+        blank=True,
+        verbose_name="Короткий код",
+        help_text="Например -s: вставка в комментарий по коду.",
+    )
+    text = models.TextField(max_length=2000, verbose_name="Текст комментария")
+    is_shared = models.BooleanField(default=True, verbose_name="Общий для всех преподавателей")
+    usage_count = models.PositiveIntegerField(default=0, verbose_name="Использований")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Шаблон комментария"
+        verbose_name_plural = "Банк комментариев"
+        ordering = ["title"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["author", "code"],
+                condition=~Q(code=""),
+                name="unique_snippet_code_per_author",
+            )
+        ]
+
+    def __str__(self):
+        return self.title
+
+
+class Question(models.Model):
+    """Вопрос теста с автоматической проверкой."""
+
+    class Kind(models.TextChoices):
+        MCQ = "mcq", "Один правильный ответ"
+        MULTI = "multi", "Несколько правильных ответов"
+        GAP = "gap", "Вписать ответ"
+        MATCH = "match", "Установить соответствие"
+
+    assignment = models.ForeignKey(
+        Assignment,
+        on_delete=models.CASCADE,
+        related_name="questions",
+        verbose_name="Задание",
+    )
+    kind = models.CharField(
+        max_length=10, choices=Kind.choices, default=Kind.MCQ, verbose_name="Тип вопроса"
+    )
+    text = models.TextField(verbose_name="Вопрос")
+    explanation = models.TextField(blank=True, verbose_name="Пояснение к ответу")
+    points = models.PositiveIntegerField(
+        default=1,
+        validators=[MinValueValidator(1), MaxValueValidator(100)],
+        verbose_name="Баллы",
+    )
+    order = models.PositiveIntegerField(default=0, verbose_name="Порядок")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Вопрос теста"
+        verbose_name_plural = "Вопросы тестов"
+        ordering = ["order", "pk"]
+
+    def __str__(self):
+        return f"{self.assignment_id}: {self.text[:60]}"
+
+    @property
+    def correct_choices(self):
+        return [choice for choice in self.choices.all() if choice.is_correct]
+
+    @property
+    def pairs(self):
+        """Пары соответствия «термин → определение» в порядке вариантов."""
+        return [
+            {"pk": choice.pk, "term": choice.text, "definition": choice.match_text}
+            for choice in self.choices.all()
+            if choice.match_text
+        ]
+
+    @property
+    def gaps(self):
+        """Принимаемые ответы для пропуска."""
+        return [choice.text for choice in self.choices.all() if choice.is_correct]
+
+
+class Choice(models.Model):
+    """Вариант ответа, принятый ответ для пропуска или пара для соответствия."""
+
+    question = models.ForeignKey(
+        Question, on_delete=models.CASCADE, related_name="choices", verbose_name="Вопрос"
+    )
+    text = models.CharField(max_length=500, verbose_name="Текст")
+    match_text = models.CharField(
+        max_length=500, blank=True, verbose_name="Вторая половина пары (для соответствия)"
+    )
+    is_correct = models.BooleanField(default=False, verbose_name="Правильный")
+    order = models.PositiveIntegerField(default=0, verbose_name="Порядок")
+
+    class Meta:
+        verbose_name = "Вариант ответа"
+        verbose_name_plural = "Варианты ответов"
+        ordering = ["order", "pk"]
+
+    def __str__(self):
+        return self.text[:60]
+
+
+class QuizAttempt(models.Model):
+    """Результат автопроверки теста, привязанный к неизменяемой попытке."""
+
+    submission = models.OneToOneField(
+        Submission, on_delete=models.CASCADE, related_name="quiz_attempt", verbose_name="Попытка"
+    )
+    score = models.PositiveIntegerField(default=0, verbose_name="Набрано")
+    max_score = models.PositiveIntegerField(default=0, verbose_name="Максимум")
+    correct_count = models.PositiveIntegerField(default=0, verbose_name="Верных ответов")
+    total_count = models.PositiveIntegerField(default=0, verbose_name="Всего вопросов")
+    answers = models.JSONField(default=dict, blank=True, verbose_name="Ответы по вопросам")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Результат теста"
+        verbose_name_plural = "Результаты тестов"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.score}/{self.max_score} — {self.submission_id}"
+
+
+class AnswerDraft(models.Model):
+    """Черновик ответа до отправки. Не изменяет неизменяемые попытки."""
+
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="answer_drafts",
+        verbose_name="Ученик",
+    )
+    assignment = models.ForeignKey(
+        Assignment,
+        on_delete=models.CASCADE,
+        related_name="answer_drafts",
+        verbose_name="Задание",
+    )
+    text = models.TextField(blank=True, max_length=20000, verbose_name="Черновик")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Сохранено")
+
+    class Meta:
+        verbose_name = "Черновик ответа"
+        verbose_name_plural = "Черновики ответов"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["student", "assignment"], name="unique_answer_draft_per_student"
+            )
+        ]
+
+    def __str__(self):
+        return f"Черновик {self.student_id} → {self.assignment_id}"
+
+
+class FlashcardDeck(models.Model):
+    """Квизлет: набор карточек внутри темы."""
+
+    topic = models.ForeignKey(
+        Topic, on_delete=models.CASCADE, related_name="decks", verbose_name="Тема"
+    )
+    title = models.CharField(max_length=150, verbose_name="Название")
+    description = models.TextField(blank=True, verbose_name="Описание")
+    order = models.PositiveIntegerField(default=0, verbose_name="Порядок")
+    is_active = models.BooleanField(default=True, verbose_name="Активен")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Набор карточек"
+        verbose_name_plural = "Наборы карточек (квизлеты)"
+        ordering = ["topic", "order", "title"]
+
+    def __str__(self):
+        return self.title
+
+
+class Flashcard(models.Model):
+    deck = models.ForeignKey(
+        FlashcardDeck, on_delete=models.CASCADE, related_name="cards", verbose_name="Набор"
+    )
+    front = models.CharField(max_length=300, verbose_name="Лицевая сторона")
+    back = models.CharField(max_length=300, verbose_name="Оборотная сторона")
+    example = models.CharField(max_length=500, blank=True, verbose_name="Пример")
+    order = models.PositiveIntegerField(default=0, verbose_name="Порядок")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Карточка"
+        verbose_name_plural = "Карточки"
+        ordering = ["order", "pk"]
+
+    def __str__(self):
+        return self.front[:60]
+
+
+class CardReview(models.Model):
+    """Состояние интервального повторения SM-2 для пары ученик × карточка."""
+
+    card = models.ForeignKey(
+        Flashcard, on_delete=models.CASCADE, related_name="reviews", verbose_name="Карточка"
+    )
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="card_reviews",
+        verbose_name="Ученик",
+    )
+    ease = models.FloatField(
+        default=2.5, validators=[MinValueValidator(1.3), MaxValueValidator(3.5)]
+    )
+    interval_days = models.PositiveIntegerField(default=0)
+    repetitions = models.PositiveIntegerField(default=0)
+    lapses = models.PositiveIntegerField(default=0)
+    due_at = models.DateTimeField(default=timezone.now, verbose_name="Повторить")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Повторение карточки"
+        verbose_name_plural = "Повторения карточек"
+        constraints = [
+            models.UniqueConstraint(fields=["card", "student"], name="unique_card_review")
+        ]
+        indexes = [models.Index(fields=["student", "due_at"], name="card_review_due_idx")]
+
+    def __str__(self):
+        return f"{self.card_id} × {self.student_id}"

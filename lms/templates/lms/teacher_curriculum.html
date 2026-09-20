@@ -1,0 +1,192 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}Карта курса — English LMS{% endblock %}
+{% block workspace_class %}workspace-wide{% endblock %}
+
+{% block rail %}
+<aside class="rail" aria-label="Поиск и сводка по курсу">
+    <form method="get" class="rail-card" role="search">
+        <label for="id_q">Поиск по курсу</label>
+        <div class="search">
+            {% icon "search" %}
+            <input id="id_q" type="search" name="q" maxlength="200" value="{{ query }}" placeholder="Задание, тема, блок…">
+        </div>
+        <div class="row" style="margin-top:12px">
+            <button class="btn btn-sm" type="submit">Найти</button>
+            {% if query %}<a class="btn btn-ghost btn-sm" href="{% url 'teacher_curriculum' %}">Сбросить</a>{% endif %}
+        </div>
+    </form>
+    <div class="rail-card">
+        <p class="rail-title">Курс целиком</p>
+        <ul class="col" style="gap:6px;margin:0;padding:0;list-style:none">
+            <li class="row row-between"><span class="small">Блоков</span><strong class="tnum">{{ totals.blocks }}</strong></li>
+            <li class="row row-between"><span class="small">Тем</span><strong class="tnum">{{ totals.topics }}</strong></li>
+            <li class="row row-between"><span class="small">Заданий</span><strong class="tnum">{{ totals.assignments }}</strong></li>
+            <li class="row row-between"><span class="small">Черновиков</span><strong class="tnum">{{ totals.drafts }}</strong></li>
+            <li class="row row-between"><span class="small">Ждут проверки</span><strong class="tnum">{{ totals.waiting }}</strong></li>
+        </ul>
+    </div>
+    <div class="rail-card">
+        <p class="rail-title">Добавить</p>
+        <div class="col" style="gap:8px">
+            <a class="btn btn-sm btn-block" href="{% url 'teacher_assignment_new' %}">{% icon "plus" %}Задание</a>
+            <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_block_new' %}">{% icon "plus" %}Блок</a>
+            <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_topic_new' %}">{% icon "plus" %}Тема</a>
+            <a class="btn btn-ghost btn-sm btn-block" href="{% url 'teacher_deck_new' %}">{% icon "cards" %}Квизлет</a>
+        </div>
+    </div>
+</aside>
+{% endblock %}
+
+{% block content %}
+<div class="content-head">
+    <div>
+        <h1>Карта курса</h1>
+        <p class="page-note">Единое дерево: блоки → темы → задания и квизлеты. Черновики ученикам не видны, пока не опубликованы.</p>
+    </div>
+    <a class="btn" href="{% url 'teacher_assignment_new' %}">{% icon "plus" %}Новое задание</a>
+</div>
+
+{% for block_item in blocks_data %}
+    {% with block=block_item.block %}
+        <section class="card" aria-labelledby="block-{{ block.pk }}">
+            <div class="card-head">
+                <div>
+                    <div class="row row-tight">
+                        <span class="block-badge">{{ forloop.counter }}</span>
+                        <h2 id="block-{{ block.pk }}" class="card-title mb-0">{{ block.name }}</h2>
+                        {% if block.cefr_level %}<span class="badge badge-accent">{{ block.cefr_level }}</span>{% endif %}
+                        {% if not block.is_active %}<span class="badge badge-outline">скрыт</span>{% endif %}
+                    </div>
+                    {% if block.description %}<p class="muted small mb-0">{{ block.description }}</p>{% endif %}
+                </div>
+                <div class="row row-tight">
+                    <span class="tiny muted tnum">{{ block_item.topics|length }} тем · {{ block_item.assignments }} заданий</span>
+                    <a class="btn btn-ghost btn-sm" href="{% url 'teacher_block_edit' block.pk %}">{% icon "pencil" %}Изменить</a>
+                    <form method="post" action="{% url 'teacher_block_move' block.pk %}">
+                        {% csrf_token %}<input type="hidden" name="direction" value="up">
+                        <button class="btn btn-ghost btn-sm icon-only" type="submit" aria-label="Переместить блок «{{ block.name }}» вверх">{% icon "arrow-up" %}</button>
+                    </form>
+                    <form method="post" action="{% url 'teacher_block_move' block.pk %}">
+                        {% csrf_token %}<input type="hidden" name="direction" value="down">
+                        <button class="btn btn-ghost btn-sm icon-only" type="submit" aria-label="Переместить блок «{{ block.name }}» вниз">{% icon "arrow-down" %}</button>
+                    </form>
+                    <form method="post" action="{% url 'teacher_block_delete' block.pk %}" data-confirm="Удалить блок «{{ block.name }}»?">
+                        {% csrf_token %}
+                        <button class="btn btn-danger-ghost btn-sm icon-only" type="submit" aria-label="Удалить блок {{ block.name }}">{% icon "trash" %}</button>
+                    </form>
+                </div>
+            </div>
+
+            {% for topic_item in block_item.topics %}
+                {% with topic=topic_item.topic %}
+                    <div class="panel topic-panel">
+                        <div class="topic-head">
+                            <div>
+                                <h3>{{ topic.title }}</h3>
+                                <p class="tiny muted mb-0">
+                                    {{ topic_item.assignments|length }} задани{{ topic_item.assignments|length|pluralize:"е,я,й" }}
+                                    {% if topic_item.waiting %} · ждут проверки {{ topic_item.waiting }}{% endif %}
+                                    {% if topic_item.revision %} · на доработке {{ topic_item.revision }}{% endif %}
+                                    {% if not topic.is_active %} · <span class="badge badge-outline">скрыта</span>{% endif %}
+                                </p>
+                            </div>
+                            <div class="row row-tight">
+                                <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_new' %}?topic={{ topic.pk }}">{% icon "plus" %}Задание</a>
+                                <a class="btn btn-ghost btn-sm" href="{% url 'teacher_topic_edit' topic.pk %}">{% icon "pencil" %}Изменить</a>
+                                <form method="post" action="{% url 'teacher_topic_move' topic.pk %}">
+                                    {% csrf_token %}<input type="hidden" name="direction" value="up">
+                                    <button class="btn btn-ghost btn-sm icon-only" type="submit" aria-label="Переместить тему «{{ topic.title }}» вверх">{% icon "arrow-up" %}</button>
+                                </form>
+                                <form method="post" action="{% url 'teacher_topic_move' topic.pk %}">
+                                    {% csrf_token %}<input type="hidden" name="direction" value="down">
+                                    <button class="btn btn-ghost btn-sm icon-only" type="submit" aria-label="Переместить тему «{{ topic.title }}» вниз">{% icon "arrow-down" %}</button>
+                                </form>
+                                <form method="post" action="{% url 'teacher_topic_delete' topic.pk %}" data-confirm="Удалить тему «{{ topic.title }}»?">
+                                    {% csrf_token %}
+                                    <button class="btn btn-danger-ghost btn-sm icon-only" type="submit" aria-label="Удалить тему {{ topic.title }}">{% icon "trash" %}</button>
+                                </form>
+                            </div>
+                        </div>
+                        {% if topic.description %}<p class="small muted">{{ topic.description }}</p>{% endif %}
+
+                        {% if topic_item.assignments %}
+                            <ul class="task-list">
+                                {% for entry in topic_item.assignments %}
+                                    {% with assignment=entry.assignment stats=entry.stats %}
+                                        <li>
+                                            <div class="row-item">
+                                                <span class="row-main">
+                                                    <span class="row-title row row-tight">
+                                                        <a href="{% url 'teacher_assignment_form' assignment.pk %}">{{ assignment.title }}</a>
+                                                        {% if assignment.is_quiz %}<span class="tag">тест</span>{% endif %}
+                                                        {% if assignment.status == 'draft' %}<span class="badge badge-draft">черновик</span>{% endif %}
+                                                        {% if not assignment.is_active %}<span class="badge badge-outline">скрыто</span>{% endif %}
+                                                    </span>
+                                                    <span class="row-meta">
+                                                        <span class="badge badge-accent">{% icon assignment.assignment_type|type_icon "icon icon-sm" %}{{ assignment.get_assignment_type_display }}</span>
+                                                        <span class="tnum">{{ assignment.max_points }} б.</span>
+                                                        {% if assignment.deadline %}<span>{% icon "clock" "icon icon-sm" %}{{ assignment.deadline|date:"d.m.Y H:i" }}</span>{% endif %}
+                                                        <span class="tiny muted">сдано {{ stats.students }} · ждут {{ stats.waiting }} · проверено {{ stats.checked }}</span>
+                                                        {% if stats.average != None %}<span class="tiny muted">средний балл {{ stats.average|floatformat:1 }}</span>{% endif %}
+                                                    </span>
+                                                </span>
+                                                <span class="row-side">
+                                                    <a class="btn btn-ghost btn-sm icon-only" href="{% url 'teacher_assignment_preview' assignment.pk %}" aria-label="Предпросмотр задания «{{ assignment.title }}»">{% icon "eye" %}</a>
+                                                    <a class="btn btn-secondary btn-sm" href="{% url 'teacher_assignment_form' assignment.pk %}">Изменить</a>
+                                                    {% if assignment.is_quiz %}<a class="btn btn-ghost btn-sm" href="{% url 'teacher_questions' assignment.pk %}">Вопросы</a>{% endif %}
+                                                    <a class="btn btn-ghost btn-sm" href="{% url 'teacher_review_queue' %}?assignment={{ assignment.pk }}">{% icon "check-circle" %}Работы</a>
+                                                </span>
+                                            </div>
+                                            <div class="row row-tight" style="margin:8px 0 0 4px;flex-wrap:wrap">
+                                                <form method="post" action="{% url 'teacher_assignment_publish' assignment.pk %}">
+                                                    {% csrf_token %}<input type="hidden" name="publish" value="1">
+                                                    <button class="btn btn-quiet btn-sm" type="submit">{% icon "send" %}Опубликовать</button>
+                                                </form>
+                                                <form method="post" action="{% url 'teacher_assignment_publish' assignment.pk %}">
+                                                    {% csrf_token %}<input type="hidden" name="publish" value="0">
+                                                    <button class="btn btn-ghost btn-sm" type="submit">{% icon "eye-off" %}В черновики</button>
+                                                </form>
+                                                <form method="post" action="{% url 'teacher_assignment_duplicate' assignment.pk %}">
+                                                    {% csrf_token %}
+                                                    <button class="btn btn-ghost btn-sm" type="submit">{% icon "copy" %}Дублировать</button>
+                                                </form>
+                                                <form method="post" action="{% url 'teacher_assignment_delete' assignment.pk %}" data-confirm="Удалить задание «{{ assignment.title }}»?">
+                                                    {% csrf_token %}
+                                                    <button class="btn btn-danger-ghost btn-sm" type="submit">{% icon "trash" %}Удалить</button>
+                                                </form>
+                                            </div>
+                                        </li>
+                                    {% endwith %}
+                                {% endfor %}
+                            </ul>
+                        {% else %}
+                            <p class="small muted mb-0">В теме нет заданий. <a href="{% url 'teacher_assignment_new' %}?topic={{ topic.pk }}">Добавить задание</a>.</p>
+                        {% endif %}
+
+                        {% if topic_item.decks %}
+                            <p class="row row-tight" style="margin-top:12px">
+                                {% for deck in topic_item.decks %}
+                                    <a class="chip" href="{% url 'teacher_deck_cards' deck.pk %}">{% icon "cards" "icon icon-sm" %}{{ deck.title }}{% if not deck.is_active %} · скрыт{% endif %}</a>
+                                {% endfor %}
+                            </p>
+                        {% endif %}
+                    </div>
+                {% endwith %}
+            {% empty %}
+                <p class="muted small">В блоке нет тем. <a href="{% url 'teacher_topic_new' %}?block={{ block.pk }}">Добавить тему</a>.</p>
+            {% endfor %}
+        </section>
+    {% endwith %}
+{% empty %}
+    <div class="card">
+        <div class="empty">
+            <div class="empty-icon">{% icon "layers" "icon icon-xl" %}</div>
+            <h3>{% if query %}Ничего не нашлось{% else %}Курс пока пустой{% endif %}</h3>
+            <p>{% if query %}Измените запрос или сбросьте поиск.{% else %}Создайте блок, добавьте темы и задания — ученики увидят дорожную карту на главной странице.{% endif %}</p>
+            <a class="btn" href="{% url 'teacher_block_new' %}">Создать блок</a>
+        </div>
+    </div>
+{% endfor %}
+{% endblock %}
