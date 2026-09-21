@@ -8,6 +8,8 @@ __pycache__/
 # Django specific
 *.sqlite3
 *.log
+# Локальный MEDIA_ROOT по умолчанию (<repo>/media) — приватные файлы учеников.
+media/
 
 # Dependencies
 .venv/

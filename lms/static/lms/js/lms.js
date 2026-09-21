@@ -413,6 +413,152 @@
     });
   }
 
+  /* ── Библиотека заготовок: шаблоны заданий, блоков и тем ───────────────── */
+  /* Данные приходят из {{ ...|json_script }} — без инлайн-JSON в атрибутах и
+   * без риска поломать разметку кавычками в условиях заданий.
+   * Без JavaScript кнопки просто ничего не делают: форма остаётся рабочей. */
+  function readJsonScript(id) {
+    var node = document.getElementById(id);
+    if (!node) return null;
+    try {
+      return JSON.parse(node.textContent);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function setFieldValue(form, name, value) {
+    var field = form.elements[name];
+    if (!field || value === undefined || value === null) return false;
+    if (typeof field.length === "number" && field.type === undefined) {
+      /* Группа чекбоксов (например, навыки): отмечаем только нужные. */
+      var wanted = Array.prototype.map.call(value, String);
+      Array.prototype.forEach.call(field, function (input) {
+        input.checked = wanted.indexOf(String(input.value)) > -1;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      return true;
+    }
+    field.value = value;
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    field.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  }
+
+  function templatePresets() {
+    var form = document.querySelector("form[data-preset-form]");
+    if (!form) return;
+    var data =
+      readJsonScript("assignment-presets") ||
+      readJsonScript("block-suggestions") ||
+      readJsonScript("topic-suggestions");
+    if (!data || !data.length) return;
+    var skillIds = readJsonScript("assignment-skill-ids") || {};
+    var hint = document.querySelector("[data-preset-hint]");
+    var ignored = ["id", "icon", "label", "tagline", "skills", "fields"];
+
+    function findPreset(key) {
+      var byIndex = data[parseInt(key, 10)];
+      if (byIndex) return byIndex;
+      for (var index = 0; index < data.length; index += 1) {
+        if (data[index].id === key) return data[index];
+      }
+      return null;
+    }
+
+    function presetLabel(item) {
+      return item.label || item.title || item.name || "шаблон";
+    }
+
+    function hasContent() {
+      var names = ["title", "name", "description"];
+      for (var index = 0; index < names.length; index += 1) {
+        var field = form.elements[names[index]];
+        if (field && field.value && field.value.trim()) return true;
+      }
+      return false;
+    }
+
+    function apply(item) {
+      var fields = item.fields || item;
+      Object.keys(fields).forEach(function (name) {
+        if (ignored.indexOf(name) > -1) return;
+        setFieldValue(form, name, fields[name]);
+      });
+      if (item.skills && item.skills.length) {
+        var ids = item.skills
+          .map(function (slug) {
+            return String(skillIds[slug] || "");
+          })
+          .filter(Boolean);
+        if (ids.length) setFieldValue(form, "skills", ids);
+      }
+    }
+
+    Array.prototype.forEach.call(document.querySelectorAll("[data-preset]"), function (button) {
+      button.setAttribute("aria-pressed", "false");
+      button.addEventListener("click", function () {
+        var item = findPreset(button.getAttribute("data-preset"));
+        if (!item) return;
+        if (hasContent() && !window.confirm("Заменить введённые данные шаблоном?")) return;
+        apply(item);
+        Array.prototype.forEach.call(
+          document.querySelectorAll("[data-preset]"),
+          function (other) {
+            other.setAttribute("aria-pressed", other === button ? "true" : "false");
+          }
+        );
+        if (hint) {
+          hint.textContent =
+            "Подставлен шаблон «" + presetLabel(item) + "» — отредактируйте детали и сохраните.";
+        }
+        var focusTarget = form.elements.title || form.elements.name;
+        if (focusTarget) {
+          focusTarget.scrollIntoView({ block: "center", behavior: "smooth" });
+          focusTarget.focus();
+        }
+      });
+    });
+  }
+
+  /* ── Быстрые дедлайны в форме задания ──────────────────────────────────── */
+  function pad(value) {
+    return value < 10 ? "0" + value : String(value);
+  }
+
+  function localStamp(date) {
+    return (
+      date.getFullYear() +
+      "-" +
+      pad(date.getMonth() + 1) +
+      "-" +
+      pad(date.getDate()) +
+      "T" +
+      pad(date.getHours()) +
+      ":" +
+      pad(date.getMinutes())
+    );
+  }
+
+  function deadlineShortcuts() {
+    var field = document.getElementById("id_deadline");
+    if (!field) return;
+    Array.prototype.forEach.call(
+      document.querySelectorAll("[data-deadline-shift]"),
+      function (button) {
+        button.addEventListener("click", function () {
+          var days = parseInt(button.getAttribute("data-deadline-shift"), 10) || 0;
+          var deadline = new Date();
+          deadline.setDate(deadline.getDate() + days);
+          deadline.setHours(23, 59, 0, 0);
+          field.value = localStamp(deadline);
+          field.dispatchEvent(new Event("input", { bubbles: true }));
+          field.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+      }
+    );
+  }
+
   ready(function () {
     autohideAlerts();
     confirmForms();
@@ -421,5 +567,7 @@
     audioRecorder();
     reviewPage();
     queueHelp();
+    templatePresets();
+    deadlineShortcuts();
   });
 })();

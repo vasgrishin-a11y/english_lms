@@ -33,9 +33,9 @@
             </div>
             <p class="small muted">Шаблоны подставляются в поле комментария на странице проверки одним нажатием. Короткий код (например, <code>gl</code>) помогает найти нужный шаблон быстрее.</p>
             {% if snippets %}
-                <ul class="col" style="padding:0;list-style:none;margin:0">
+                <ul class="col list-plain">
                     {% for snippet in snippets %}
-                        <li class="row-item" style="margin-bottom:8px">
+                        <li class="row-item">
                             <span class="row-main">
                                 <span class="row-title row row-tight">
                                     {{ snippet.title }}

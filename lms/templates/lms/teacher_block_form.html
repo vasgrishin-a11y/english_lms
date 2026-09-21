@@ -16,10 +16,10 @@
     <div class="split-main">
         <section class="card">
             <h1 class="card-title">{% if form.instance.pk %}Изменить блок{% else %}Новый блок{% endif %}</h1>
-            <form method="post" novalidate>
+            <form method="post" novalidate data-preset-form>
                 {% csrf_token %}
                 {% include "lms/form_fields.html" %}
-                <div class="row">
+                <div class="form-actions">
                     <button class="btn" type="submit">{% icon "save" %}Сохранить блок</button>
                     <a class="btn btn-secondary" href="{% url 'teacher_curriculum' %}">Отмена</a>
                     {% if form.instance.pk %}
@@ -30,6 +30,23 @@
         </section>
     </div>
     <div class="split-side">
+        <div class="card card-pad-sm">
+            <p class="rail-title">Готовые варианты блоков</p>
+            <p class="tiny muted">Нажмите — название, уровень CEFR и описание подставятся в форму.</p>
+            <div class="col suggestion-list">
+                {% for suggestion in suggestions %}
+                    <button type="button" class="suggestion" data-preset="{{ forloop.counter0 }}">
+                        <span class="suggestion-label">{{ suggestion.name }}</span>
+                        <span class="suggestion-note">
+                            {% if suggestion.cefr_level %}<span class="badge badge-accent">{{ suggestion.cefr_level }}</span>{% endif %}
+                            {{ suggestion.description|truncatechars:70 }}
+                        </span>
+                    </button>
+                {% endfor %}
+            </div>
+            <p class="tiny muted mb-0" data-preset-hint aria-live="polite"></p>
+            {{ suggestions|json_script:"block-suggestions" }}
+        </div>
         <div class="card card-pad-sm">
             <p class="rail-title">Подсказка</p>
             <p class="small muted">Блок — крупный раздел курса (например, «Reading B2» или «Модуль 1 ОГЭ»). Порядок блоков задаёт последовательность дорожной карты у учеников.</p>

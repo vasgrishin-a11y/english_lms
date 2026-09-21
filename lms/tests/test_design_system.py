@@ -259,6 +259,25 @@ class DesignAssetTests(SimpleTestCase):
         self.assertFalse((CSS_DIR.parents[2] / "webpack.config.js").exists())
         self.assertFalse((CSS_DIR.parents[2] / "vite.config.js").exists())
 
+    def test_badge_variants_used_in_templates_exist_in_css(self):
+        """Модификатор бейджа без правила — это «голый» текст без цвета и рамки.
+
+        В шаблонах встречаются и литералы (badge-draft), и ветки условий
+        ({% if … %}badge-checked{% else %}badge-outline{% endif %}), поэтому
+        собираем все варианты из обеих форм записи.
+        """
+        css = " ".join(_read(name) for name in ("base.css", "components.css", "layout.css"))
+        defined = set(re.findall(r"\.(badge-[a-z0-9_]+)", css))
+        used = set()
+        for path in sorted(TEMPLATE_DIR.rglob("*.html")):
+            text = path.read_text(encoding="utf-8")
+            used.update(re.findall(r"\bbadge-[a-z0-9_]+", text))
+            # Второй вариант записи: префикс вынесен за условие.
+            for branch in re.findall(r"{%[^%]*%}", text):
+                used.update(re.findall(r"\bbadge-[a-z0-9_]+", branch))
+        missing = sorted(name for name in used if name not in defined)
+        self.assertEqual(missing, [], f"Классы бейджей без стилей: {missing}")
+
     def test_tables_are_wrapped_for_narrow_screens(self):
         """На 320px таблица обязана скроллиться в обёртке, а не растягивать страницу."""
         offenders = []
@@ -293,6 +312,77 @@ class DesignAssetTests(SimpleTestCase):
         base = _read("base.css")
         self.assertIn("prefers-reduced-motion", base)
         self.assertIn(":focus-visible", base)
+
+
+def _rule_body(css_text, pattern):
+    """Тело правила по regex-селектору: нужны точечные проверки отдельных свойств."""
+    match = re.search(pattern + r"\s*\{([^}]*)\}", css_text, re.M | re.S)
+    return match.group(1) if match else None
+
+
+class LayoutRegressionTests(SimpleTestCase):
+    """Регрессии, которые видно сразу: сдвиг макета и переносы по буквам."""
+
+    def test_workspace_is_single_column_by_default(self):
+        layout = _read("layout.css")
+        body = _rule_body(layout, r"^\.workspace")
+        self.assertIsNotNone(body, "Не найдено правило .workspace")
+        self.assertIn("grid-template-columns: minmax(0, 1fr)", body)
+        self.assertNotIn("var(--rail-w)", body, "Страницы без рельса резервируют пустую колонку")
+        rail = _rule_body(layout, r"^\.workspace\.has-rail")
+        self.assertIsNotNone(rail, "Нет правила .workspace.has-rail для страниц с панелью")
+        self.assertIn("var(--rail-w)", rail)
+
+    def test_rail_class_matches_rail_block(self):
+        """has-rail объявлен ровно там, где шаблон действительно рисует рельс."""
+        for path in sorted(TEMPLATE_DIR.glob("*.html")):
+            text = path.read_text(encoding="utf-8")
+            # Пустой блок в base.html рельсом не считается.
+            has_rail_block = bool(re.search(r"{% block rail %}(?!{% endblock %})\s*\S", text))
+            declares_class = "has-rail" in text
+            self.assertEqual(
+                has_rail_block,
+                declares_class,
+                f"{path.name}: rail-блок и класс has-rail должны совпадать",
+            )
+
+    def test_rail_grid_collapses_on_narrow_screens(self):
+        layout = _read("layout.css")
+        media = re.search(r"@media \(max-width: 960px\)\s*\{(.*?)\n\}", layout, re.S)
+        self.assertIsNotNone(media, "Не найден адаптив на 960px")
+        body = _rule_body(media.group(1), r"\.workspace,\s*\.workspace\.has-rail")
+        self.assertIsNotNone(
+            body, "На узких экранах двухколоночная сетка с рельсом не схлопывается"
+        )
+        self.assertIn("grid-template-columns: minmax(0, 1fr)", body)
+
+    def test_narrow_screen_guard_does_not_break_letters(self):
+        """`overflow-wrap: anywhere` в общем гарде ломал слова по буквам.
+
+        anywhere учитывается в min-content, поэтому flex-потомок сжимался до
+        одной буквы («stu / den / t»). break-word переносит только слово,
+        которое не влезает в строку.
+        """
+        layout = _read("layout.css")
+        guard = re.search(r"^\.workspace,\s*\.content,.*?\{([^}]*)\}", layout, re.M | re.S)
+        self.assertIsNotNone(guard, "Не найден гард узких экранов")
+        self.assertIn("overflow-wrap: break-word", guard.group(1))
+        self.assertNotIn("anywhere", guard.group(1))
+
+    def test_text_containers_allow_whole_words(self):
+        cases = [
+            ("base.css", r"^h1,\s*h2,\s*h3,\s*h4"),
+            ("base.css", r"^p"),
+            ("components.css", r"^\.card"),
+            ("components.css", r"^\.row-title"),
+            ("layout.css", r"^\.task-title"),
+        ]
+        for name, pattern in cases:
+            with self.subTest(selector=pattern):
+                body = _rule_body(_read(name), pattern)
+                self.assertIsNotNone(body, f"{name}: не найдено правило {pattern}")
+                self.assertIn("overflow-wrap: break-word", body)
+                self.assertNotIn("anywhere", body)
 
 
 def _base_template():

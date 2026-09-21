@@ -28,13 +28,14 @@
 </div>
 
 <section class="card">
+    <div class="rows">
     {% for group in groups %}
-        <div class="row-item" style="margin-bottom:8px">
+        <div class="row-item">
             <span class="avatar avatar-group" aria-hidden="true">{% icon "users" %}</span>
             <span class="row-main">
                 <a class="row-title" href="{% url 'teacher_group_edit' group.pk %}">{{ group.name }}</a>
                 <span class="row-meta">
-                    {% if group.cefr_level %}<span class="badge badge-level">{{ group.get_cefr_level_display }}</span>{% endif %}
+                    {% if group.cefr_level %}<span class="tag tag-cefr">{{ group.get_cefr_level_display }}</span>{% endif %}
                     {% if group.teacher %}<span>{% icon "user" "icon icon-sm" %}{{ group.teacher.get_full_name|default:group.teacher.username }}</span>{% endif %}
                     <span>{% icon "users" "icon icon-sm" %}{{ group.student_count }} учеников</span>
                     <span>{% icon "book" "icon icon-sm" %}{{ group.assignment_count }} заданий</span>
@@ -44,13 +45,13 @@
                 {% endif %}
             </span>
             <span class="row-side">
-                <span class="badge {% if group.is_active %}badge-checked{% else %}badge-muted{% endif %}">
+                <span class="badge {% if group.is_active %}badge-checked{% else %}badge-outline{% endif %}">
                     {% if group.is_active %}Активна{% else %}Архив{% endif %}
                 </span>
                 <a class="btn btn-sm" href="{% url 'teacher_group_edit' group.pk %}">Редактировать</a>
-                <form method="post" action="{% url 'teacher_group_delete' group.pk %}" style="display:inline" onsubmit="return confirm('Удалить группу «{{ group.name }}»? Это нельзя отменить.')">
+                <form method="post" action="{% url 'teacher_group_delete' group.pk %}" data-confirm="Удалить группу «{{ group.name }}»? Это нельзя отменить.">
                     {% csrf_token %}
-                    <button type="submit" class="btn btn-sm btn-danger">Удалить</button>
+                    <button type="submit" class="btn btn-sm btn-danger-ghost">Удалить</button>
                 </form>
             </span>
         </div>
@@ -67,5 +68,6 @@
             {% endif %}
         </div>
     {% endfor %}
+    </div>
 </section>
 {% endblock %}

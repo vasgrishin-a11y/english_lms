@@ -151,10 +151,12 @@
     white-space: nowrap;
 }
 
-/* ── Рабочая область с рельсом ──────────────────────────── */
+/* ── Рабочая область ────────────────────────────────────── */
+/* По умолчанию одна колонка: страница без боковой панели обязана занимать
+   всю ширину контейнера. Второй трек появляется только вместе с рельсом. */
 .workspace {
     display: grid;
-    grid-template-columns: var(--rail-w) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--sp-6);
     align-items: start;
     width: 100%;
@@ -163,17 +165,20 @@
     padding: var(--sp-6);
 }
 
+/* Двухколоночная сетка существует ровно для страниц с плавающей панелью. */
+.workspace.has-rail {
+    grid-template-columns: var(--rail-w) minmax(0, 1fr);
+}
+
 .workspace-wide {
     max-width: 1400px;
 }
 
 .workspace-plain {
-    grid-template-columns: minmax(0, 1fr);
     max-width: 960px;
 }
 
 .workspace-narrow {
-    grid-template-columns: minmax(0, 1fr);
     max-width: 760px;
 }
 
@@ -508,7 +513,8 @@
     font-weight: 600;
     color: var(--text);
     text-decoration: none;
-    overflow-wrap: anywhere;
+    word-break: normal;
+    overflow-wrap: break-word;
 }
 
 .task-title:hover {
@@ -594,7 +600,8 @@
     font-size: var(--fs-30);
     font-weight: 700;
     letter-spacing: var(--tracking-tight);
-    overflow-wrap: anywhere;
+    word-break: normal;
+    overflow-wrap: break-word;
 }
 
 .flashcard-hint {
@@ -716,7 +723,8 @@
 }
 
 @media (max-width: 960px) {
-    .workspace {
+    .workspace,
+    .workspace.has-rail {
         grid-template-columns: minmax(0, 1fr);
         padding: var(--sp-5) var(--sp-4) calc(var(--sp-10) + var(--sp-5));
         gap: var(--sp-5);
@@ -778,7 +786,11 @@
     }
 }
 
-/* Узкие экраны: никаких горизонтальных переполнений (проверяется в CI на 320px) */
+/* Узкие экраны: никаких горизонтальных переполнений (проверяется в CI на 320px).
+   Именно `break-word`, а не `anywhere`: `anywhere` участвует в расчёте
+   min-content, из-за чего flex/grid-потомок сжимается до одной буквы
+   («stu / den / t»). `break-word` переносит только то слово, которое
+   действительно не помещается в строку. */
 .workspace,
 .content,
 .card,
@@ -787,6 +799,14 @@
 .split-main,
 .split-side {
     min-width: 0;
+    overflow-wrap: break-word;
+}
+
+/* Неделимые токены (URL, пути, фрагменты кода) ломаем жёстко: иначе они
+   растягивают контейнер вбок на узком экране. */
+.content pre,
+.content code,
+.break-anywhere {
     overflow-wrap: anywhere;
 }
 
