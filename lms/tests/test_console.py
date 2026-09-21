@@ -10,8 +10,6 @@ from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-User = get_user_model()
-
 from lms.models import (
     AnswerDraft,
     Assignment,
@@ -30,6 +28,8 @@ from lms.models import (
 )
 
 from .base import LMSCase
+
+User = get_user_model()
 
 
 class ConsoleAccessTests(LMSCase):

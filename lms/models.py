@@ -45,13 +45,15 @@ class Profile(models.Model):
     )
     telegram = models.CharField(max_length=100, blank=True, verbose_name="Telegram")
     comment = models.TextField(blank=True, verbose_name="Комментарий преподавателя")
-    
+
     # Геймификация (мягкая)
     streak_days = models.PositiveIntegerField(default=0, verbose_name="Серия дней")
-    streak_last_date = models.DateField(null=True, blank=True, verbose_name="Последний день активности")
+    streak_last_date = models.DateField(
+        null=True, blank=True, verbose_name="Последний день активности"
+    )
     xp_total = models.PositiveIntegerField(default=0, verbose_name="Всего XP")
     badges = models.JSONField(default=list, blank=True, verbose_name="Бейджи")
-    
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -73,7 +75,7 @@ def create_user_profile(sender, instance, created, **kwargs):
 
 class Group(models.Model):
     """Учебная группа/класс для разделения учеников."""
-    
+
     name = models.CharField(max_length=100, verbose_name="Название группы")
     slug = models.SlugField(unique=True, verbose_name="URL")
     description = models.TextField(blank=True, verbose_name="Описание")
@@ -97,24 +99,24 @@ class Group(models.Model):
         blank=True,
         related_name="taught_groups",
         verbose_name="Преподаватель",
-        limit_choices_to={'profile__role': 'teacher'},
+        limit_choices_to={"profile__role": "teacher"},
     )
     students = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         blank=True,
         related_name="student_groups",
         verbose_name="Ученики",
-        limit_choices_to={'profile__role': 'student'},
+        limit_choices_to={"profile__role": "student"},
     )
     is_active = models.BooleanField(default=True, verbose_name="Активна")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     class Meta:
         verbose_name = "Группа"
         verbose_name_plural = "Группы"
         ordering = ["name"]
-    
+
     def __str__(self):
         return self.name
 
@@ -195,20 +197,20 @@ class AssignmentQuerySet(models.QuerySet):
             topic__is_active=True,
             topic__block__is_active=True,
         ).filter(Q(publish_at__isnull=True) | Q(publish_at__lte=moment))
-        
+
         # Если пользователь указан, показываем:
         # 1. Задания без ограничений (нет группы и нет персональных учеников)
         # 2. Задания для его групп
         # 3. Задания, назначенные ему лично
         if user and user.is_authenticated:
-            user_groups = user.student_groups.all() if hasattr(user, 'student_groups') else []
+            user_groups = user.student_groups.all() if hasattr(user, "student_groups") else []
             condition = (
                 (Q(group__isnull=True) & Q(assigned_students__isnull=True))
                 | Q(group__in=user_groups)
                 | Q(assigned_students=user)
             )
             qs = qs.filter(condition).distinct()
-        
+
         return qs
 
 

@@ -161,6 +161,7 @@ class Command(BaseCommand):
         }
         self._groups(users_map)
         return users_map
+
     def _groups(self, users):
         teacher = users["teacher"]
         g1, _ = Group.objects.get_or_create(
@@ -170,7 +171,7 @@ class Command(BaseCommand):
                 "description": "Студенты среднего уровня: подготовка к общему английскому и грамматика.",
                 "cefr_level": "B1",
                 "teacher": teacher,
-            }
+            },
         )
         g1.students.set([users["anna"], users["maxim"]])
 
@@ -181,10 +182,9 @@ class Command(BaseCommand):
                 "description": "Спецкурс подготовки к экзамену IELTS: Writing & Speaking band 6.5+.",
                 "cefr_level": "B2",
                 "teacher": teacher,
-            }
+            },
         )
         g2.students.set([users["sofia"], users["anna"]])
-
 
     def _skills(self):
         wanted = [
