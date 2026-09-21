@@ -36,11 +36,20 @@
                         {{ form.topic.errors }}
                     </div>
                     
-                    <div class="form-field{% if form.group.errors %} field-error{% endif %}">
-                        <label for="{{ form.group.id_for_label }}">{{ form.group.label }}</label>
-                        {{ form.group }}
-                        {% if form.group.help_text %}<div class="help-text">{{ form.group.help_text }}</div>{% endif %}
-                        {{ form.group.errors }}
+                    <div class="row" style="gap: 16px; flex-wrap: wrap;">
+                        <div class="form-field{% if form.group.errors %} field-error{% endif %}" style="flex: 1; min-width: 220px;">
+                            <label for="{{ form.group.id_for_label }}">{{ form.group.label }}</label>
+                            {{ form.group }}
+                            {% if form.group.help_text %}<div class="help-text">{{ form.group.help_text }}</div>{% endif %}
+                            {{ form.group.errors }}
+                        </div>
+                    </div>
+                    
+                    <div class="form-field{% if form.assigned_students.errors %} field-error{% endif %}">
+                        <label>{{ form.assigned_students.label }}</label>
+                        {{ form.assigned_students }}
+                        {% if form.assigned_students.help_text %}<div class="help-text">{{ form.assigned_students.help_text }}</div>{% endif %}
+                        {{ form.assigned_students.errors }}
                     </div>
                     
                     <div class="form-field{% if form.title.errors %} field-error{% endif %}">

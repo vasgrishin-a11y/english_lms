@@ -65,6 +65,11 @@ urlpatterns = [
         views_teacher.block_delete,
         name="teacher_block_delete",
     ),
+    path(
+        "teacher/curriculum/blocks/<int:pk>/publish/",
+        views_teacher.block_publish,
+        name="teacher_block_publish",
+    ),
     path("teacher/curriculum/topics/new/", views_teacher.topic_form, name="teacher_topic_new"),
     path(
         "teacher/curriculum/topics/<int:pk>/", views_teacher.topic_form, name="teacher_topic_edit"
@@ -78,6 +83,11 @@ urlpatterns = [
         "teacher/curriculum/topics/<int:pk>/delete/",
         views_teacher.topic_delete,
         name="teacher_topic_delete",
+    ),
+    path(
+        "teacher/curriculum/topics/<int:pk>/publish/",
+        views_teacher.topic_publish,
+        name="teacher_topic_publish",
     ),
     path(
         "teacher/curriculum/assignments/new/",

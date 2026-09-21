@@ -199,11 +199,20 @@ class TopicForm(SluglessModelForm):
 
 
 class AssignmentForm(forms.ModelForm):
+    assigned_students = forms.ModelMultipleChoiceField(
+        queryset=None,
+        required=False,
+        label="Персонально ученикам",
+        help_text="Если нужно открыть доступ конкретным ученикам помимо группы",
+        widget=forms.CheckboxSelectMultiple,
+    )
+
     class Meta:
         model = Assignment
         fields = [
             "topic",
             "group",
+            "assigned_students",
             "title",
             "description",
             "assignment_type",
@@ -257,10 +266,23 @@ class AssignmentForm(forms.ModelForm):
         
         # Улучшаем отображение поля группы
         self.fields["group"].label = "Группа назначения"
-        self.fields["group"].help_text = "Если не выбрано, задание доступно всем ученикам. Выберите группу для ограничения доступа."
+        self.fields["group"].help_text = "Если не выбрано, задание доступно всем ученикам (или только выбранным персонально ниже)."
         self.fields["group"].empty_label = "Все ученики (общее задание)"
         self.fields["group"].queryset = Group.objects.filter(is_active=True).order_by("name")
+
+        # Настройка персональных учеников
+        self.fields["assigned_students"].queryset = User.objects.filter(
+            profile__role=Profile.Role.STUDENT,
+            is_active=True
+        ).order_by("last_name", "first_name", "username")
         
+        # Улучшаем выпадающий список тем: показываем Блок - Тема
+        self.fields["topic"].queryset = Topic.objects.select_related("block").filter(
+            is_active=True
+        ).order_by("block__order", "block__name", "order", "title")
+        self.fields["topic"].label_from_instance = lambda obj: f"[{obj.block.name}] {obj.title}"
+        self.fields["topic"].empty_label = "Выберите тему курса"
+
         # Скрываем is_active из формы, так как это техническое поле
         self.fields["is_active"].widget = forms.HiddenInput()
 
@@ -511,16 +533,24 @@ class GroupForm(forms.ModelForm):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Показываем только учеников
-        self.fields["student_ids"].queryset = Profile.objects.filter(
-            role=Profile.Role.STUDENT
-        ).select_related("user").order_by("user__last_name", "user__first_name")
+        # Показываем только учеников с понятным лейблом
+        self.fields["student_ids"].queryset = User.objects.filter(
+            profile__role=Profile.Role.STUDENT,
+            is_active=True
+        ).order_by("last_name", "first_name", "username")
+        self.fields["student_ids"].label_from_instance = (
+            lambda u: f"{u.get_full_name() or u.username} (@{u.username})"
+        )
         
         # Показываем только учителей
-        self.fields["teacher"].queryset = Profile.objects.filter(
-            role=Profile.Role.TEACHER
-        ).select_related("user").order_by("user__last_name", "user__first_name")
-        self.fields["teacher"].empty_label = "Не назначен"
+        self.fields["teacher"].queryset = User.objects.filter(
+            profile__role=Profile.Role.TEACHER,
+            is_active=True
+        ).order_by("last_name", "first_name", "username")
+        self.fields["teacher"].label_from_instance = (
+            lambda u: f"{u.get_full_name() or u.username} (@{u.username})"
+        )
+        self.fields["teacher"].empty_label = "Не назначен (общая группа)"
         
         # Если редактируем существующую группу, устанавливаем текущих студентов
         if self.instance.pk:
@@ -529,7 +559,6 @@ class GroupForm(forms.ModelForm):
     def save(self, commit=True):
         instance = super().save(commit=commit)
         if commit:
-            # Сохраняем связь ManyToMany
             instance.students.set(self.cleaned_data["student_ids"])
         return instance
     
@@ -543,18 +572,20 @@ class GroupForm(forms.ModelForm):
 
 
 class StudentCreateForm(forms.ModelForm):
-    """Форма создания нового ученика с генерацией пароля."""
+    """Форма создания нового ученика с генерацией пароля или ручным вводом."""
     
     first_name = forms.CharField(max_length=150, required=True, label="Имя")
     last_name = forms.CharField(max_length=150, required=True, label="Фамилия")
     email = forms.EmailField(required=False, label="Email")
     username = forms.CharField(max_length=150, required=True, label="Логин")
     
-    # Поле для отображения сгенерированного пароля (не сохраняется в БД)
-    generated_password = forms.CharField(
-        required=False,
-        widget=forms.TextInput(attrs={"readonly": True, "class": "password-display"}),
-        label="Сгенерированный пароль"
+    # Поле пароля: автосгенерированное значение по умолчанию, которое учитель может изменить вручную
+    password = forms.CharField(
+        max_length=128,
+        required=True,
+        widget=forms.TextInput(attrs={"class": "password-display"}),
+        label="Пароль для входа",
+        help_text="Сгенерирован автоматически, но вы можете изменить его на свой вариант"
     )
     
     group_ids = forms.ModelMultipleChoiceField(
@@ -569,13 +600,19 @@ class StudentCreateForm(forms.ModelForm):
     comment = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 2}), label="Комментарий")
     
     class Meta:
-        model = None  # Кастомная форма
-        fields = ["username", "first_name", "last_name", "email", "group_ids", "telegram", "comment"]
+        model = User
+        fields = ["username", "first_name", "last_name", "email", "password"]
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Показываем только активные группы
+        # Показываем только активные группы с уровнем
         self.fields["group_ids"].queryset = Group.objects.filter(is_active=True).order_by("name")
+        self.fields["group_ids"].label_from_instance = (
+            lambda g: f"{g.name} ({g.get_cefr_level_display()})" if g.cefr_level else g.name
+        )
+        if "password" not in self.initial and not self.data:
+            import secrets
+            self.initial["password"] = secrets.token_urlsafe(10)
     
     def clean_username(self):
         username = self.cleaned_data.get("username")
@@ -590,29 +627,24 @@ class StudentCreateForm(forms.ModelForm):
         return email
     
     def save(self, commit=True):
-        # Генерируем случайный пароль
-        import secrets
-        password = secrets.token_urlsafe(12)
-        self.generated_password = password
+        raw_password = self.cleaned_data["password"]
+        self.saved_password = raw_password
         
-        # Создаем пользователя
         user = User(
             username=self.cleaned_data["username"],
             first_name=self.cleaned_data["first_name"],
             last_name=self.cleaned_data["last_name"],
             email=self.cleaned_data.get("email", ""),
         )
-        user.set_password(password)
+        user.set_password(raw_password)
         if commit:
             user.save()
-            # Создаем профиль
             profile, _ = Profile.objects.get_or_create(user=user)
             profile.role = Profile.Role.STUDENT
             profile.telegram = self.cleaned_data.get("telegram", "")
             profile.comment = self.cleaned_data.get("comment", "")
             profile.save()
             
-            # Добавляем в выбранные группы
             if self.cleaned_data.get("group_ids"):
                 user.student_groups.set(self.cleaned_data["group_ids"])
         
@@ -638,13 +670,16 @@ class StudentEditForm(forms.ModelForm):
     comment = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 2}), label="Комментарий")
     
     class Meta:
-        model = None  # Кастомная форма
-        fields = ["first_name", "last_name", "email", "group_ids", "telegram", "comment"]
+        model = User
+        fields = ["first_name", "last_name", "email"]
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Показываем только активные группы
+        # Показываем только активные группы с уровнем
         self.fields["group_ids"].queryset = Group.objects.filter(is_active=True).order_by("name")
+        self.fields["group_ids"].label_from_instance = (
+            lambda g: f"{g.name} ({g.get_cefr_level_display()})" if g.cefr_level else g.name
+        )
         
         # Если редактируем, устанавливаем текущие группы
         if self.instance.pk and hasattr(self.instance, 'student_groups'):

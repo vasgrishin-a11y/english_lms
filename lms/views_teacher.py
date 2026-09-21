@@ -545,6 +545,34 @@ def assignment_publish(request, pk):
 
 @teacher_required
 @require_POST
+def block_publish(request, pk):
+    block = get_object_or_404(Block, pk=pk)
+    active = request.POST.get("active") == "1"
+    block.is_active = active
+    block.save(update_fields=["is_active", "updated_at"])
+    messages.success(
+        request,
+        f"Блок «{block.name}» опубликован." if active else f"Блок «{block.name}» скрыт."
+    )
+    return redirect(request.POST.get("next") or "teacher_curriculum")
+
+
+@teacher_required
+@require_POST
+def topic_publish(request, pk):
+    topic = get_object_or_404(Topic, pk=pk)
+    active = request.POST.get("active") == "1"
+    topic.is_active = active
+    topic.save(update_fields=["is_active", "updated_at"])
+    messages.success(
+        request,
+        f"Тема «{topic.title}» опубликована." if active else f"Тема «{topic.title}» скрыта."
+    )
+    return redirect(request.POST.get("next") or "teacher_curriculum")
+
+
+@teacher_required
+@require_POST
 def assignment_delete(request, pk):
     assignment = get_object_or_404(Assignment, pk=pk)
     return _delete(
@@ -1058,7 +1086,9 @@ def group_form(request, pk=None):
             if not obj.pk and not obj.teacher_id:
                 obj.teacher = request.user
             obj.save()
-            form.save_m2m()  # Сохраняем связь ManyToMany для студентов
+            form.save_m2m()  # Сохраняем связи ManyToMany формы
+            if "student_ids" in form.cleaned_data:
+                obj.students.set(form.cleaned_data["student_ids"])
             
             action = "создана" if not pk else "обновлена"
             messages.success(request, f"Группа «{obj.name}» {action}.")
@@ -1108,12 +1138,11 @@ def student_create(request):
         form = StudentCreateForm(request.POST)
         if form.is_valid():
             user = form.save()
-            # Показываем пароль только один раз
             messages.success(
                 request,
-                f"Ученик «{user.first_name} {user.last_name}» создан. "
-                f"Логин: {user.username}, Пароль: {form.generated_password}. "
-                "Сообщите пароль ученику!"
+                f"Ученик «{user.first_name} {user.last_name}» успешно создан. "
+                f"Логин: {user.username}, Пароль: {form.saved_password}. "
+                "Сохраните пароль и передайте его ученику!"
             )
             return redirect("teacher_students")
     else:

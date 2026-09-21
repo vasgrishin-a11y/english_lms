@@ -35,6 +35,9 @@
                 <a class="nav-link" href="{% url 'teacher_students' %}"{% if workspace == 'students' %} aria-current="page"{% endif %}>
                     {% icon "users" %}<span class="label">Ученики</span>
                 </a>
+                <a class="nav-link" href="{% url 'teacher_groups' %}"{% if workspace == 'groups' %} aria-current="page"{% endif %}>
+                    {% icon "users" %}<span class="label">Группы</span>
+                </a>
                 <a class="nav-link" href="{% url 'teacher_analytics' %}"{% if workspace == 'analytics' %} aria-current="page"{% endif %}>
                     {% icon "chart" %}<span class="label">Аналитика</span>
                 </a>
@@ -99,6 +102,7 @@
             <li><a href="{% url 'teacher_review_queue' %}"{% if workspace == 'review' %} aria-current="page"{% endif %}>{% icon "check-circle" %}Проверка</a></li>
             <li><a href="{% url 'teacher_curriculum' %}"{% if workspace == 'curriculum' %} aria-current="page"{% endif %}>{% icon "layers" %}Курс</a></li>
             <li><a href="{% url 'teacher_students' %}"{% if workspace == 'students' %} aria-current="page"{% endif %}>{% icon "users" %}Ученики</a></li>
+            <li><a href="{% url 'teacher_groups' %}"{% if workspace == 'groups' %} aria-current="page"{% endif %}>{% icon "users" %}Группы</a></li>
             <li><a href="{% url 'teacher_analytics' %}"{% if workspace == 'analytics' %} aria-current="page"{% endif %}>{% icon "chart" %}Аналитика</a></li>
         {% else %}
             <li><a href="{% url 'student_home' %}"{% if workspace == 'home' %} aria-current="page"{% endif %}>{% icon "home" %}Главная</a></li>

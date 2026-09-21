@@ -187,7 +187,7 @@ class Topic(models.Model):
 class AssignmentQuerySet(models.QuerySet):
     def visible(self, user=None, at=None):
         """Всё, что реально видит ученик: активно, опубликовано, срок публикации наступил.
-        Если передан user, фильтруем по группе ученика."""
+        Если передан user, фильтруем по группе или персональному назначению."""
         moment = at or timezone.now()
         qs = self.filter(
             is_active=True,
@@ -196,11 +196,18 @@ class AssignmentQuerySet(models.QuerySet):
             topic__block__is_active=True,
         ).filter(Q(publish_at__isnull=True) | Q(publish_at__lte=moment))
         
-        # Если пользователь указан и у него есть группы, показываем задания для его групп
-        # или задания без привязки к группе (общие)
-        if user and hasattr(user, 'student_groups'):
-            user_groups = user.student_groups.all()
-            qs = qs.filter(Q(group__isnull=True) | Q(group__in=user_groups))
+        # Если пользователь указан, показываем:
+        # 1. Задания без ограничений (нет группы и нет персональных учеников)
+        # 2. Задания для его групп
+        # 3. Задания, назначенные ему лично
+        if user and user.is_authenticated:
+            user_groups = user.student_groups.all() if hasattr(user, 'student_groups') else []
+            condition = (
+                (Q(group__isnull=True) & Q(assigned_students__isnull=True))
+                | Q(group__in=user_groups)
+                | Q(assigned_students=user)
+            )
+            qs = qs.filter(condition).distinct()
         
         return qs
 
@@ -283,6 +290,13 @@ class Assignment(models.Model):
         blank=True,
         related_name="assignments",
         verbose_name="Навыки",
+    )
+    assigned_students = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name="assigned_assignments",
+        verbose_name="Индивидуально для учеников",
+        help_text="Если выбраны ученики, задание также будет доступно им персонально",
     )
     material_file = models.FileField(
         upload_to=assignment_upload_to,

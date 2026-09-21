@@ -164,12 +164,17 @@
 }
 
 .workspace-wide {
-    max-width: 1600px;
+    max-width: 1400px;
 }
 
 .workspace-plain {
     grid-template-columns: minmax(0, 1fr);
-    max-width: 900px;
+    max-width: 960px;
+}
+
+.workspace-narrow {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 760px;
 }
 
 .rail {
