@@ -22,86 +22,112 @@
                     <span class="badge badge-{{ assignment.status }}">{% icon assignment.status|status_icon "icon icon-sm" %}{{ assignment.get_status_display }}</span>
                 {% endif %}
             </div>
-            
-            <form method="post" enctype="multipart/form-data" novalidate>
+
+            <form method="post" enctype="multipart/form-data" novalidate id="assignment-form" data-preset-form>
                 {% csrf_token %}
-                
+
+                <!-- Секция: быстрые шаблоны -->
+                <fieldset class="form-section">
+                    <legend>{% icon "sparkles" %}Быстрые шаблоны заданий</legend>
+                    <p class="help-text">Выберите формат — заголовок, условия, тип сдачи и баллы подставятся в форму. Всё можно отредактировать перед сохранением.</p>
+                    <div class="preset-grid">
+                        {% for preset in presets %}
+                            <button type="button" class="preset-card" data-preset="{{ preset.id }}">
+                                <span class="preset-icon">{% icon preset.icon "icon" %}</span>
+                                <span class="preset-text">
+                                    <span class="preset-label">{{ preset.label }}</span>
+                                    <span class="preset-tagline">{{ preset.tagline }}</span>
+                                </span>
+                            </button>
+                        {% endfor %}
+                    </div>
+                    <p class="tiny muted mb-0" data-preset-hint aria-live="polite"></p>
+                    <noscript>
+                        <p class="tiny muted mb-0">Шаблоны подставляются скриптом: включите JavaScript или скопируйте условия из библиотеки курсов.</p>
+                    </noscript>
+                    {{ presets|json_script:"assignment-presets" }}
+                    {{ skill_ids|json_script:"assignment-skill-ids" }}
+                </fieldset>
+
                 <!-- Секция: Основная информация -->
                 <div class="form-section">
                     <h3 class="section-title">{% icon "file-text" %}Основная информация</h3>
-                    <div class="form-field{% if form.topic.errors %} field-error{% endif %}">
-                        <label for="{{ form.topic.id_for_label }}">{{ form.topic.label }}</label>
-                        {{ form.topic }}
-                        {% if form.topic.help_text %}<div class="help-text">{{ form.topic.help_text }}</div>{% endif %}
-                        {{ form.topic.errors }}
-                    </div>
-                    
-                    <div class="row" style="gap: 16px; flex-wrap: wrap;">
-                        <div class="form-field{% if form.group.errors %} field-error{% endif %}" style="flex: 1; min-width: 220px;">
+                    <div class="form-grid">
+                        <div class="form-field form-field-wide{% if form.topic.errors %} field-error{% endif %}">
+                            <label for="{{ form.topic.id_for_label }}">{{ form.topic.label }}</label>
+                            {{ form.topic }}
+                            {% if form.topic.help_text %}<div class="help-text">{{ form.topic.help_text }}</div>{% endif %}
+                            {{ form.topic.errors }}
+                        </div>
+
+                        <div class="form-field{% if form.group.errors %} field-error{% endif %}">
                             <label for="{{ form.group.id_for_label }}">{{ form.group.label }}</label>
                             {{ form.group }}
                             {% if form.group.help_text %}<div class="help-text">{{ form.group.help_text }}</div>{% endif %}
                             {{ form.group.errors }}
                         </div>
-                    </div>
-                    
-                    <div class="form-field{% if form.assigned_students.errors %} field-error{% endif %}">
-                        <label>{{ form.assigned_students.label }}</label>
-                        {{ form.assigned_students }}
-                        {% if form.assigned_students.help_text %}<div class="help-text">{{ form.assigned_students.help_text }}</div>{% endif %}
-                        {{ form.assigned_students.errors }}
-                    </div>
-                    
-                    <div class="form-field{% if form.title.errors %} field-error{% endif %}">
-                        <label for="{{ form.title.id_for_label }}">{{ form.title.label }} <span class="required">*</span></label>
-                        {{ form.title }}
-                        {% if form.title.help_text %}<div class="help-text">{{ form.title.help_text }}</div>{% endif %}
-                        {{ form.title.errors }}
-                    </div>
-                    
-                    <div class="form-field{% if form.description.errors %} field-error{% endif %}">
-                        <label for="{{ form.description.id_for_label }}">{{ form.description.label }} <span class="required">*</span></label>
-                        {{ form.description }}
-                        {% if form.description.help_text %}<div class="help-text">{{ form.description.help_text }}</div>{% endif %}
-                        {{ form.description.errors }}
+
+                        <div class="form-field form-field-wide{% if form.assigned_students.errors %} field-error{% endif %}">
+                            <label>{{ form.assigned_students.label }}</label>
+                            {{ form.assigned_students }}
+                            {% if form.assigned_students.help_text %}<div class="help-text">{{ form.assigned_students.help_text }}</div>{% endif %}
+                            {{ form.assigned_students.errors }}
+                        </div>
+
+                        <div class="form-field form-field-wide{% if form.title.errors %} field-error{% endif %}">
+                            <label for="{{ form.title.id_for_label }}">{{ form.title.label }} <span class="required" aria-hidden="true">*</span></label>
+                            {{ form.title }}
+                            {% if form.title.help_text %}<div class="help-text">{{ form.title.help_text }}</div>{% endif %}
+                            {{ form.title.errors }}
+                        </div>
+
+                        <div class="form-field form-field-wide{% if form.description.errors %} field-error{% endif %}">
+                            <label for="{{ form.description.id_for_label }}">{{ form.description.label }} <span class="required" aria-hidden="true">*</span></label>
+                            {{ form.description }}
+                            {% if form.description.help_text %}<div class="help-text">{{ form.description.help_text }}</div>{% endif %}
+                            {{ form.description.errors }}
+                        </div>
                     </div>
                 </div>
-                
+
                 <!-- Секция: Параметры задания -->
                 <div class="form-section">
                     <h3 class="section-title">{% icon "settings" %}Параметры задания</h3>
-                    <div class="row" style="gap: 16px; flex-wrap: wrap;">
-                        <div class="form-field{% if form.assignment_type.errors %} field-error{% endif %}" style="flex: 1; min-width: 200px;">
+                    <div class="form-grid">
+                        <div class="form-field{% if form.assignment_type.errors %} field-error{% endif %}">
                             <label for="{{ form.assignment_type.id_for_label }}">{{ form.assignment_type.label }}</label>
                             {{ form.assignment_type }}
                             {% if form.assignment_type.help_text %}<div class="help-text">{{ form.assignment_type.help_text }}</div>{% endif %}
                             {{ form.assignment_type.errors }}
                         </div>
-                        
-                        <div class="form-field{% if form.max_points.errors %} field-error{% endif %}" style="flex: 1; min-width: 150px;">
+
+                        <div class="form-field{% if form.max_points.errors %} field-error{% endif %}">
                             <label for="{{ form.max_points.id_for_label }}">{{ form.max_points.label }}</label>
                             {{ form.max_points }}
                             {% if form.max_points.help_text %}<div class="help-text">{{ form.max_points.help_text }}</div>{% endif %}
                             {{ form.max_points.errors }}
                         </div>
-                    </div>
-                    
-                    <div class="form-field{% if form.skills.errors %} field-error{% endif %}">
-                        <label for="{{ form.skills.id_for_label }}">{{ form.skills.label }}</label>
-                        {{ form.skills }}
-                        {% if form.skills.help_text %}<div class="help-text">{{ form.skills.help_text }}</div>{% endif %}
-                        {{ form.skills.errors }}
-                    </div>
-                    
-                    <div class="row" style="gap: 16px; flex-wrap: wrap;">
-                        <div class="form-field{% if form.deadline.errors %} field-error{% endif %}" style="flex: 1; min-width: 200px;">
+
+                        <div class="form-field form-field-wide{% if form.skills.errors %} field-error{% endif %}">
+                            <label for="{{ form.skills.id_for_label }}">{{ form.skills.label }}</label>
+                            {{ form.skills }}
+                            {% if form.skills.help_text %}<div class="help-text">{{ form.skills.help_text }}</div>{% endif %}
+                            {{ form.skills.errors }}
+                        </div>
+
+                        <div class="form-field{% if form.deadline.errors %} field-error{% endif %}">
                             <label for="{{ form.deadline.id_for_label }}">{{ form.deadline.label }}</label>
                             {{ form.deadline }}
+                            <div class="row row-tight deadline-shortcuts">
+                                <button class="btn btn-ghost btn-sm" type="button" data-deadline-shift="3">+3 дня</button>
+                                <button class="btn btn-ghost btn-sm" type="button" data-deadline-shift="7">+1 неделя</button>
+                                <button class="btn btn-ghost btn-sm" type="button" data-deadline-shift="14">+2 недели</button>
+                            </div>
                             {% if form.deadline.help_text %}<div class="help-text">{{ form.deadline.help_text }}</div>{% endif %}
                             {{ form.deadline.errors }}
                         </div>
-                        
-                        <div class="form-field{% if form.publish_at.errors %} field-error{% endif %}" style="flex: 1; min-width: 200px;">
+
+                        <div class="form-field{% if form.publish_at.errors %} field-error{% endif %}">
                             <label for="{{ form.publish_at.id_for_label }}">{{ form.publish_at.label }}</label>
                             {{ form.publish_at }}
                             {% if form.publish_at.help_text %}<div class="help-text">{{ form.publish_at.help_text }}</div>{% endif %}
@@ -109,29 +135,29 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <!-- Секция: Публикация и материалы -->
                 <div class="form-section">
                     <h3 class="section-title">{% icon "send" %}Публикация и материалы</h3>
                     <div class="form-field{% if form.status.errors %} field-error{% endif %}">
                         <label for="{{ form.status.id_for_label }}">{{ form.status.label }}</label>
                         {{ form.status }}
-                        {% if form.status.help_text %}<div class="help-text" style="color: var(--muted); font-size: 0.875rem;">{{ form.status.help_text }}</div>{% endif %}
+                        {% if form.status.help_text %}<div class="help-text">{{ form.status.help_text }}</div>{% endif %}
                         {{ form.status.errors }}
                     </div>
-                    
+
                     <div class="form-field{% if form.material_file.errors %} field-error{% endif %}">
                         <label for="{{ form.material_file.id_for_label }}">{{ form.material_file.label }}</label>
                         {{ form.material_file }}
                         {% if form.material_file.help_text %}<div class="help-text">{{ form.material_file.help_text }}</div>{% endif %}
                         {{ form.material_file.errors }}
                     </div>
-                    
+
                     {{ form.is_active }}
                     {{ form.order }}
                 </div>
-                
-                <div class="row" style="margin-top:24px; border-top: 1px solid var(--border); padding-top: 16px;">
+
+                <div class="form-actions">
                     <button class="btn" type="submit">{% icon "save" %}Сохранить</button>
                     {% if assignment and assignment.is_quiz %}
                         <button class="btn btn-secondary" type="submit" name="_save_questions" value="1">{% icon "list" %}Сохранить и перейти к вопросам</button>
@@ -145,19 +171,43 @@
     <div class="split-side">
         <div class="card card-pad-sm">
             <p class="rail-title">Как собрать задание</p>
-            <ol class="col tiny muted" style="padding-left:18px;margin:0">
-                <li>Выберите тему и группу (если нужно ограничить доступ)</li>
-                <li>Укажите тип: тест проверяется автоматически, письменные и аудио — вручную</li>
-                <li>Для теста нажмите «Сохранить и перейти к вопросам» — там добавляются задания с вариантами, пропусками и соответствиями</li>
-                <li>Прикрепите материалы (текст, аудио, фото) — ученик увидит их прямо в карточке задания</li>
-                <li>Укажите дедлайн и максимум баллов; баллы теста считаются из вопросов автоматически</li>
-                <li>Выберите статус: черновик (скрыто) или опубликовано (видно ученикам)</li>
+            <ol class="col tiny muted rail-list">
+                <li>Выберите шаблон выше или напишите условия с нуля</li>
+                <li>Укажите тему и группу (если нужно ограничить доступ)</li>
+                <li>Тип: тест проверяется автоматически, письменные и аудио — вручную</li>
+                <li>Для теста нажмите «Сохранить и перейти к вопросам»</li>
+                <li>Прикрепите материалы — ученик увидит их в карточке задания</li>
+                <li>Укажите дедлайн и максимум баллов</li>
+                <li>Статус: черновик (скрыто) или опубликовано (видно ученикам)</li>
             </ol>
         </div>
+
+        {% if progress %}
+            <div class="card card-pad-sm">
+                <p class="rail-title">Кто сдал это задание</p>
+                <div class="progress" role="img" aria-label="Сдали {{ progress.submitted }} из {{ progress.total }}">
+                    <span class="progress-bar" style="width:{% if progress.total %}{% widthratio progress.submitted progress.total 100 %}{% else %}0{% endif %}%"></span>
+                </div>
+                <p class="tiny muted">
+                    Сдали <strong class="tnum">{{ progress.submitted }}</strong>
+                    из <strong class="tnum">{{ progress.total }}</strong> ожидаемых учеников
+                </p>
+                {% if progress.pending %}
+                    <p class="tiny muted mb-0">
+                        Ещё не сдали:
+                        {% for student in progress.pending %}{{ student.get_full_name|default:student.username }}{% if not forloop.last %}, {% endif %}{% endfor %}{% if progress.pending_more %} и ещё {{ progress.pending_more }}{% endif %}.
+                        <a href="{% url 'teacher_review_queue' %}?assignment={{ assignment.pk }}">Открыть работы</a>.
+                    </p>
+                {% else %}
+                    <p class="tiny muted mb-0">Сдали все ожидаемые ученики.</p>
+                {% endif %}
+            </div>
+        {% endif %}
+
         {% if assignment %}
             <div class="card card-pad-sm">
                 <p class="rail-title">Это задание</p>
-                <div class="col" style="gap:8px">
+                <div class="col">
                     <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_assignment_preview' assignment.pk %}">{% icon "eye" %}Предпросмотр глазами ученика</a>
                     {% if assignment.is_quiz %}<a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_questions' assignment.pk %}">{% icon "list" %}Вопросы теста ({{ assignment.questions.count }})</a>{% endif %}
                     <a class="btn btn-ghost btn-sm btn-block" href="{% url 'teacher_review_queue' %}?assignment={{ assignment.pk }}">{% icon "check-circle" %}Работы учеников</a>
@@ -168,37 +218,14 @@
                 </div>
             </div>
         {% endif %}
-        
-        <div class="card card-pad-sm" style="background: var(--accent-50);">
-            <p class="rail-title" style="color: var(--accent-700);">{% icon "lightbulb" %}Статусы публикации</p>
-            <ul class="tiny muted" style="margin: 0; padding-left: 18px;">
-                <li><strong>📝 Черновик</strong> — виден только вам, можно редактировать</li>
-                <li><strong>✅ Опубликовано</strong> — видно ученикам выбранной группы (или всем, если группа не указана)</li>
+
+        <div class="card card-pad-sm">
+            <p class="rail-title">{% icon "lightbulb" %}Статусы публикации</p>
+            <ul class="tiny muted rail-list">
+                <li><strong>Черновик</strong> — виден только вам, можно редактировать</li>
+                <li><strong>Опубликовано</strong> — видно ученикам выбранной группы (или всем, если группа не указана)</li>
             </ul>
         </div>
     </div>
 </div>
-
-<style>
-.form-section {
-    margin-bottom: 24px;
-    padding-bottom: 24px;
-    border-bottom: 1px solid var(--border);
-}
-.form-section:last-of-type {
-    border-bottom: none;
-}
-.section-title {
-    font-size: 1.125rem;
-    font-weight: 600;
-    color: var(--text);
-    margin: 0 0 16px 0;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-.required {
-    color: var(--danger);
-}
-</style>
 {% endblock %}

@@ -1,0 +1,94 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}Библиотека курсов — English LMS{% endblock %}
+{% block workspace_class %}workspace-wide{% endblock %}
+
+{% block content %}
+<nav aria-label="Хлебные крошки">
+    <ol class="crumbs">
+        <li><a href="{% url 'teacher_curriculum' %}">Карта курса</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">Библиотека</span></li>
+    </ol>
+</nav>
+
+<div class="content-head">
+    <div>
+        <h1>Библиотека курсов</h1>
+        <p class="page-note">Готовые наборы «блоки → темы → задания» для преподавателя английского: условия уже написаны, тесты и карточки собраны. Импорт создаёт задания черновиками — проверьте формулировки и опубликуйте нужные.</p>
+    </div>
+    <div class="row row-tight">
+        <a class="btn btn-secondary btn-sm" href="{% url 'teacher_curriculum' %}">{% icon "layers" %}Карта курса</a>
+        <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_new' %}">{% icon "plus" %}Новое задание</a>
+    </div>
+</div>
+
+<div class="library-grid">
+    {% for entry in entries %}
+        {% with pack=entry.pack counts=entry.counts %}
+            <section class="card library-card" aria-labelledby="pack-{{ pack.slug }}">
+                <div class="card-head">
+                    <div>
+                        <div class="row row-tight">
+                            <h2 id="pack-{{ pack.slug }}" class="card-title mb-0">{{ pack.name }}</h2>
+                            {% if pack.level %}<span class="badge badge-accent">{{ pack.level }}</span>{% endif %}
+                        </div>
+                        <p class="muted small mb-0">{{ pack.summary }}</p>
+                    </div>
+                    <form method="post" action="{% url 'teacher_library_import' pack.slug %}">
+                        {% csrf_token %}
+                        <button class="btn btn-sm" type="submit">{% icon "download" %}Добавить в курс</button>
+                    </form>
+                </div>
+
+                <div class="stats">
+                    <div class="stat"><div class="stat-value tnum">{{ counts.blocks }}</div><div class="stat-label">{% icon "layers" "icon icon-sm" %}Блоков</div></div>
+                    <div class="stat"><div class="stat-value tnum">{{ counts.topics }}</div><div class="stat-label">{% icon "bookmark" "icon icon-sm" %}Тем</div></div>
+                    <div class="stat"><div class="stat-value tnum">{{ counts.assignments }}</div><div class="stat-label">{% icon "file-text" "icon icon-sm" %}Заданий</div></div>
+                    <div class="stat"><div class="stat-value tnum">{{ counts.quizzes }}</div><div class="stat-label">{% icon "target" "icon icon-sm" %}Тестов</div></div>
+                    <div class="stat"><div class="stat-value tnum">{{ counts.cards }}</div><div class="stat-label">{% icon "cards" "icon icon-sm" %}Карточек</div></div>
+                </div>
+
+                {% if counts.imported_blocks %}
+                    <p class="tiny muted">
+                        {% icon "check-circle" "icon icon-sm" %}
+                        Уже в курсе: {{ counts.imported_blocks }} из {{ counts.blocks }} блоков,
+                        {{ counts.imported_topics }} из {{ counts.topics }} тем.
+                        Повторный импорт добавит только недостающее.
+                    </p>
+                {% endif %}
+
+                <details class="library-details">
+                    <summary>Показать состав набора</summary>
+                    <div class="library-toc">
+                        {% for block in pack.blocks %}
+                            <div class="panel">
+                                <p class="library-block-title">
+                                    {{ forloop.counter }}. {{ block.name }}
+                                    {% if block.cefr_level %}<span class="badge badge-accent">{{ block.cefr_level }}</span>{% endif %}
+                                </p>
+                                <ul class="tiny muted">
+                                    {% for topic in block.topics %}
+                                        <li>
+                                            <strong>{{ topic.title }}</strong>
+                                            {% for item in topic.assignments %}
+                                                <span class="library-item">
+                                                    {% icon item.type|type_icon "icon icon-sm" %}{{ item.title }}
+                                                    <span class="tnum">· {{ item.max_points }} б.</span>
+                                                </span>
+                                            {% endfor %}
+                                            {% for deck in topic.decks %}
+                                                <span class="library-item">{% icon "cards" "icon icon-sm" %}{{ deck.title }} · {{ deck.cards|length }} карточек</span>
+                                            {% endfor %}
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </details>
+            </section>
+        {% endwith %}
+    {% endfor %}
+</div>
+{% endblock %}

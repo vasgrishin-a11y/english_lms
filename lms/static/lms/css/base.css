@@ -31,7 +31,8 @@ h4 {
     line-height: var(--lh-tight);
     letter-spacing: var(--tracking-tight);
     font-weight: 650;
-    overflow-wrap: anywhere;
+    word-break: normal;
+    overflow-wrap: break-word;
 }
 
 h1 {
@@ -50,7 +51,7 @@ h4 {
 
 p {
     margin: 0 0 var(--sp-4);
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
 }
 
 a {

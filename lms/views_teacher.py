@@ -40,6 +40,13 @@ from .forms import (
     TeacherProfileForm,
     TopicForm,
 )
+from .library import (
+    ASSIGNMENT_PRESETS,
+    BLOCK_SUGGESTIONS,
+    TOPIC_SUGGESTIONS,
+    import_course_pack,
+    packs_with_state,
+)
 from .models import (
     Assignment,
     Block,
@@ -51,6 +58,7 @@ from .models import (
     Group,
     Profile,
     Question,
+    Skill,
     Submission,
     Topic,
 )
@@ -353,6 +361,80 @@ def _reorder(siblings, obj, direction):
 
 
 @teacher_required
+@require_GET
+def library(request):
+    """Библиотека готовых курсов: наборы «блоки → темы → задания» одним действием."""
+    return render(
+        request,
+        "lms/teacher_library.html",
+        {"entries": packs_with_state(), "workspace": "curriculum"},
+    )
+
+
+@teacher_required
+@require_POST
+def library_import(request, slug):
+    """Скопировать набор в курс. Задания попадают в черновики, дубликаты пропускаются."""
+    try:
+        result = import_course_pack(slug)
+    except LookupError:
+        raise Http404("Неизвестный набор библиотеки")
+    created, skipped = result["created"], result["skipped"]
+    parts = [
+        f"блоков {created['blocks']}",
+        f"тем {created['topics']}",
+        f"заданий {created['assignments']}",
+    ]
+    if created["questions"]:
+        parts.append(f"вопросов {created['questions']}")
+    if created["cards"]:
+        parts.append(f"карточек {created['cards']}")
+    message = (
+        "Добавлено в курс: "
+        + ", ".join(parts)
+        + ". Задания созданы черновиками — проверьте и опубликуйте."
+    )
+    skipped_total = sum(skipped.values())
+    if skipped_total:
+        message += f" Пропущено дубликатов: {skipped_total}."
+    messages.success(request, message)
+    logger.info("Library pack %s imported by user %s: %s", slug, request.user.pk, created)
+    return redirect("teacher_curriculum")
+
+
+def _submission_progress(assignment):
+    """Кто из ожидаемых учеников уже сдал задание, а кто нет.
+
+    Ожидаемые — активные ученики группы задания (или все ученики, если группа
+    не выбрана) плюс назначенные персонально. Используется в боковой панели
+    формы задания, чтобы преподаватель видел «не сдали» без перехода в очередь.
+    Для нового задания возвращает None: сдавать ещё нечего.
+    """
+    if not assignment.pk:
+        return None
+    expected = User.objects.filter(profile__role=Profile.Role.STUDENT, is_active=True)
+    if assignment.group_id:
+        expected = expected.filter(student_groups=assignment.group_id)
+    expected_ids = set(expected.values_list("pk", flat=True))
+    expected_ids |= set(
+        assignment.assigned_students.filter(is_active=True).values_list("pk", flat=True)
+    )
+    submitted_ids = set(
+        Submission.objects.filter(assignment=assignment).values_list("student_id", flat=True)
+    )
+    students = list(
+        User.objects.filter(pk__in=expected_ids).order_by("last_name", "first_name", "username")
+    )
+    pending = [student for student in students if student.pk not in submitted_ids]
+    return {
+        "total": len(students),
+        "submitted": len(students) - len(pending),
+        "pending": pending[:8],
+        "pending_more": max(len(pending) - 8, 0),
+    }
+
+
+@teacher_required
 @require_http_methods(["GET", "POST"])
 def block_form(request, pk=None):
     block = get_object_or_404(Block, pk=pk) if pk else None
@@ -364,7 +446,12 @@ def block_form(request, pk=None):
     return render(
         request,
         "lms/teacher_block_form.html",
-        {"form": form, "block": block, "workspace": "curriculum"},
+        {
+            "form": form,
+            "block": block,
+            "suggestions": BLOCK_SUGGESTIONS,
+            "workspace": "curriculum",
+        },
     )
 
 
@@ -412,6 +499,7 @@ def topic_form(request, pk=None):
             "form": form,
             "topic": topic,
             "blocks": Block.objects.order_by("order", "name"),
+            "suggestions": TOPIC_SUGGESTIONS,
             "workspace": "curriculum",
         },
     )
@@ -475,6 +563,9 @@ def assignment_form(request, pk=None):
                 "block__order", "order", "title"
             ),
             "groups": Group.objects.filter(is_active=True).order_by("name"),
+            "presets": ASSIGNMENT_PRESETS,
+            "skill_ids": {skill.slug: skill.pk for skill in Skill.objects.all()},
+            "progress": _submission_progress(assignment) if assignment else None,
             "workspace": "curriculum",
         },
     )

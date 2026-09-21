@@ -2,7 +2,7 @@
 {% load lms_tags %}
 
 {% block title %}Карта курса — English LMS{% endblock %}
-{% block workspace_class %}workspace-wide{% endblock %}
+{% block workspace_class %}workspace-wide has-rail{% endblock %}
 
 {% block rail %}
 <aside class="rail" aria-label="Поиск и сводка по курсу">
@@ -34,6 +34,7 @@
             <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_block_new' %}">{% icon "plus" %}Блок</a>
             <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_topic_new' %}">{% icon "plus" %}Тема</a>
             <a class="btn btn-ghost btn-sm btn-block" href="{% url 'teacher_deck_new' %}">{% icon "cards" %}Квизлет</a>
+            <a class="btn btn-ghost btn-sm btn-block" href="{% url 'teacher_library' %}">{% icon "database" %}Из библиотеки</a>
         </div>
     </div>
 </aside>
@@ -45,7 +46,10 @@
         <h1>Карта курса</h1>
         <p class="page-note">Единое дерево: блоки → темы → задания и квизлеты. Черновики ученикам не видны, пока не опубликованы.</p>
     </div>
-    <a class="btn" href="{% url 'teacher_assignment_new' %}">{% icon "plus" %}Новое задание</a>
+    <div class="row row-tight">
+        <a class="btn btn-secondary btn-sm" href="{% url 'teacher_library' %}">{% icon "database" %}Библиотека курсов</a>
+        <a class="btn" href="{% url 'teacher_assignment_new' %}">{% icon "plus" %}Новое задание</a>
+    </div>
 </div>
 
 {% for block_item in blocks_data %}
@@ -148,7 +152,7 @@
                                                         {% else %}
                                                             <span class="badge badge-draft">черновик</span>
                                                         {% endif %}
-                                                        {% if assignment.group %}<span class="badge badge-level">группа: {{ assignment.group.name }}</span>{% endif %}
+                                                        {% if assignment.group %}<span class="badge badge-sand">группа: {{ assignment.group.name }}</span>{% endif %}
                                                         {% if assignment.assigned_students.all %}<span class="badge badge-accent">персонально ({{ assignment.assigned_students.count }})</span>{% endif %}
                                                         {% if not assignment.is_active %}<span class="badge badge-outline">скрыто</span>{% endif %}
                                                     </span>
@@ -213,7 +217,10 @@
             <div class="empty-icon">{% icon "layers" "icon icon-xl" %}</div>
             <h3>{% if query %}Ничего не нашлось{% else %}Курс пока пустой{% endif %}</h3>
             <p>{% if query %}Измените запрос или сбросьте поиск.{% else %}Создайте блок, добавьте темы и задания — ученики увидят дорожную карту на главной странице.{% endif %}</p>
-            <a class="btn" href="{% url 'teacher_block_new' %}">Создать блок</a>
+            <div class="row row-tight">
+                <a class="btn" href="{% url 'teacher_block_new' %}">Создать блок</a>
+                <a class="btn btn-secondary" href="{% url 'teacher_library' %}">{% icon "database" %}Взять готовый курс</a>
+            </div>
         </div>
     </div>
 {% endfor %}

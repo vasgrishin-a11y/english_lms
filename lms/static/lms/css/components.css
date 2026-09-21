@@ -314,7 +314,7 @@ select[aria-invalid="true"],
     border: 1px solid var(--border);
     border-radius: var(--r-lg);
     box-shadow: var(--shadow-1);
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
 }
 
 .card + .card {
@@ -648,7 +648,8 @@ td {
     text-align: left;
     vertical-align: middle;
     border-bottom: 1px solid var(--border-subtle);
-    overflow-wrap: anywhere;
+    word-break: normal;
+    overflow-wrap: break-word;
 }
 
 th {
@@ -820,7 +821,8 @@ th.numeric {
     font-weight: 600;
     color: var(--text);
     text-decoration: none;
-    overflow-wrap: anywhere;
+    word-break: normal;
+    overflow-wrap: break-word;
 }
 
 a.row-title:hover {
@@ -1622,7 +1624,7 @@ audio {
 
 .def-list dd {
     margin: 0;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
 }
 
 .card-grid {
@@ -1681,11 +1683,209 @@ table .grade-col {
     border-left: 3px solid var(--accent-200);
     background: var(--surface-sunken);
     border-radius: 0 var(--r-sm) var(--r-sm) 0;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
 }
 
 /* Короткий комментарий преподавателя в списках результатов. */
 .feedback-note {
     margin-top: 4px;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
+}
+
+/* ── Формы: заголовки секций и обязательные поля ─────────── */
+.section-title {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    margin: 0 0 var(--sp-4);
+    font-size: var(--fs-16);
+    font-weight: 650;
+    color: var(--text);
+}
+
+.section-title .icon {
+    width: 16px;
+    height: 16px;
+    color: var(--accent-700);
+}
+
+.required {
+    color: var(--danger-ink);
+}
+
+/* Список внутри боковой карточки: плотный, без лишних отступов. */
+.rail-list {
+    margin: 0;
+    padding-left: var(--sp-5);
+}
+
+.deadline-shortcuts {
+    margin-top: var(--sp-2);
+}
+
+/* ── Библиотека шаблонов: быстрые заготовки заданий ─────── */
+.preset-grid {
+    display: grid;
+    gap: var(--sp-3);
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr));
+}
+
+.preset-card {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--sp-3);
+    padding: var(--sp-4);
+    text-align: left;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    cursor: pointer;
+    font: inherit;
+    color: var(--text);
+    transition:
+        border-color var(--dur-2) var(--ease),
+        box-shadow var(--dur-2) var(--ease),
+        background var(--dur-2) var(--ease);
+}
+
+.preset-card:hover {
+    border-color: var(--accent-300);
+    box-shadow: var(--shadow-2);
+}
+
+.preset-card[aria-pressed="true"] {
+    border-color: var(--accent-600);
+    background: var(--accent-soft);
+}
+
+.preset-icon {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
+    color: var(--accent-800);
+    background: var(--accent-100);
+    border-radius: var(--r-sm);
+}
+
+.preset-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.preset-label {
+    font-size: var(--fs-14);
+    font-weight: 650;
+    color: var(--text);
+}
+
+.preset-tagline {
+    font-size: var(--fs-12);
+    color: var(--text-muted);
+}
+
+/* ── Готовые формулировки блоков и тем ──────────────────── */
+.suggestion-list {
+    gap: var(--sp-2);
+    max-height: 420px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.suggestion {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--sp-3);
+    text-align: left;
+    background: var(--surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    font: inherit;
+    color: var(--text);
+    transition: border-color var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
+}
+
+.suggestion:hover {
+    border-color: var(--accent-300);
+    background: var(--accent-soft);
+}
+
+.suggestion[aria-pressed="true"] {
+    border-color: var(--accent-600);
+    background: var(--accent-soft);
+}
+
+.suggestion-label {
+    font-size: var(--fs-13);
+    font-weight: 650;
+}
+
+.suggestion-note {
+    font-size: var(--fs-12);
+    color: var(--text-muted);
+}
+
+/* ── Библиотека курсов ──────────────────────────────────── */
+.library-grid {
+    display: grid;
+    gap: var(--sp-5);
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+    align-items: start;
+}
+
+.library-card .stats {
+    margin-bottom: var(--sp-4);
+}
+
+.library-details {
+    border-top: 1px solid var(--border-subtle);
+    padding-top: var(--sp-4);
+}
+
+.library-details summary {
+    cursor: pointer;
+    font-size: var(--fs-13);
+    font-weight: 650;
+    color: var(--accent-800);
+}
+
+.library-toc {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    margin-top: var(--sp-3);
+}
+
+.library-block-title {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    margin: 0 0 var(--sp-2);
+    font-size: var(--fs-13);
+    font-weight: 650;
+    color: var(--text);
+}
+
+.library-toc ul {
+    margin: 0;
+    padding-left: var(--sp-5);
+}
+
+.library-item {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-1);
+    flex-wrap: wrap;
+}
+
+/* Список без маркеров и отступов: интервал задаёт сам контейнер (.col/.rows). */
+.list-plain {
+    margin: 0;
+    padding: 0;
+    list-style: none;
 }

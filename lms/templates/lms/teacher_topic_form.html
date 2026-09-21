@@ -17,10 +17,10 @@
     <div class="split-main">
         <section class="card">
             <h1 class="card-title">{% if form.instance.pk %}Изменить тему{% else %}Новая тема{% endif %}</h1>
-            <form method="post" novalidate>
+            <form method="post" novalidate data-preset-form>
                 {% csrf_token %}
                 {% include "lms/form_fields.html" %}
-                <div class="row">
+                <div class="form-actions">
                     <button class="btn" type="submit">{% icon "save" %}Сохранить тему</button>
                     <a class="btn btn-secondary" href="{% url 'teacher_curriculum' %}">Отмена</a>
                     {% if form.instance.pk %}
@@ -31,6 +31,20 @@
         </section>
     </div>
     <div class="split-side">
+        <div class="card card-pad-sm">
+            <p class="rail-title">Готовые темы по английскому</p>
+            <p class="tiny muted">Нажмите тему — название и описание подставятся в форму. Навыки отметьте вручную, если они нужны.</p>
+            <div class="col suggestion-list">
+                {% for suggestion in suggestions %}
+                    <button type="button" class="suggestion" data-preset="{{ forloop.counter0 }}">
+                        <span class="suggestion-label">{{ suggestion.title }}</span>
+                        <span class="suggestion-note">{{ suggestion.description|truncatechars:70 }}</span>
+                    </button>
+                {% endfor %}
+            </div>
+            <p class="tiny muted mb-0" data-preset-hint aria-live="polite"></p>
+            {{ suggestions|json_script:"topic-suggestions" }}
+        </div>
         <div class="card card-pad-sm">
             <p class="rail-title">Подсказка</p>
             <p class="small muted">Тема — раздел внутри блока. К теме можно привязать квизлеты: ученик увидит карточки рядом с заданиями и в тренажёре.</p>

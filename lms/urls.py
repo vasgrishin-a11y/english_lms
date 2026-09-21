@@ -51,6 +51,12 @@ urlpatterns = [
         name="teacher_submission_review_legacy",
     ),
     path("teacher/curriculum/", views_teacher.curriculum, name="teacher_curriculum"),
+    path("teacher/library/", views_teacher.library, name="teacher_library"),
+    path(
+        "teacher/library/<slug:slug>/import/",
+        views_teacher.library_import,
+        name="teacher_library_import",
+    ),
     path("teacher/curriculum/blocks/new/", views_teacher.block_form, name="teacher_block_new"),
     path(
         "teacher/curriculum/blocks/<int:pk>/", views_teacher.block_form, name="teacher_block_edit"

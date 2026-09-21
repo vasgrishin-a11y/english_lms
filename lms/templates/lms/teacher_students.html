@@ -28,8 +28,9 @@
 </div>
 
 <section class="card">
+    <div class="rows">
     {% for student in students %}
-        <div class="row-item" style="margin-bottom:8px">
+        <div class="row-item">
             <span class="avatar" aria-hidden="true">{{ student|initials }}</span>
             <span class="row-main">
                 <a class="row-title" href="{% url 'teacher_student_detail' student.pk %}">{{ student.get_full_name|default:student.username }}</a>
@@ -66,5 +67,6 @@
             {% endif %}
         </div>
     {% endfor %}
+    </div>
 </section>
 {% endblock %}
