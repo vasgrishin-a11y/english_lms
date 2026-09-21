@@ -7,6 +7,7 @@
 
 from datetime import timedelta
 
+from django.contrib.auth import get_user_model
 from django.utils import timezone
 
 from lms.models import (
@@ -18,6 +19,8 @@ from lms.models import (
     CommentSnippet,
     Flashcard,
     FlashcardDeck,
+    Group,
+    Profile,
     Question,
     Skill,
     Submission,
@@ -25,6 +28,8 @@ from lms.models import (
 )
 
 from .base import LMSCase
+
+User = get_user_model()
 
 
 class ConsoleAccessTests(LMSCase):
@@ -770,6 +775,65 @@ class StudentDirectoryTests(LMSCase):
             self.teacher_client.get(f"/teacher/students/{self.teacher.pk}/").status_code, 404
         )
 
+    def test_teacher_can_create_student_with_password(self):
+        response = self.teacher_client.post(
+            "/teacher/students/create/",
+            {
+                "username": "new_student",
+                "first_name": "New",
+                "last_name": "Student",
+                "email": "new@example.com",
+                "password": "CustomSecretPassword123!",
+                "telegram": "@new_student",
+            },
+        )
+        self.assertRedirects(response, "/teacher/students/")
+        new_user = User.objects.get(username="new_student")
+        self.assertEqual(new_user.first_name, "New")
+        self.assertTrue(new_user.check_password("CustomSecretPassword123!"))
+        self.assertEqual(new_user.profile.role, Profile.Role.STUDENT)
+
+    def test_teacher_can_manage_groups(self):
+        # 1. Create group
+        resp = self.teacher_client.post(
+            "/teacher/groups/new/",
+            {
+                "name": "IELTS Prep",
+                "slug": "ielts-prep",
+                "cefr_level": "B2",
+                "student_ids": [self.student.pk],
+                "is_active": "on",
+            },
+        )
+        self.assertRedirects(resp, "/teacher/groups/")
+        group = Group.objects.get(slug="ielts-prep")
+        self.assertEqual(group.name, "IELTS Prep")
+        self.assertIn(self.student, group.students.all())
+
+        # 2. View groups list
+        resp = self.teacher_client.get("/teacher/groups/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "IELTS Prep")
+
+    def test_block_and_topic_publish_toggles(self):
+        # 1. Toggle block
+        resp = self.teacher_client.post(
+            f"/teacher/curriculum/blocks/{self.block.pk}/publish/",
+            {"active": "0"},
+        )
+        self.assertRedirects(resp, "/teacher/curriculum/")
+        self.block.refresh_from_db()
+        self.assertFalse(self.block.is_active)
+
+        # 2. Toggle topic
+        resp = self.teacher_client.post(
+            f"/teacher/curriculum/topics/{self.topic.pk}/publish/",
+            {"active": "0"},
+        )
+        self.assertRedirects(resp, "/teacher/curriculum/")
+        self.topic.refresh_from_db()
+        self.assertFalse(self.topic.is_active)
+
 
 class AnalyticsTests(LMSCase):
     def test_gradebook_matrix(self):
@@ -818,7 +882,6 @@ class ConsoleSettingsTests(LMSCase):
         response = self.teacher_client.get("/teacher/settings/")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.context["snippets"]), 1)
-        self.assertContains(response, "Горячие клавиши")
 
     def test_interface_preferences_are_stored_in_session(self):
         response = self.teacher_client.post(

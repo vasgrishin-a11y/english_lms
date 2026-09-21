@@ -49,7 +49,8 @@
                 {% if student.stats.waiting %}<span class="badge badge-submitted">ждут {{ student.stats.waiting }}</span>{% endif %}
                 {% if student.stats.revision %}<span class="badge badge-needs_revision">доработка {{ student.stats.revision }}</span>{% endif %}
                 {% if student.stats.average != None %}<span class="grade-pill tnum {{ student.stats.average|grade_class }}">{{ student.stats.average|floatformat:0 }}<small>%</small></span>{% endif %}
-                <a class="btn btn-sm" href="{% url 'teacher_student_detail' student.pk %}">Открыть</a>
+                <a class="btn btn-sm btn-ghost" href="{% url 'teacher_student_edit' student.pk %}" title="Редактировать">{% icon "pencil" %}</a>
+                <a class="btn btn-sm btn-secondary" href="{% url 'teacher_student_detail' student.pk %}">Открыть</a>
             </span>
         </div>
     {% empty %}

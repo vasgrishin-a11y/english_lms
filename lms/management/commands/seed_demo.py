@@ -35,6 +35,7 @@ from lms.models import (
     CommentSnippet,
     Flashcard,
     FlashcardDeck,
+    Group,
     Profile,
     Question,
     Skill,
@@ -149,7 +150,7 @@ class Command(BaseCommand):
             user.profile = profile
             return user
 
-        return {
+        users_map = {
             "admin": ensure(
                 "admin", Profile.Role.TEACHER, first="Ada", last="Admin", superuser=True
             ),
@@ -158,6 +159,32 @@ class Command(BaseCommand):
             "maxim": ensure("maxim", Profile.Role.STUDENT, first="Maxim", last="Sokolov"),
             "sofia": ensure("sofia", Profile.Role.STUDENT, first="Sofia", last="Kuznetsova"),
         }
+        self._groups(users_map)
+        return users_map
+
+    def _groups(self, users):
+        teacher = users["teacher"]
+        g1, _ = Group.objects.get_or_create(
+            slug="b1-intermediate-evening",
+            defaults={
+                "name": "Группа B1 — Вечерний интенсив",
+                "description": "Студенты среднего уровня: подготовка к общему английскому и грамматика.",
+                "cefr_level": "B1",
+                "teacher": teacher,
+            },
+        )
+        g1.students.set([users["anna"], users["maxim"]])
+
+        g2, _ = Group.objects.get_or_create(
+            slug="b2-ielts-prep",
+            defaults={
+                "name": "Группа B2 — IELTS Academic Prep",
+                "description": "Спецкурс подготовки к экзамену IELTS: Writing & Speaking band 6.5+.",
+                "cefr_level": "B2",
+                "teacher": teacher,
+            },
+        )
+        g2.students.set([users["sofia"], users["anna"]])
 
     def _skills(self):
         wanted = [
@@ -328,6 +355,46 @@ class Command(BaseCommand):
         task2.status = Assignment.Publication.DRAFT
         task2.save(update_fields=["status", "updated_at"])
         task2.skills.set([skills["writing"]])
+
+        # 4. Аудирование с диктантом и вопросами (Listening & Comprehension)
+        listening_task = make(
+            topic(lexis, "Speaking: describe a trip"),
+            "Listening: Airport announcements & directions",
+            "Прослушайте аудиозапись и ответьте на вопросы по деталям рейса и гейтам. "
+            "Запишите краткие тезисы.",
+            kind=Assignment.Type.AUDIO,
+            order=3,
+            deadline=now + timedelta(days=5),
+            max_points=40,
+        )
+        listening_task.skills.set([skills["listening"], skills["reading"]])
+
+        # 5. Чтение и критический анализ (Reading & Comprehension)
+        reading_task = make(
+            topic(grammar, "Условные предложения"),
+            "Reading: The Science of Decision Making",
+            "Прочитайте статью (в прикреплённом файле). "
+            "Ответьте на 5 открытых вопросов и найдите в тексте примеры Second и Third Conditionals.",
+            kind=Assignment.Type.MIXED,
+            order=3,
+            deadline=now + timedelta(days=7),
+            max_points=60,
+        )
+        reading_task.skills.set([skills["reading"], skills["writing"], skills["grammar"]])
+
+        # Привязываем задания к созданным группам
+        b1_group = Group.objects.filter(slug="b1-intermediate-evening").first()
+        b2_group = Group.objects.filter(slug="b2-ielts-prep").first()
+        if b1_group:
+            conditionals.group = b1_group
+            conditionals.save(update_fields=["group", "updated_at"])
+            gaps.group = b1_group
+            gaps.save(update_fields=["group", "updated_at"])
+        if b2_group:
+            task1.group = b2_group
+            task1.save(update_fields=["group", "updated_at"])
+            task2.group = b2_group
+            task2.save(update_fields=["group", "updated_at"])
 
         self._deck(topic(lexis, "Travel vocabulary"))
         self._deck(topic(grammar, "Present Perfect и Past Simple"))

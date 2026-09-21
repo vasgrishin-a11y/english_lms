@@ -63,6 +63,17 @@
                 </div>
                 <div class="row row-tight">
                     <span class="tiny muted tnum">{{ block_item.topics|length }} тем · {{ block_item.assignments }} заданий</span>
+                    {% if block.is_active %}
+                        <form method="post" action="{% url 'teacher_block_publish' block.pk %}">
+                            {% csrf_token %}<input type="hidden" name="active" value="0">
+                            <button class="btn btn-ghost btn-sm" type="submit" title="Скрыть блок от учеников">{% icon "eye" %}Активен</button>
+                        </form>
+                    {% else %}
+                        <form method="post" action="{% url 'teacher_block_publish' block.pk %}">
+                            {% csrf_token %}<input type="hidden" name="active" value="1">
+                            <button class="btn btn-quiet btn-sm" type="submit" title="Опубликовать блок для учеников">{% icon "eye-off" %}Скрыт</button>
+                        </form>
+                    {% endif %}
                     <a class="btn btn-ghost btn-sm" href="{% url 'teacher_block_edit' block.pk %}">{% icon "pencil" %}Изменить</a>
                     <form method="post" action="{% url 'teacher_block_move' block.pk %}">
                         {% csrf_token %}<input type="hidden" name="direction" value="up">
@@ -93,6 +104,17 @@
                                 </p>
                             </div>
                             <div class="row row-tight">
+                                {% if topic.is_active %}
+                                    <form method="post" action="{% url 'teacher_topic_publish' topic.pk %}">
+                                        {% csrf_token %}<input type="hidden" name="active" value="0">
+                                        <button class="btn btn-ghost btn-sm" type="submit" title="Скрыть тему">{% icon "eye" %}Активна</button>
+                                    </form>
+                                {% else %}
+                                    <form method="post" action="{% url 'teacher_topic_publish' topic.pk %}">
+                                        {% csrf_token %}<input type="hidden" name="active" value="1">
+                                        <button class="btn btn-quiet btn-sm" type="submit" title="Опубликовать тему">{% icon "eye-off" %}Скрыта</button>
+                                    </form>
+                                {% endif %}
                                 <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_new' %}?topic={{ topic.pk }}">{% icon "plus" %}Задание</a>
                                 <a class="btn btn-ghost btn-sm" href="{% url 'teacher_topic_edit' topic.pk %}">{% icon "pencil" %}Изменить</a>
                                 <form method="post" action="{% url 'teacher_topic_move' topic.pk %}">
@@ -121,7 +143,13 @@
                                                     <span class="row-title row row-tight">
                                                         <a href="{% url 'teacher_assignment_form' assignment.pk %}">{{ assignment.title }}</a>
                                                         {% if assignment.is_quiz %}<span class="tag">тест</span>{% endif %}
-                                                        {% if assignment.status == 'draft' %}<span class="badge badge-draft">черновик</span>{% endif %}
+                                                        {% if assignment.status == 'published' %}
+                                                            <span class="badge badge-checked">опубликовано</span>
+                                                        {% else %}
+                                                            <span class="badge badge-draft">черновик</span>
+                                                        {% endif %}
+                                                        {% if assignment.group %}<span class="badge badge-level">группа: {{ assignment.group.name }}</span>{% endif %}
+                                                        {% if assignment.assigned_students.all %}<span class="badge badge-accent">персонально ({{ assignment.assigned_students.count }})</span>{% endif %}
                                                         {% if not assignment.is_active %}<span class="badge badge-outline">скрыто</span>{% endif %}
                                                     </span>
                                                     <span class="row-meta">

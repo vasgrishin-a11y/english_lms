@@ -25,6 +25,7 @@
         </div>
     </div>
     <div class="row">
+        <a class="btn btn-secondary" href="{% url 'teacher_student_edit' student.pk %}">{% icon "pencil" %}Редактировать профиль</a>
         <a class="btn btn-secondary" href="{% url 'teacher_review_queue' %}?student={{ student.pk }}">{% icon "check-circle" %}Работы ученика</a>
         <a class="btn btn-ghost" href="{% url 'teacher_analytics' %}">{% icon "grid" %}Журнал</a>
     </div>

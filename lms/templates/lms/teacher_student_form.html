@@ -24,13 +24,12 @@
                 <small class="form-help">Уникальное имя для входа в систему.</small>
             </div>
             
-            {% if form.generated_password.field %}
+            {% if form.password %}
             <div class="form-group">
-                <label for="{{ form.generated_password.id_for_label }}">{{ form.generated_password.label }}</label>
-                {{ form.generated_password }}
-                <small class="form-help" style="color:var(--success-700)">
-                    {% if not student %}Пароль сгенерирован автоматически. Покажите его ученику!{% else %}Для смены пароля используйте кнопку ниже.{% endif %}
-                </small>
+                <label for="{{ form.password.id_for_label }}">Пароль *</label>
+                {{ form.password }}
+                {% if form.password.errors %}<div class="form-error">{{ form.password.errors.0 }}</div>{% endif %}
+                <small class="form-help" style="color:var(--accent-800)">{{ form.password.help_text }}</small>
             </div>
             {% endif %}
         </div>

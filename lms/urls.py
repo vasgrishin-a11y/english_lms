@@ -65,6 +65,11 @@ urlpatterns = [
         views_teacher.block_delete,
         name="teacher_block_delete",
     ),
+    path(
+        "teacher/curriculum/blocks/<int:pk>/publish/",
+        views_teacher.block_publish,
+        name="teacher_block_publish",
+    ),
     path("teacher/curriculum/topics/new/", views_teacher.topic_form, name="teacher_topic_new"),
     path(
         "teacher/curriculum/topics/<int:pk>/", views_teacher.topic_form, name="teacher_topic_edit"
@@ -78,6 +83,11 @@ urlpatterns = [
         "teacher/curriculum/topics/<int:pk>/delete/",
         views_teacher.topic_delete,
         name="teacher_topic_delete",
+    ),
+    path(
+        "teacher/curriculum/topics/<int:pk>/publish/",
+        views_teacher.topic_publish,
+        name="teacher_topic_publish",
     ),
     path(
         "teacher/curriculum/assignments/new/",
@@ -144,13 +154,25 @@ urlpatterns = [
     path("teacher/students/", views_teacher.students_list, name="teacher_students"),
     path("teacher/students/create/", views_teacher.student_create, name="teacher_student_create"),
     path("teacher/students/<int:pk>/", views_teacher.student_detail, name="teacher_student_detail"),
-    path("teacher/students/<int:pk>/edit/", views_teacher.student_edit, name="teacher_student_edit"),
-    path("teacher/students/<int:pk>/delete/", views_teacher.student_delete, name="teacher_student_delete"),
-    path("teacher/students/<int:pk>/reset-password/", views_teacher.student_reset_password, name="teacher_student_reset_password"),
+    path(
+        "teacher/students/<int:pk>/edit/", views_teacher.student_edit, name="teacher_student_edit"
+    ),
+    path(
+        "teacher/students/<int:pk>/delete/",
+        views_teacher.student_delete,
+        name="teacher_student_delete",
+    ),
+    path(
+        "teacher/students/<int:pk>/reset-password/",
+        views_teacher.student_reset_password,
+        name="teacher_student_reset_password",
+    ),
     path("teacher/groups/", views_teacher.groups_list, name="teacher_groups"),
     path("teacher/groups/new/", views_teacher.group_form, name="teacher_group_new"),
     path("teacher/groups/<int:pk>/", views_teacher.group_form, name="teacher_group_edit"),
-    path("teacher/groups/<int:pk>/delete/", views_teacher.group_delete, name="teacher_group_delete"),
+    path(
+        "teacher/groups/<int:pk>/delete/", views_teacher.group_delete, name="teacher_group_delete"
+    ),
     path("teacher/analytics/", views_teacher.analytics, name="teacher_analytics"),
     path(
         "teacher/analytics/export.csv",
