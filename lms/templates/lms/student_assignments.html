@@ -10,7 +10,7 @@
         <label for="id_q">Поиск по курсу</label>
         <div class="search-pill">
             {% icon "search" %}
-            <input id="id_q" type="search" name="q" maxlength="200" value="{{ query }}" placeholder="Задание, тема, блок…">
+            <input id="id_q" type="search" name="q" maxlength="200" value="{{ query }}" placeholder="Задание, тема, блок…" data-suggest="{% url 'suggest' %}" data-suggest-scope="curriculum" autocomplete="off">
         </div>
         <input type="hidden" name="mode" value="{{ mode }}">
         <div class="row" style="margin-top:12px">

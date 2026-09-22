@@ -137,7 +137,7 @@ class StudentHomeTests(LMSCase):
 
     def test_dashboard_routes_by_role(self):
         self.assertRedirects(
-            self.teacher_client.get("/"), "/teacher/review/", fetch_redirect_response=False
+            self.teacher_client.get("/"), "/teacher/", fetch_redirect_response=False
         )
         self.assertRedirects(self.student_client.get("/"), "/my/", fetch_redirect_response=False)
 

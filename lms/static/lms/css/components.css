@@ -2789,3 +2789,133 @@ table .grade-col {
     }
 }
 
+/* ── Карточки типа задания и чипы навыков ───────────────── */
+.type-cards > div,
+.type-cards #id_assignment_type {
+    display: grid;
+    gap: var(--sp-3);
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
+}
+
+.type-cards div {
+    margin: 0;
+}
+
+.type-cards label {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 6px;
+    min-height: 72px;
+    margin: 0;
+    padding: var(--sp-4);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    cursor: pointer;
+    font-weight: 650;
+    line-height: 1.3;
+}
+
+.type-cards label:hover {
+    border-color: var(--accent-300);
+    background: var(--accent-soft);
+}
+
+.type-cards label:has(input:checked) {
+    border-color: var(--accent-600);
+    background: var(--accent-soft);
+    box-shadow: var(--shadow-1);
+}
+
+.type-cards input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+#id_skills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+}
+
+#id_skills > div {
+    margin: 0;
+}
+
+#id_skills label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    padding: 6px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
+    cursor: pointer;
+    font-weight: 550;
+}
+
+#id_skills label:has(input:checked) {
+    background: var(--accent-soft);
+    border-color: var(--accent-400);
+    color: var(--accent-900);
+}
+
+.search-pill {
+    position: relative;
+}
+
+.suggest-list {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100% + 4px);
+    z-index: 20;
+    margin: 0;
+    padding: 4px;
+    list-style: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-2);
+    max-height: 280px;
+    overflow-y: auto;
+}
+
+.suggest-list[hidden] {
+    display: none;
+}
+
+.suggest-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 100%;
+    padding: 8px 10px;
+    text-align: left;
+    background: transparent;
+    border: 0;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    font: inherit;
+    color: var(--text);
+}
+
+.suggest-item:hover,
+.suggest-item.is-active {
+    background: var(--accent-soft);
+}
+
+.suggest-item-label {
+    font-size: var(--fs-14);
+    font-weight: 650;
+}
+
+.suggest-item-hint {
+    font-size: var(--fs-12);
+    color: var(--text-muted);
+}
+

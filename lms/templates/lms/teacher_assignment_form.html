@@ -23,10 +23,19 @@
                 {% endif %}
             </div>
 
-            <form method="post" enctype="multipart/form-data" novalidate id="assignment-form" data-preset-form>
+            <form method="post" enctype="multipart/form-data" novalidate id="assignment-form" data-preset-form data-assignment-form>
                 {% csrf_token %}
+                <input type="hidden" name="skills_manual" id="id_skills_manual" value="{{ request.POST.skills_manual|default:'' }}">
 
-                <!-- Секция: быстрые шаблоны -->
+                <fieldset class="form-section">
+                    <legend>{% icon "layers" %}Тип задания</legend>
+                    <p class="help-text">Сначала выберите, как ученик сдаёт работу. Навыки подставятся автоматически — их можно заменить.</p>
+                    <div class="type-cards{% if form.assignment_type.errors %} field-error{% endif %}">
+                        {{ form.assignment_type }}
+                    </div>
+                    {{ form.assignment_type.errors }}
+                </fieldset>
+
                 <fieldset class="form-section">
                     <legend>{% icon "sparkles" %}Быстрые шаблоны заданий</legend>
                     <p class="help-text">Выберите формат — заголовок, условия, тип сдачи и баллы подставятся в форму. Всё можно отредактировать перед сохранением.</p>
@@ -47,10 +56,10 @@
                     </noscript>
                     {{ presets|json_script:"assignment-presets" }}
                     {{ skill_ids|json_script:"assignment-skill-ids" }}
+                    {{ skills_by_type|json_script:"assignment-skills-by-type" }}
                 </fieldset>
 
-                <!-- Секция: Основная информация -->
-                <div class="form-section">
+                <div class="form-section assignment-body" data-assignment-body>
                     <h3 class="section-title">{% icon "file-text" %}Основная информация</h3>
                     <div class="form-grid">
                         <div class="form-field form-field-wide{% if form.topic.errors %} field-error{% endif %}">
@@ -90,29 +99,21 @@
                     </div>
                 </div>
 
-                <!-- Секция: Параметры задания -->
                 <div class="form-section">
                     <h3 class="section-title">{% icon "settings" %}Параметры задания</h3>
                     <div class="form-grid">
-                        <div class="form-field{% if form.assignment_type.errors %} field-error{% endif %}">
-                            <label for="{{ form.assignment_type.id_for_label }}">{{ form.assignment_type.label }}</label>
-                            {{ form.assignment_type }}
-                            {% if form.assignment_type.help_text %}<div class="help-text">{{ form.assignment_type.help_text }}</div>{% endif %}
-                            {{ form.assignment_type.errors }}
-                        </div>
-
-                        <div class="form-field{% if form.max_points.errors %} field-error{% endif %}">
-                            <label for="{{ form.max_points.id_for_label }}">{{ form.max_points.label }}</label>
-                            {{ form.max_points }}
-                            {% if form.max_points.help_text %}<div class="help-text">{{ form.max_points.help_text }}</div>{% endif %}
-                            {{ form.max_points.errors }}
-                        </div>
-
                         <div class="form-field form-field-wide{% if form.skills.errors %} field-error{% endif %}">
                             <label for="{{ form.skills.id_for_label }}">{{ form.skills.label }}</label>
                             {{ form.skills }}
                             {% if form.skills.help_text %}<div class="help-text">{{ form.skills.help_text }}</div>{% endif %}
                             {{ form.skills.errors }}
+                        </div>
+
+                        <div class="form-field{% if form.max_points.errors %} field-error{% endif %}" data-show-types="text file audio mixed">
+                            <label for="{{ form.max_points.id_for_label }}">{{ form.max_points.label }}</label>
+                            {{ form.max_points }}
+                            {% if form.max_points.help_text %}<div class="help-text">{{ form.max_points.help_text }}</div>{% endif %}
+                            {{ form.max_points.errors }}
                         </div>
 
                         <div class="form-field{% if form.deadline.errors %} field-error{% endif %}">
@@ -136,48 +137,55 @@
                     </div>
                 </div>
 
-                <!-- Секция: Публикация и материалы -->
-                <div class="form-section">
-                    <h3 class="section-title">{% icon "send" %}Публикация и материалы</h3>
-                    <div class="form-field{% if form.status.errors %} field-error{% endif %}">
-                        <label for="{{ form.status.id_for_label }}">{{ form.status.label }}</label>
-                        {{ form.status }}
-                        {% if form.status.help_text %}<div class="help-text">{{ form.status.help_text }}</div>{% endif %}
-                        {{ form.status.errors }}
-                    </div>
-
+                <div class="form-section" data-show-types="file audio mixed">
+                    <h3 class="section-title">{% icon "send" %}Материалы</h3>
+                    <p class="help-text" data-show-types="audio">Для аудио ученик прикрепит запись. Можно дать образец произношения.</p>
                     <div class="form-field{% if form.material_file.errors %} field-error{% endif %}">
                         <label for="{{ form.material_file.id_for_label }}">{{ form.material_file.label }}</label>
                         {{ form.material_file }}
                         {% if form.material_file.help_text %}<div class="help-text">{{ form.material_file.help_text }}</div>{% endif %}
                         {{ form.material_file.errors }}
                     </div>
+                </div>
 
+                <div class="form-section">
+                    <h3 class="section-title">{% icon "send" %}Публикация</h3>
+                    <div class="form-field{% if form.status.errors %} field-error{% endif %}">
+                        <label for="{{ form.status.id_for_label }}">{{ form.status.label }}</label>
+                        {{ form.status }}
+                        {% if form.status.help_text %}<div class="help-text">{{ form.status.help_text }}</div>{% endif %}
+                        {{ form.status.errors }}
+                    </div>
                     {{ form.is_active }}
                     {{ form.order }}
                 </div>
 
                 <div class="form-actions">
                     <button class="btn" type="submit">{% icon "save" %}Сохранить</button>
-                    {% if assignment and assignment.is_quiz %}
-                        <button class="btn btn-secondary" type="submit" name="_save_questions" value="1">{% icon "list" %}Сохранить и перейти к вопросам</button>
+                    {% if not assignment %}
+                        <noscript><button class="btn btn-secondary" type="submit" name="_save_questions" value="1">{% icon "list" %}Сохранить тест и перейти к вопросам</button></noscript>
+                    {% elif assignment.is_quiz %}
+                        <a class="btn btn-secondary" href="{% url 'teacher_questions' assignment.pk %}">{% icon "list" %}Открыть вопросы отдельно</a>
                     {% endif %}
                     <a class="btn btn-ghost" href="{% url 'teacher_curriculum' %}">Отмена</a>
                 </div>
             </form>
         </section>
+
+        {% if assignment and assignment.is_quiz and question_form %}
+            {% include "lms/parts/quiz_questions.html" with form=question_form %}
+        {% endif %}
     </div>
 
     <div class="split-side">
         <div class="card card-pad-sm">
             <p class="rail-title">Как собрать задание</p>
             <ol class="col tiny muted rail-list">
-                <li>Выберите шаблон выше или напишите условия с нуля</li>
+                <li>Выберите тип карточками — навыки подставятся сами</li>
+                <li>Шаблон можно взять как заготовку условий</li>
                 <li>Укажите тему и группу (если нужно ограничить доступ)</li>
-                <li>Тип: тест проверяется автоматически, письменные и аудио — вручную</li>
-                <li>Для теста нажмите «Сохранить и перейти к вопросам»</li>
+                <li>Тест: сохраните задание — откроется редактор вопросов</li>
                 <li>Прикрепите материалы — ученик увидит их в карточке задания</li>
-                <li>Укажите дедлайн и максимум баллов</li>
                 <li>Статус: черновик (скрыто) или опубликовано (видно ученикам)</li>
             </ol>
         </div>

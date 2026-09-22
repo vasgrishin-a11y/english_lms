@@ -21,6 +21,7 @@ from .models import (
     Submission,
     Topic,
 )
+from .skills import apply_default_skills
 from .validators import ALLOWED_FILE_EXTENSIONS, AUDIO_EXTENSIONS, validate_answer, validate_upload
 
 User = get_user_model()
@@ -237,7 +238,8 @@ class AssignmentForm(forms.ModelForm):
             ),
             "deadline": _datetime_widget(),
             "publish_at": _datetime_widget(),
-            "skills": forms.CheckboxSelectMultiple,
+            "assignment_type": forms.RadioSelect(attrs={"class": "type-picker"}),
+            "skills": forms.CheckboxSelectMultiple(attrs={"class": "skill-chips"}),
             "group": forms.Select(attrs={"class": "form-select"}),
             "status": forms.Select(attrs={"class": "form-select"}),
         }
@@ -246,7 +248,12 @@ class AssignmentForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["deadline"].input_formats = DATETIME_FORMATS
         self.fields["publish_at"].input_formats = DATETIME_FORMATS
-        self.fields["skills"].queryset = Skill.objects.all()
+        self.fields["skills"].queryset = Skill.objects.all().order_by("order", "name")
+        self.fields["skills"].required = False
+        self.fields[
+            "skills"
+        ].help_text = "Подставляются по типу задания. Нажмите чип, чтобы заменить набор."
+        self.fields["assignment_type"].label = "Тип задания"
         self.fields[
             "max_points"
         ].help_text = "Для теста максимум считается автоматически как сумма баллов вопросов."
@@ -290,6 +297,15 @@ class AssignmentForm(forms.ModelForm):
 
         # Скрываем is_active из формы, так как это техническое поле
         self.fields["is_active"].widget = forms.HiddenInput()
+
+    def save(self, commit=True):
+        instance = super().save(commit=commit)
+        if commit:
+            posted = self.cleaned_data.get("skills")
+            has_skills = posted is not None and posted.exists()
+            if not has_skills and self.data.get("skills_manual") != "1":
+                apply_default_skills(instance, override=True)
+        return instance
 
 
 class QuestionForm(forms.ModelForm):
