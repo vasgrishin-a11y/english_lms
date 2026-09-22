@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 34" role="img" aria-label="Стопка книг">
+  <ellipse cx="22" cy="31" rx="18" ry="2.6" fill="#d9d4ca"/>
+  <rect x="6" y="23" width="32" height="7" rx="1.6" fill="#2a9d94"/>
+  <rect x="6" y="23" width="32" height="2" rx="1" fill="#63c3bc"/>
+  <rect x="8" y="25.6" width="14" height="1.4" rx=".7" fill="#e8f8f7" opacity=".9"/>
+  <rect x="9" y="16" width="28" height="7" rx="1.6" fill="#d86e3e"/>
+  <rect x="9" y="16" width="28" height="2" rx="1" fill="#f3a35b"/>
+  <rect x="19" y="18.6" width="14" height="1.4" rx=".7" fill="#fff8ed" opacity=".9"/>
+  <rect x="12" y="9" width="24" height="7" rx="1.6" fill="#5c8a66"/>
+  <rect x="12" y="9" width="24" height="2" rx="1" fill="#a6c3aa"/>
+  <rect x="14" y="11.6" width="10" height="1.4" rx=".7" fill="#f3f7f3" opacity=".9"/>
+  <path fill="#f6efe4" d="M33 2.5c2 1 2 4.5 0 6-2-1.5-2-5 0-6Z"/>
+  <path fill="#a03a2c" d="M33 2.5c2 1 2 4.5 0 6V2.5Z"/>
+</svg>

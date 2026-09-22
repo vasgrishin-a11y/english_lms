@@ -122,7 +122,7 @@ def course_tree(
     if include_skills:
         assignments_queryset = assignments_queryset.prefetch_related("skills")
     assignments = list(assignments_queryset.order_by("topic__order", "order", "pk"))
-    decks = FlashcardDeck.objects.select_related("topic__block")
+    decks = FlashcardDeck.objects.select_related("topic__block").annotate(card_total=Count("cards"))
     if not teacher_view:
         decks = decks.filter(is_active=True, topic__is_active=True, topic__block__is_active=True)
     decks = list(decks.order_by("topic__order", "order", "pk"))
@@ -160,6 +160,7 @@ def _assemble(blocks, topics, assignments, decks, *, stats, student_view, query)
     for block in blocks:
         block_topics = []
         block_total = block_done = block_waiting = block_count = block_revision = 0
+        block_decks = 0
         for topic in topics_by_block.get(block.pk, []):
             entries = []
             topic_total = topic_done = topic_waiting = topic_revision = 0
@@ -197,6 +198,7 @@ def _assemble(blocks, topics, assignments, decks, *, stats, student_view, query)
             block_waiting += topic_waiting
             block_revision += topic_revision
             block_count += len(entries)
+            block_decks += len(topic_decks)
             block_topics.append(
                 {
                     "topic": topic,
@@ -220,6 +222,7 @@ def _assemble(blocks, topics, assignments, decks, *, stats, student_view, query)
                 "waiting": block_waiting,
                 "revision": block_revision,
                 "assignments": block_count,
+                "decks": block_decks,
                 "progress": _percent(block_done, block_total),
             }
         )
@@ -227,6 +230,7 @@ def _assemble(blocks, topics, assignments, decks, *, stats, student_view, query)
         "blocks": len(result),
         "topics": sum(len(item["topics"]) for item in result),
         "assignments": sum(item["assignments"] for item in result),
+        "decks": sum(item["decks"] for item in result),
         "done": sum(item["done"] for item in result),
         "total": sum(item["total"] for item in result),
         "waiting": sum(item["waiting"] for item in result),

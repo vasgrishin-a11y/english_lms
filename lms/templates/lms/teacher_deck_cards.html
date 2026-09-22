@@ -54,9 +54,49 @@
                 <div class="empty">
                     <div class="empty-icon">{% icon "cards" "icon icon-xl" %}</div>
                     <h3>Карточек пока нет</h3>
-                    <p>Добавьте первую карточку или вставьте сразу список — по одной паре «слово | перевод» на строку.</p>
+                    <p>Добавьте первую карточку, вставьте список строкой ниже или возьмите готовый набор из библиотеки шаблонов.</p>
                 </div>
             {% endif %}
+        </section>
+
+        <section class="card" aria-labelledby="deck-presets-title">
+            <div class="card-head">
+                <h2 class="card-title" id="deck-presets-title">{% icon "sparkles" %}Библиотека шаблонов</h2>
+            </div>
+            <p class="help-text">Готовые наборы по темам и уровням. «Подставить в импорт» — заполнить поле массового импорта для просмотра и правок, «Добавить сразу» — создать карточки немедленно.</p>
+            {% include "lms/parts/level_filter.html" with levels=preset_levels %}
+            {% for topic in preset_topics %}
+            <div class="preset-group" data-preset-group>
+                <h3 class="preset-topic">{{ topic.label }}</h3>
+                <ul class="preset-pick-list">
+                    {% for preset in presets %}
+                        {% if preset.topic == topic.id %}
+                            <li class="preset-pick" data-level="{{ preset.level }}">
+                                <span class="preset-icon">{% icon preset.icon "icon" %}</span>
+                                <span class="preset-text">
+                                    <span class="preset-label">{{ preset.label }}</span>
+                                    <span class="preset-tagline">{{ preset.tagline }}</span>
+                                    <span class="preset-meta">
+                                        <span class="tag">{{ preset.level }}</span>
+                                        <span class="tag tnum">{{ preset.cards|length }} карт.</span>
+                                    </span>
+                                </span>
+                                <span class="preset-pick-actions">
+                                    <button class="btn btn-secondary btn-sm" type="button" data-deck-cards="{{ preset.id }}">{% icon "upload" %}В импорт</button>
+                                    <form method="post">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="preset_id" value="{{ preset.id }}">
+                                        <button class="btn btn-sm" type="submit" name="_preset" value="1">{% icon "plus" %}Добавить сразу</button>
+                                    </form>
+                                </span>
+                            </li>
+                        {% endif %}
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endfor %}
+            <p class="tiny muted mb-0" data-deck-cards-hint aria-live="polite"></p>
+            {{ presets|deck_cards_map|json_script:"deck-preset-cards" }}
         </section>
     </div>
 

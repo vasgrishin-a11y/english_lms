@@ -5,6 +5,8 @@
 * ``ASSIGNMENT_PRESETS`` — шаблоны заданий (форма «Новое задание»);
 * ``BLOCK_SUGGESTIONS`` / ``TOPIC_SUGGESTIONS`` — готовые формулировки блоков
   и тем, подставляются в соответствующие формы;
+* ``DECK_PRESETS`` — шаблоны квизлетов по темам и уровням CEFR
+  (форма «Новый квизлет» и страница карточек);
 * ``COURSE_PACKS`` — собранные курсы «блоки → темы → задания (+ вопросы теста
   и карточки)», добавляются в курс одним действием через ``import_course_pack``.
 
@@ -441,6 +443,559 @@ ASSIGNMENT_PRESETS = [
     },
 ]
 
+# ── Шаблоны квизлетов (наборов карточек) ───────────────────────────────────
+# Квизлет в интерфейсе — задание тренажёрного типа: преподаватель выбирает
+# шаблон по теме и уровню, правит название/описание и получает готовые карточки.
+# ``topic`` — ключ группировки, ``level`` — CEFR-уровень набора.
+DECK_LEVELS = ["A1", "A2", "B1", "B2", "C1"]
+
+DECK_PRESETS = [
+    {
+        "id": "everyday-a1",
+        "icon": "home",
+        "label": "Everyday Words · A1",
+        "tagline": "10 базовых слов: дом, семья, день",
+        "topic": "everyday",
+        "topic_label": "Повседневное",
+        "level": "A1",
+        "fields": {
+            "title": "Everyday Words · A1",
+            "description": "Первый десяток слов для тренажёра: дом, семья и распорядок дня.",
+        },
+        "cards": [
+            {"front": "family", "back": "семья", "example": "My family is big."},
+            {"front": "home", "back": "дом", "example": "I am at home."},
+            {"front": "morning", "back": "утро", "example": "Good morning!"},
+            {"front": "water", "back": "вода", "example": "A glass of water, please."},
+            {"front": "food", "back": "еда", "example": "I like this food."},
+            {"front": "friend", "back": "друг", "example": "She is my friend."},
+            {"front": "school", "back": "школа", "example": "We go to school."},
+            {"front": "day", "back": "день", "example": "Have a nice day!"},
+            {"front": "night", "back": "ночь", "example": "Good night!"},
+            {"front": "happy", "back": "счастливый", "example": "I am happy today."},
+        ],
+    },
+    {
+        "id": "food-a1",
+        "icon": "star",
+        "label": "Food & Shopping · A1",
+        "tagline": "Еда, покупки и кафе",
+        "topic": "food",
+        "topic_label": "Еда",
+        "level": "A1",
+        "fields": {
+            "title": "Food & Shopping · A1",
+            "description": "Базовая лексика покупок и еды с короткими примерами.",
+        },
+        "cards": [
+            {"front": "bread", "back": "хлеб", "example": "Fresh bread."},
+            {"front": "milk", "back": "молоко", "example": "A bottle of milk."},
+            {"front": "apple", "back": "яблоко", "example": "A red apple."},
+            {"front": "to buy", "back": "покупать", "example": "I buy bread every day."},
+            {"front": "price", "back": "цена", "example": "What is the price?"},
+            {"front": "shop", "back": "магазин", "example": "The shop is open."},
+            {"front": "to pay", "back": "платить", "example": "Can I pay by card?"},
+            {"front": "receipt", "back": "чек", "example": "Here is your receipt."},
+        ],
+    },
+    {
+        "id": "kids-a1",
+        "icon": "star",
+        "label": "Kids First Words · A1",
+        "tagline": "Цвета, животные, игрушки",
+        "topic": "kids",
+        "topic_label": "Детям",
+        "level": "A1",
+        "fields": {
+            "title": "Kids · My first words",
+            "description": "Игровые слова первого месяца: цвета, животные и игрушки.",
+        },
+        "cards": [
+            {"front": "red", "back": "красный", "example": "A red ball."},
+            {"front": "blue", "back": "синий", "example": "A blue toy."},
+            {"front": "cat", "back": "кот", "example": "The cat is funny."},
+            {"front": "dog", "back": "собака", "example": "My dog can run."},
+            {"front": "toy", "back": "игрушка", "example": "My toy is new."},
+            {"front": "ball", "back": "мяч", "example": "Catch the ball!"},
+            {"front": "sun", "back": "солнце", "example": "The sun is yellow."},
+            {"front": "star", "back": "звезда", "example": "I see a star."},
+        ],
+    },
+    {
+        "id": "travel-a2",
+        "icon": "compass",
+        "label": "Travel Essentials · A2",
+        "tagline": "Аэропорт, отель, транспорт",
+        "topic": "travel",
+        "topic_label": "Путешествия",
+        "level": "A2",
+        "fields": {
+            "title": "Travel and Transport · A2",
+            "description": "10 слов и выражений по теме «путешествия» для тренажёра.",
+        },
+        "cards": [
+            {
+                "front": "departure",
+                "back": "отправление, вылет",
+                "example": "Our departure time is 7 a.m.",
+            },
+            {
+                "front": "to check in",
+                "back": "регистрироваться (на рейс)",
+                "example": "We checked in online.",
+            },
+            {
+                "front": "boarding pass",
+                "back": "посадочный талон",
+                "example": "Show your boarding pass at the gate.",
+            },
+            {"front": "luggage", "back": "багаж", "example": "How many pieces of luggage?"},
+            {
+                "front": "to book",
+                "back": "бронировать",
+                "example": "I booked a hotel near the beach.",
+            },
+            {
+                "front": "return ticket",
+                "back": "билет туда-обратно",
+                "example": "A return ticket is cheaper.",
+            },
+            {
+                "front": "delay",
+                "back": "задержка",
+                "example": "The flight was delayed by two hours.",
+            },
+            {
+                "front": "sightseeing",
+                "back": "осмотр достопримечательностей",
+                "example": "We went sightseeing in Rome.",
+            },
+            {"front": "journey", "back": "поездка", "example": "The journey took five hours."},
+            {
+                "front": "harbour",
+                "back": "гавань, порт",
+                "example": "The old harbour is beautiful.",
+            },
+        ],
+    },
+    {
+        "id": "hotel-a2",
+        "icon": "home",
+        "label": "At the Hotel · A2",
+        "tagline": "Заселение, удобства, жалобы",
+        "topic": "travel",
+        "topic_label": "Путешествия",
+        "level": "A2",
+        "fields": {
+            "title": "Hotel · Vocabulary A2",
+            "description": "Лексика отеля: заселение, удобства и вежливые жалобы.",
+        },
+        "cards": [
+            {
+                "front": "check-in",
+                "back": "регистрация, заселение",
+                "example": "Check-in is at 2 p.m.",
+            },
+            {"front": "reception", "back": "ресепшн, стойка", "example": "Ask at the reception."},
+            {"front": "facilities", "back": "удобства", "example": "The facilities are excellent."},
+            {
+                "front": "to complain",
+                "back": "жаловаться",
+                "example": "We complained about the noise.",
+            },
+            {
+                "front": "to upgrade",
+                "back": "повысить класс номера",
+                "example": "They upgraded us to a suite.",
+            },
+            {"front": "bill", "back": "счёт", "example": "Could I have the bill, please?"},
+            {
+                "front": "single room",
+                "back": "одноместный номер",
+                "example": "I booked a single room.",
+            },
+            {"front": "key card", "back": "ключ-карта", "example": "Here is your key card."},
+        ],
+    },
+    {
+        "id": "exam-a2",
+        "icon": "target",
+        "label": "Exam Words · A2 (ОГЭ)",
+        "tagline": "Школа, учёба, экзамены",
+        "topic": "exams",
+        "topic_label": "Экзамены",
+        "level": "A2",
+        "fields": {
+            "title": "Exam Words · A2",
+            "description": "Лексика школьных экзаменов: задания, письмо, говорение.",
+        },
+        "cards": [
+            {"front": "task", "back": "задание", "example": "Read the task carefully."},
+            {"front": "answer", "back": "ответ", "example": "Write your answer here."},
+            {"front": "mistake", "back": "ошибка", "example": "Find the mistake."},
+            {
+                "front": "to pass an exam",
+                "back": "сдать экзамен",
+                "example": "She passed the exam.",
+            },
+            {"front": "to fail", "back": "провалить", "example": "Don't be afraid to fail."},
+            {"front": "mark", "back": "оценка", "example": "He got a good mark."},
+            {"front": "essay", "back": "эссе, сочинение", "example": "Write an essay."},
+            {
+                "front": "to revise",
+                "back": "повторять (материал)",
+                "example": "Revise the words daily.",
+            },
+        ],
+    },
+    {
+        "id": "phrasal-b1",
+        "icon": "refresh",
+        "label": "Phrasal Verbs · B1",
+        "tagline": "Работа и учёба: 10 глаголов",
+        "topic": "verbs",
+        "topic_label": "Глаголы",
+        "level": "B1",
+        "fields": {
+            "title": "Phrasal verbs · Work and Study",
+            "description": "Фразовые глаголы для работы и учёбы с примерами.",
+        },
+        "cards": [
+            {
+                "front": "to carry out",
+                "back": "проводить, выполнять",
+                "example": "We carried out a survey.",
+            },
+            {
+                "front": "to put off",
+                "back": "откладывать",
+                "example": "Don't put off your homework.",
+            },
+            {"front": "to look into", "back": "изучать", "example": "I'll look into this problem."},
+            {
+                "front": "to come up with",
+                "back": "придумать",
+                "example": "She came up with a great idea.",
+            },
+            {
+                "front": "to hand in",
+                "back": "сдавать (работу)",
+                "example": "Hand in your essays by Friday.",
+            },
+            {
+                "front": "to catch up on",
+                "back": "наверстать",
+                "example": "I need to catch up on sleep.",
+            },
+            {"front": "to take on", "back": "брать на себя", "example": "He took on extra work."},
+            {
+                "front": "to fall behind",
+                "back": "отставать",
+                "example": "Don't fall behind the schedule.",
+            },
+            {"front": "to find out", "back": "выяснять", "example": "I found out the truth."},
+            {
+                "front": "to run out of",
+                "back": "исчерпать (запас)",
+                "example": "We ran out of time.",
+            },
+        ],
+    },
+    {
+        "id": "business-b1",
+        "icon": "send",
+        "label": "Business Basics · B1",
+        "tagline": "Финансы и маркетинг",
+        "topic": "business",
+        "topic_label": "Бизнес",
+        "level": "B1",
+        "fields": {
+            "title": "Finance and Marketing · B1",
+            "description": "Базовые термины финансов и маркетинга.",
+        },
+        "cards": [
+            {"front": "revenue", "back": "выручка", "example": "Revenue grew by 12%."},
+            {"front": "profit", "back": "прибыль", "example": "The profit doubled."},
+            {"front": "budget", "back": "бюджет", "example": "The budget was cut."},
+            {
+                "front": "target audience",
+                "back": "целевая аудитория",
+                "example": "Our target audience is 25–35.",
+            },
+            {"front": "to launch", "back": "запускать", "example": "We launched the app in March."},
+            {"front": "invoice", "back": "счёт-фактура", "example": "Pay the invoice in 30 days."},
+            {
+                "front": "meeting",
+                "back": "встреча, совещание",
+                "example": "The meeting starts at 10.",
+            },
+            {"front": "deadline", "back": "дедлайн", "example": "We missed the deadline."},
+            {
+                "front": "feedback",
+                "back": "обратная связь",
+                "example": "Customer feedback was positive.",
+            },
+            {
+                "front": "stakeholder",
+                "back": "заинтересованная сторона",
+                "example": "We informed all stakeholders.",
+            },
+        ],
+    },
+    {
+        "id": "movie-b1",
+        "icon": "play",
+        "label": "Movie Time · B1",
+        "tagline": "Жанры, сюжет, рецензия",
+        "topic": "movies",
+        "topic_label": "Кино",
+        "level": "B1",
+        "fields": {
+            "title": "Movie Time · Vocabulary",
+            "description": "Жанры и слова для обсуждения фильмов.",
+        },
+        "cards": [
+            {"front": "plot", "back": "сюжет", "example": "The plot was predictable."},
+            {"front": "genre", "back": "жанр", "example": "My favourite genre is comedy."},
+            {"front": "review", "back": "рецензия", "example": "I read a review first."},
+            {"front": "starring", "back": "в главных ролях", "example": "Starring Tom Hanks."},
+            {"front": "soundtrack", "back": "саундтрек", "example": "The soundtrack is amazing."},
+            {"front": "gripping", "back": "захватывающий", "example": "A gripping thriller."},
+            {"front": "boring", "back": "скучный", "example": "The second half was boring."},
+            {"front": "to recommend", "back": "рекомендовать", "example": "I recommend this film."},
+        ],
+    },
+    {
+        "id": "it-b1",
+        "icon": "grid",
+        "label": "IT English Core · B1",
+        "tagline": "Разработка и созвоны",
+        "topic": "it",
+        "topic_label": "IT",
+        "level": "B1",
+        "fields": {
+            "title": "IT English · Core",
+            "description": "Ядро IT-лексики: деплой, стендап, ревью.",
+        },
+        "cards": [
+            {
+                "front": "to deploy",
+                "back": "выкатывать, деплоить",
+                "example": "We deploy on Fridays.",
+            },
+            {
+                "front": "bugfix",
+                "back": "исправление бага",
+                "example": "This PR contains a bugfix.",
+            },
+            {"front": "stand-up", "back": "стендап", "example": "Stand-up is at 10 a.m."},
+            {"front": "blocker", "back": "блокер", "example": "No blockers at the moment."},
+            {"front": "pull request", "back": "пулл-реквест", "example": "Create a pull request."},
+            {"front": "to review", "back": "проверять код", "example": "Could you review my code?"},
+            {"front": "to merge", "back": "смержить", "example": "We can merge after approval."},
+            {"front": "sprint", "back": "спринт", "example": "We have a two-week sprint."},
+            {"front": "backlog", "back": "бэклог", "example": "Check the backlog."},
+            {"front": "retrospective", "back": "ретроспектива", "example": "Retro is on Friday."},
+        ],
+    },
+    {
+        "id": "teens-b1",
+        "icon": "users",
+        "label": "Teens Digital Life · B1",
+        "tagline": "Соцсети и медиа",
+        "topic": "teens",
+        "topic_label": "Подростки",
+        "level": "B1",
+        "fields": {
+            "title": "Digital Life · B1",
+            "description": "Слова о соцсетях, приватности и медиа для подростков.",
+        },
+        "cards": [
+            {"front": "feed", "back": "лента", "example": "My feed is full of memes."},
+            {"front": "follower", "back": "подписчик", "example": "She has 1k followers."},
+            {"front": "privacy", "back": "приватность", "example": "Check your privacy settings."},
+            {"front": "clickbait", "back": "кликбейт", "example": "This headline is clickbait."},
+            {"front": "to post", "back": "публиковать", "example": "He posted a photo."},
+            {"front": "comment", "back": "комментарий", "example": "Leave a kind comment."},
+            {"front": "stream", "back": "стрим, трансляция", "example": "We watched the stream."},
+            {"front": "trend", "back": "тренд", "example": "A new dance trend."},
+        ],
+    },
+    {
+        "id": "collocations-b2",
+        "icon": "layers",
+        "label": "Collocations · B2",
+        "tagline": "make / do / take / get",
+        "topic": "collocations",
+        "topic_label": "Сочетания",
+        "level": "B2",
+        "fields": {
+            "title": "Collocations · B2",
+            "description": "Устойчивые сочетания с make, do, take и get.",
+        },
+        "cards": [
+            {
+                "front": "to make a decision",
+                "back": "принимать решение",
+                "example": "We made a decision quickly.",
+            },
+            {
+                "front": "to do research",
+                "back": "проводить исследование",
+                "example": "She does research at uni.",
+            },
+            {
+                "front": "to take responsibility",
+                "back": "брать ответственность",
+                "example": "He took responsibility.",
+            },
+            {
+                "front": "to get feedback",
+                "back": "получать обратную связь",
+                "example": "We got useful feedback.",
+            },
+            {
+                "front": "to make an effort",
+                "back": "прилагать усилия",
+                "example": "Make an effort daily.",
+            },
+            {
+                "front": "to do a favour",
+                "back": "оказать услугу",
+                "example": "Could you do me a favour?",
+            },
+            {
+                "front": "to take a break",
+                "back": "делать перерыв",
+                "example": "Let's take a break.",
+            },
+            {
+                "front": "to get permission",
+                "back": "получать разрешение",
+                "example": "Get permission first.",
+            },
+            {
+                "front": "to make progress",
+                "back": "делать успехи",
+                "example": "You make good progress.",
+            },
+            {
+                "front": "to take notes",
+                "back": "делать заметки",
+                "example": "Take notes during the talk.",
+            },
+        ],
+    },
+    {
+        "id": "ielts-b2",
+        "icon": "chart",
+        "label": "IELTS Academic · B2",
+        "tagline": "Графики и аргументы",
+        "topic": "academic",
+        "topic_label": "Академический",
+        "level": "B2",
+        "fields": {
+            "title": "IELTS · Academic words B2",
+            "description": "Академическая лексика: тренды, сравнения, аргументы.",
+        },
+        "cards": [
+            {
+                "front": "to increase",
+                "back": "увеличиваться",
+                "example": "Prices increased sharply.",
+            },
+            {"front": "to decrease", "back": "уменьшаться", "example": "Numbers decreased slowly."},
+            {"front": "significant", "back": "значительный", "example": "A significant change."},
+            {"front": "trend", "back": "тенденция", "example": "The trend is upward."},
+            {"front": "to fluctuate", "back": "колебаться", "example": "Sales fluctuated in May."},
+            {"front": "comparison", "back": "сравнение", "example": "In comparison, print fell."},
+            {"front": "evidence", "back": "доказательство", "example": "There is no evidence."},
+            {"front": "to argue", "back": "утверждать", "example": "Critics argue that…"},
+            {"front": "conclusion", "back": "вывод", "example": "In conclusion, both rose."},
+            {"front": "overview", "back": "общий обзор", "example": "Overall, online use grew."},
+        ],
+    },
+    {
+        "id": "support-c1",
+        "icon": "headphones",
+        "label": "Customer Support · C1",
+        "tagline": "Эмпатия и решение проблем",
+        "topic": "business",
+        "topic_label": "Бизнес",
+        "level": "C1",
+        "fields": {
+            "title": "Support · Advanced C1",
+            "description": "Продвинутая лексика поддержки: эмпатия, эскалация, follow-up.",
+        },
+        "cards": [
+            {"front": "to escalate", "back": "эскалировать", "example": "We escalated the ticket."},
+            {"front": "workaround", "back": "обходное решение", "example": "Here is a workaround."},
+            {
+                "front": "to reassure",
+                "back": "успокоить, заверить",
+                "example": "I reassured the client.",
+            },
+            {
+                "front": "follow-up",
+                "back": "последующее письмо",
+                "example": "I'll send a follow-up.",
+            },
+            {"front": "downtime", "back": "простой", "example": "Sorry for the downtime."},
+            {
+                "front": "to prioritise",
+                "back": "расставлять приоритеты",
+                "example": "We prioritised the fix.",
+            },
+            {
+                "front": "resolution",
+                "back": "решение (проблемы)",
+                "example": "Thanks for the quick resolution.",
+            },
+            {"front": "to clarify", "back": "уточнять", "example": "Could you clarify the steps?"},
+        ],
+    },
+]
+
+
+def get_deck_preset(preset_id):
+    """Шаблон квизлета по id или None."""
+    return next((item for item in DECK_PRESETS if item["id"] == preset_id), None)
+
+
+def deck_preset_topics():
+    """Темы шаблонов квизлетов для группировки: [{"id": ..., "label": ...}]."""
+    seen = {}
+    for preset in DECK_PRESETS:
+        seen.setdefault(preset["topic"], preset.get("topic_label") or preset["topic"])
+    return [
+        {"id": key, "label": label} for key, label in sorted(seen.items(), key=lambda item: item[1])
+    ]
+
+
+def create_cards_from_preset(deck, preset_id, *, replace=False):
+    """Добавить карточки шаблона в набор. Возвращает число добавленных."""
+    from django.db.models import Max
+
+    preset = get_deck_preset(preset_id)
+    if preset is None:
+        raise LookupError(f"Неизвестный шаблон квизлета: {preset_id}")
+    if replace:
+        deck.cards.all().delete()
+    start = (deck.cards.aggregate(last=Max("order"))["last"] or 0) + 1
+    cards = [
+        Flashcard(
+            deck=deck,
+            front=item["front"][:300],
+            back=item["back"][:300],
+            example=item.get("example", "")[:500],
+            order=start + index,
+        )
+        for index, item in enumerate(preset["cards"])
+    ]
+    Flashcard.objects.bulk_create(cards)
+    return len(cards)
+
+
 # ── Готовые формулировки блоков ────────────────────────────────────────────
 BLOCK_SUGGESTIONS = [
     {
@@ -761,6 +1316,7 @@ TOPIC_SUGGESTIONS = [
 COURSE_PACKS = [
     {
         "slug": "general-a2",
+        "cover": "general",
         "name": "General English · A2 Elementary",
         "summary": "Базовый общий курс: времена в бытовых ситуациях, лексика "
         "«путешествия, еда, покупки», короткое письмо и устный ответ.",
@@ -1150,6 +1706,7 @@ COURSE_PACKS = [
     },
     {
         "slug": "general-b1b2",
+        "cover": "general",
         "name": "General English · B1–B2",
         "summary": "Общий курс среднего уровня: времена Perfect, условные "
         "предложения, пассив, фразовые глаголы, эссе и дискуссия.",
@@ -1453,6 +2010,7 @@ COURSE_PACKS = [
     },
     {
         "slug": "exam-prep",
+        "cover": "exam",
         "name": "Экзаменационный курс · ОГЭ и ЕГЭ",
         "summary": "Форматы российских экзаменов: грамматика и лексика, "
         "письмо (email), проект, говорение, чтение и аудирование.",
@@ -1713,6 +2271,7 @@ COURSE_PACKS = [
     },
     {
         "slug": "business-english",
+        "cover": "business",
         "name": "Business English · B1+",
         "summary": "Деловое общение: письма, встречи, презентации, переговоры и бизнес-лексика.",
         "level": "B1–B2",
@@ -1914,6 +2473,7 @@ COURSE_PACKS = [
     },
     {
         "slug": "travel-english",
+        "cover": "travel",
         "name": "Travelling and Weather · B1",
         "summary": "Как в ProgressMe «Travelling an weather» и «English for traveling»: аэропорт, отель, описание стран (Denmark) с секциями Warm-up → Writing.",
         "level": "B1",
@@ -2148,6 +2708,7 @@ COURSE_PACKS = [
     },
     {
         "slug": "movie-time",
+        "cover": "movie",
         "name": "Movie Time · A2–B1",
         "summary": "Как в ProgressMe «MOVIE TIME»: жанры, описание сюжета, рецензия с автопроверяемыми упражнениями.",
         "level": "B1",
@@ -2329,6 +2890,7 @@ COURSE_PACKS = [
     },
     {
         "slug": "it-english",
+        "cover": "it",
         "name": "IT English · B1–B2",
         "summary": "Для разработчиков: stand-up, code review, документация, small talk — с новыми типами упражнений.",
         "level": "B2",
@@ -2537,6 +3099,7 @@ COURSE_PACKS = [
     },
     {
         "slug": "happy-learning",
+        "cover": "happy",
         "name": "Happy Learning · Marathon A2",
         "summary": "Марафон 5 дней как в ProgressMe Marathon: VR, group class, словарь и геймификация без давления.",
         "level": "A2",
@@ -2644,6 +3207,7 @@ COURSE_PACKS = [
     },
     {
         "slug": "ielts-academic",
+        "cover": "ielts",
         "name": "IELTS Academic · B2–C1",
         "summary": "Структурированный трек IELTS: Writing Task 1–2, Reading, Listening и Speaking с понятными критериями проверки.",
         "level": "C1",
@@ -2767,6 +3331,7 @@ COURSE_PACKS = [
     },
     {
         "slug": "kids-english",
+        "cover": "kids",
         "name": "English for Kids · A1–A2",
         "summary": "Короткие игровые уроки для детей: песня, движение, картинки, простые диалоги и карточки без перегрузки.",
         "level": "A2",
@@ -2890,6 +3455,7 @@ COURSE_PACKS = [
     },
     {
         "slug": "teen-english",
+        "cover": "teens",
         "name": "English for Teens · B1",
         "summary": "Курс для подростков: самопрезентация, школа, digital life, медиа, планы и безопасная дискуссия.",
         "level": "B1",

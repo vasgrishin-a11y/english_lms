@@ -170,6 +170,8 @@
 
     /* Размеры интерфейса */
     --topbar-h: 60px;
+    --nav-w-expanded: 232px;
+    --nav-w-collapsed: 76px;
     --rail-w: 288px;
     --aside-w: 320px;
     --content-max: 1440px;

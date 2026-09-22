@@ -23,6 +23,7 @@
             <li class="row row-between"><span class="small">Блоков</span><strong class="tnum">{{ totals.blocks }}</strong></li>
             <li class="row row-between"><span class="small">Тем</span><strong class="tnum">{{ totals.topics }}</strong></li>
             <li class="row row-between"><span class="small">Заданий</span><strong class="tnum">{{ totals.assignments }}</strong></li>
+            <li class="row row-between"><span class="small">Квизлетов</span><strong class="tnum">{{ totals.decks }}</strong></li>
             <li class="row row-between"><span class="small">Черновиков</span><strong class="tnum">{{ totals.drafts }}</strong></li>
             <li class="row row-between"><span class="small">Ждут проверки</span><strong class="tnum">{{ totals.waiting }}</strong></li>
         </ul>
@@ -70,11 +71,7 @@
         {% for block_item in blocks_data %}
             {% with block=block_item.block %}
             <a class="class-card" href="#block-{{ block.pk }}">
-                <div class="class-cover" style="background: var(--cover-{{ forloop.counter }});">
-                    {% with name=block.name|lower %}
-                        {% if "travel" in name %}🧳{% elif "movie" in name %}🎬{% elif "business" in name %}💼{% elif "exam" in name or "огэ" in name or "егэ" in name %}📝{% elif "grammar" in name %}📚{% elif "kids" in name %}🧒{% elif "it" in name %}💻{% else %}🌍{% endif %}
-                    {% endwith %}
-                </div>
+                {% include "lms/parts/cover.html" with course=block %}
                 <div class="class-body">
                     <h2 class="class-title">{{ block.name }}</h2>
                     <div class="class-meta">
@@ -109,7 +106,7 @@
                     {% if block.description %}<p class="muted small mb-0">{{ block.description }}</p>{% endif %}
                 </div>
                 <div class="row row-tight">
-                    <span class="tiny muted tnum">{{ block_item.topics|length }} тем · {{ block_item.assignments }} заданий</span>
+                    <span class="tiny muted tnum">{{ block_item.topics|length }} тем · {{ block_item.assignments }} заданий{% if block_item.decks %} · {{ block_item.decks }} квиз.{% endif %}</span>
                     <a class="btn btn-ghost btn-sm" href="{% url 'teacher_block_edit' block.pk %}">{% icon "pencil" %}Изменить</a>
                     <form method="post" action="{% url 'teacher_archive_item' 'block' block.pk %}" data-confirm="Переместить блок «{{ block.name }}» в архив вместе со всеми темами и заданиями?">
                         {% csrf_token %}<button class="btn btn-ghost btn-sm" type="submit">{% icon "archive" %}<span class="sr-only">Архивировать блок</span></button>
@@ -128,10 +125,11 @@
                         <div class="topic-head">
                             <div>
                                 <h3>{{ topic.title }}</h3>
-                                <p class="tiny muted mb-0">{{ topic_item.assignments|length }} задани{{ topic_item.assignments|length|pluralize:"е,я,й" }}{% if topic_item.waiting %} · ждут {{ topic_item.waiting }}{% endif %}{% if not topic.is_active %} · скрыта{% endif %}</p>
+                                <p class="tiny muted mb-0">{{ topic_item.assignments|length }} задани{{ topic_item.assignments|length|pluralize:"е,я,й" }}{% if topic_item.decks %} · {{ topic_item.decks|length }} квизлет{{ topic_item.decks|length|pluralize:"а,ов" }}{% endif %}{% if topic_item.waiting %} · ждут {{ topic_item.waiting }}{% endif %}{% if not topic.is_active %} · скрыта{% endif %}</p>
                             </div>
                             <div class="row row-tight">
                                 <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_new' %}?topic={{ topic.pk }}">{% icon "plus" %}Задание</a>
+                                <a class="btn btn-ghost btn-sm" href="{% url 'teacher_deck_new' %}?topic={{ topic.pk }}">{% icon "cards" %}Квизлет</a>
                                 <a class="btn btn-ghost btn-sm" href="{% url 'teacher_topic_edit' topic.pk %}">{% icon "pencil" %}<span class="sr-only">Изменить тему</span></a>
                                 <form method="post" action="{% url 'teacher_archive_item' 'topic' topic.pk %}" data-confirm="Переместить тему «{{ topic.title }}» в архив вместе со всеми заданиями?">
                                     {% csrf_token %}<button class="btn btn-ghost btn-sm" type="submit">{% icon "archive" %}<span class="sr-only">Архивировать тему</span></button>
@@ -144,7 +142,7 @@
                             </div>
                         </div>
                         {% if topic.description %}<p class="small muted">{{ topic.description }}</p>{% endif %}
-                        {% if topic_item.assignments %}
+                        {% if topic_item.assignments or topic_item.decks %}
                             <ul class="task-list">
                                 {% for entry in topic_item.assignments %}
                                     {% with assignment=entry.assignment stats=entry.stats %}
@@ -178,12 +176,30 @@
                                         </li>
                                     {% endwith %}
                                 {% endfor %}
+                                {% for deck in topic_item.decks %}
+                                    <li>
+                                        <div class="row-item">
+                                            <span class="row-main">
+                                                <span class="row-title row row-tight">
+                                                    <a href="{% url 'teacher_deck_cards' deck.pk %}">{{ deck.title }}</a>
+                                                    <span class="badge badge-info">{% icon "cards" "icon icon-sm" %}квизлет</span>
+                                                    {% if not deck.is_active %}<span class="badge badge-outline">скрыт</span>{% endif %}
+                                                </span>
+                                                <span class="row-meta">
+                                                    <span class="tnum">{{ deck.card_total }} карт.</span>
+                                                    {% if deck.description %}<span class="tiny muted">{{ deck.description|truncatewords:14 }}</span>{% endif %}
+                                                </span>
+                                            </span>
+                                            <span class="row-side">
+                                                <a class="btn btn-secondary btn-sm" href="{% url 'teacher_deck_edit' deck.pk %}">Изменить</a>
+                                                <a class="btn btn-ghost btn-sm" href="{% url 'teacher_deck_cards' deck.pk %}" title="Карточки набора">{% icon "cards" %}<span class="sr-only">Карточки набора</span></a>
+                                            </span>
+                                        </div>
+                                    </li>
+                                {% endfor %}
                             </ul>
                         {% else %}
-                            <p class="small muted mb-0">В теме нет заданий. <a href="{% url 'teacher_assignment_new' %}?topic={{ topic.pk }}">Добавить задание</a>.</p>
-                        {% endif %}
-                        {% if topic_item.decks %}
-                            <p class="row row-tight" style="margin-top:12px">{% for deck in topic_item.decks %}<a class="chip" href="{% url 'teacher_deck_cards' deck.pk %}">{% icon "cards" "icon icon-sm" %}{{ deck.title }}</a>{% endfor %}</p>
+                            <p class="small muted mb-0">В теме нет заданий. <a href="{% url 'teacher_assignment_new' %}?topic={{ topic.pk }}">Добавить задание</a> или <a href="{% url 'teacher_deck_new' %}?topic={{ topic.pk }}">квизлет</a>.</p>
                         {% endif %}
                     </div>
                 {% endwith %}

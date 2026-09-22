@@ -16,7 +16,10 @@ class QueryAndMarkupTests(LMSCase):
         with CaptureQueriesContext(connection) as queries:
             response = self.student_client.get("/assignments/")
         self.assertEqual(response.status_code, 200)
-        self.assertLessEqual(len(queries), 6)
+        # 7 запросов: сессия, пользователь, роль, счётчик, страница, сводка
+        # и квизлеты тем страницы (один запрос на все темы — бюджет по-прежнему
+        # не зависит от размера курса).
+        self.assertLessEqual(len(queries), 7)
         self.assertEqual(len(response.context["page_obj"]), 25)
 
     def test_teacher_queue_only_contains_latest_attempts(self):

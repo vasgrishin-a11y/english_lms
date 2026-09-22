@@ -87,15 +87,11 @@
             {% for block_group in block_groups|slice:":6" %}
                 {% with block=block_group.grouper %}
                 <a class="class-card" href="{% url 'student_assignments' %}#block-{{ block.pk }}">
-                    <div class="class-cover" style="background: var(--cover-{{ forloop.counter }});">
-                        {% with name=block.name|lower %}
-                            {% if "travel" in name %}🧳{% elif "movie" in name %}🎬{% elif "business" in name %}💼{% elif "exam" in name or "огэ" in name or "егэ" in name %}📝{% elif "grammar" in name %}📚{% else %}🌍{% endif %}
-                        {% endwith %}
-                    </div>
+                    {% include "lms/parts/cover.html" with course=block %}
                     <div class="class-body">
                         <h3 class="class-title">{{ block.name }}</h3>
                         <div class="class-meta">
-                            <span>{{ block_group.list|length }} заданий</span>
+                            <span>{{ block_group.list|length }} заданий{% with dbc=deck_block_counts|get_item:block.pk %}{% if dbc %} + {{ dbc }} квиз.{% endif %}{% endwith %}</span>
                             {% if block.cefr_level %}<span class="tag tag-cefr">{{ block.cefr_level }}</span>{% endif %}
                         </div>
                         <div class="class-foot">

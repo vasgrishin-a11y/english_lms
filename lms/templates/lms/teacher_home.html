@@ -46,10 +46,10 @@
         {% for block_item in blocks_data|slice:":5" %}
             {% with block=block_item.block %}
             <a class="class-card" href="{% url 'teacher_curriculum' %}#block-{{ block.pk }}">
-                <div class="class-cover" style="background: var(--cover-{{ forloop.counter }});"><span class="class-cover-emoji">🌍</span></div>
+                {% include "lms/parts/cover.html" with course=block %}
                 <div class="class-body">
                     <h3 class="class-title">{{ block.name }}</h3>
-                    <div class="class-meta"><span>{{ block_item.assignments }} заданий · {{ block_item.topics|length }} тем</span></div>
+                    <div class="class-meta"><span>{{ block_item.assignments }} заданий · {{ block_item.topics|length }} тем{% if block_item.decks %} · {{ block_item.decks }} квиз.{% endif %}</span></div>
                 </div>
             </a>
             {% endwith %}

@@ -33,6 +33,7 @@ from .services import (
     save_answer_draft,
     submit_assignment,
     submit_quiz,
+    visible_decks,
 )
 from .views import _add_validation_errors
 
@@ -129,6 +130,11 @@ def student_home(request):
     )
     decks = deck_stats(student)
     due_total = sum(deck.due_count for deck in decks)
+    deck_block_counts = {}
+    for deck in decks:
+        if deck.topic_id and deck.topic.block_id:
+            block_id = deck.topic.block_id
+            deck_block_counts[block_id] = deck_block_counts.get(block_id, 0) + 1
     context = {
         "continue_item": continue_candidates[0] if continue_candidates else None,
         "continue_draft": drafts.get(continue_candidates[0].pk if continue_candidates else None),
@@ -144,6 +150,7 @@ def student_home(request):
         "recent": recent,
         "decks": decks,
         "due_total": due_total,
+        "deck_block_counts": deck_block_counts,
         "workspace": "home",
     }
     return render(request, "lms/student_home.html", context)
@@ -154,8 +161,9 @@ def student_home(request):
 def student_assignments(request):
     """Карта курса: страница заданий, сгруппированных по блокам и темам в шаблоне.
 
-    Бюджет — шесть запросов независимо от размера курса: сессия, пользователь,
-    роль, счётчик страниц, сама страница и одна агрегирующая сводка.
+    Бюджет — семь запросов независимо от размера курса: сессия, пользователь,
+    роль, счётчик страниц, сама страница, одна агрегирующая сводка и квизлеты
+    тем текущей страницы (показываются строками-заданиями в темах).
     """
     query = request.GET.get("q", "").strip()[:200]
     assignments = annotate_student_states(
@@ -179,6 +187,17 @@ def student_assignments(request):
     page = Paginator(assignments, settings.LMS_PAGE_SIZE).get_page(request.GET.get("page"))
     for assignment in page:
         assignment.state = state_of(assignment)
+    topic_ids = {assignment.topic_id for assignment in page}
+    decks_by_topic = {}
+    if topic_ids:
+        topic_decks = (
+            visible_decks(request.user)
+            .filter(topic_id__in=topic_ids, topic__isnull=False)
+            .annotate(card_total=Count("cards"))
+            .order_by("topic__order", "order", "pk")
+        )
+        for deck in topic_decks:
+            decks_by_topic.setdefault(deck.topic_id, []).append(deck)
     summary = annotate_student_states(visible_assignments(), request.user).aggregate(
         total=Count("pk"),
         done=Count("pk", filter=Q(latest_status=Submission.Status.CHECKED)),
@@ -200,6 +219,7 @@ def student_assignments(request):
             "page_obj": page,
             "query": query,
             "mode": mode,
+            "decks_by_topic": decks_by_topic,
             "workspace": "curriculum",
         },
     )

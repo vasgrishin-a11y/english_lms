@@ -1799,6 +1799,83 @@ table .grade-col {
     color: var(--text-muted);
 }
 
+/* Заголовок группы шаблонов (тема библиотеки квизлетов). */
+.preset-topic {
+    margin: var(--sp-5) 0 var(--sp-3);
+    font-size: var(--fs-13);
+    font-weight: 700;
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    color: var(--text-subtle);
+}
+
+.preset-topic:first-of-type {
+    margin-top: var(--sp-3);
+}
+
+.preset-meta {
+    display: flex;
+    gap: var(--sp-2);
+    flex-wrap: wrap;
+    margin-top: var(--sp-1);
+}
+
+/* Фильтр библиотеки шаблонов по уровню: чипсы, без JS всё видно. */
+.level-filter {
+    display: flex;
+    gap: var(--sp-2);
+    flex-wrap: wrap;
+    margin-bottom: var(--sp-3);
+}
+
+/* Строки выбора шаблона на странице карточек: просмотр + импорт. */
+.preset-pick-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    margin: 0 0 var(--sp-2);
+    padding: 0;
+    list-style: none;
+}
+
+.preset-pick {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--sp-3);
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--r-md);
+    transition: border-color var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
+}
+
+.preset-pick:hover {
+    border-color: var(--accent-300);
+    background: var(--accent-soft);
+}
+
+.preset-pick .preset-text {
+    flex: 1 1 auto;
+}
+
+.preset-pick-actions {
+    display: flex;
+    gap: var(--sp-2);
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+@media (max-width: 620px) {
+    .preset-pick {
+        flex-wrap: wrap;
+    }
+    .preset-pick-actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+}
+
 /* ── Готовые формулировки блоков и тем ──────────────────── */
 .suggestion-list {
     gap: var(--sp-2);
@@ -2055,6 +2132,94 @@ table .grade-col {
     filter: drop-shadow(0 2px 8px rgba(0,0,0,0.08));
     z-index: 1;
 }
+
+/* Обложка курса (parts/cover.html): сцена по теме + плашка с названием.
+   Свои курсы всегда показывают название и инициалы на цветном фоне. */
+.cover-scene {
+    font-size: 2.75rem;
+    line-height: 1;
+    z-index: 1;
+    transform: translateY(-10px);
+    filter: drop-shadow(0 3px 10px rgba(38, 55, 44, 0.18));
+}
+
+.cover-plate {
+    position: absolute;
+    left: var(--sp-3);
+    right: var(--sp-3);
+    bottom: var(--sp-3);
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-3);
+    text-align: left;
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.75);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-1);
+    z-index: 1;
+}
+
+.cover-initials {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
+    font-size: var(--fs-12);
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    color: #fff;
+    background: var(--accent-700);
+    border-radius: 50%;
+}
+
+.cover-words {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.cover-name {
+    font-size: var(--fs-13);
+    font-weight: 700;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cover-tag {
+    font-size: var(--fs-11);
+    font-weight: 600;
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+/* Тематические акценты обложки: бейдж инициалов + кромка плашки.
+   Белый текст на тёмном бейдже держит AA (проверено: 5.8–9.5:1). */
+.cover-theme-travel .cover-initials { background: #1e6e68; }
+.cover-theme-travel .cover-plate { border-left: 4px solid #63c3bc; }
+.cover-theme-movie .cover-initials { background: #4a3f6b; }
+.cover-theme-movie .cover-plate { border-left: 4px solid #9a8fc4; }
+.cover-theme-business .cover-initials { background: #3d4b5c; }
+.cover-theme-business .cover-plate { border-left: 4px solid #8fa3b8; }
+.cover-theme-exam .cover-initials { background: #7a3b2e; }
+.cover-theme-exam .cover-plate { border-left: 4px solid #d08a7a; }
+.cover-theme-ielts .cover-initials { background: #3f5a47; }
+.cover-theme-ielts .cover-plate { border-left: 4px solid #a6c3aa; }
+.cover-theme-it .cover-initials { background: #2f4a7a; }
+.cover-theme-it .cover-plate { border-left: 4px solid #7f9cd4; }
+.cover-theme-kids .cover-initials { background: #8a5a2b; }
+.cover-theme-kids .cover-plate { border-left: 4px solid #d9a75f; }
+.cover-theme-teens .cover-initials { background: #5c4d8a; }
+.cover-theme-teens .cover-plate { border-left: 4px solid #a394d4; }
+.cover-theme-happy .cover-initials { background: #7a5c10; }
+.cover-theme-happy .cover-plate { border-left: 4px solid #d9b95f; }
+.cover-theme-grammar .cover-initials { background: #2f6b45; }
+.cover-theme-grammar .cover-plate { border-left: 4px solid #8fc0a0; }
 
 .class-cover img {
     width: 100%;

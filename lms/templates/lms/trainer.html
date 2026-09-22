@@ -20,10 +20,11 @@
     <div class="class-grid">
         {% for deck in decks %}
             <a class="class-card" href="{% url 'trainer_session' deck.pk %}">
-                <div class="class-cover" style="background: {% if deck.is_personal %}var(--cover-2){% else %}var(--cover-{{ forloop.counter }}){% endif %}; display:grid; place-items:center">
-                    <span class="class-cover-emoji">{% if deck.is_personal %}📚{% else %}🗂️{% endif %}</span>
-                    {% if deck.due_count %}<span class="badge badge-submitted">{{ deck.due_count }} к повтору</span>{% else %}<span class="badge badge-checked">повторено</span>{% endif %}
-                </div>
+                {% if deck.due_count %}
+                    {% include "lms/parts/cover.html" with name=deck.title badge=deck.due_count badge_suffix=" к повтору" badge_class="badge-submitted" %}
+                {% else %}
+                    {% include "lms/parts/cover.html" with name=deck.title badge="повторено" badge_class="badge-checked" %}
+                {% endif %}
                 <div class="class-body">
                     <h2 class="class-title">{{ deck.title }}</h2>
                     <div class="class-meta">
