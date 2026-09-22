@@ -122,9 +122,7 @@ def course_tree(
     if include_skills:
         assignments_queryset = assignments_queryset.prefetch_related("skills")
     assignments = list(assignments_queryset.order_by("topic__order", "order", "pk"))
-    decks = FlashcardDeck.objects.select_related("topic__block").annotate(
-        card_total=Count("cards")
-    )
+    decks = FlashcardDeck.objects.select_related("topic__block").annotate(card_total=Count("cards"))
     if not teacher_view:
         decks = decks.filter(is_active=True, topic__is_active=True, topic__block__is_active=True)
     decks = list(decks.order_by("topic__order", "order", "pk"))

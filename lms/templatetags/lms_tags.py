@@ -40,7 +40,10 @@ COVER_THEMES = {
 
 # Ключевые слова названия → тема обложки. Порядок важен: первые совпадения точнее.
 COVER_KEYWORDS = [
-    (("travel", "travell", "путешеств", "scandinav", "denmark", "hotel", "airport", "trip"), "travel"),
+    (
+        ("travel", "travell", "путешеств", "scandinav", "denmark", "hotel", "airport", "trip"),
+        "travel",
+    ),
     (("movie", "cinema", "film", "кино", "фильм"), "movie"),
     (("business", "делов", "бизнес", "finance", "market", "meeting", "negotiat"), "business"),
     (("exam", "огэ", "егэ", "ielts", "test prep", "экзамен"), "exam"),
@@ -345,27 +348,6 @@ def cover_initials(name):
     if len(words) == 1:
         return words[0][:2].upper()
     return (words[0][:1] + words[1][:1]).upper()
-
-
-@register.filter
-def deck_cards_map(presets):
-    """Текст «лицо | оборот | пример» по строкам для каждого шаблона квизлета.
-
-    Отдаётся в ``json_script`` на странице карточек: кнопка «Подставить
-    в импорт» заполняет textarea массового импорта без перезагрузки.
-    """
-
-    def line(card):
-        parts = [card.get("front", ""), card.get("back", "")]
-        if card.get("example"):
-            parts.append(card["example"])
-        return " | ".join(parts)
-
-    return {
-        preset["id"]: "\n".join(line(card) for card in preset.get("cards", []))
-        for preset in presets or []
-        if preset.get("id")
-    }
 
 
 @register.filter
