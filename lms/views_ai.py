@@ -83,6 +83,8 @@ def ai_assistant(request):
             "form": form,
             "mode": mode,
             "mode_label": ai.ai_mode_label(mode),
+            "provider": ai.provider_spec(),
+            "provider_hint": ai.provider_hint(),
             "material": material,
             "meta": meta,
             "summary": summary,

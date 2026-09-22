@@ -172,12 +172,25 @@ FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o700
 # Гибрид: с ключом провайдера разбираем файл моделью, без ключа — офлайн-эвристиками.
 # Пустой ключ не ошибка: помощник просто работает офлайн. Выключить целиком — LMS_AI_ENABLED=0.
 LMS_AI_ENABLED = env_bool("LMS_AI_ENABLED", True)
-LMS_AI_PROVIDER = os.getenv("LMS_AI_PROVIDER", "gemini").strip() or "gemini"
+# Провайдер: gigachat (по умолчанию, доступен из РФ без VPN), gemini, yandex,
+# proxyapi, vsegpt, aitunnel, openrouter, deepseek, qwen, ollama или свой
+# OpenAI-совместимый шлюз через LMS_AI_ENDPOINT. Модель и адрес по умолчанию
+# берутся из lms.ai.PROVIDERS; незнакомое имя провайдера не ошибка.
+LMS_AI_PROVIDER = os.getenv("LMS_AI_PROVIDER", "gigachat").strip().lower() or "gigachat"
 LMS_AI_API_KEY = os.getenv("LMS_AI_API_KEY", "").strip()
-LMS_AI_MODEL = os.getenv("LMS_AI_MODEL", "gemini-2.0-flash").strip() or "gemini-2.0-flash"
-LMS_AI_ENDPOINT = os.getenv(
-    "LMS_AI_ENDPOINT", "https://generativelanguage.googleapis.com/v1beta/models"
-).strip()
+LMS_AI_MODEL = os.getenv("LMS_AI_MODEL", "").strip()
+LMS_AI_ENDPOINT = os.getenv("LMS_AI_ENDPOINT", "").strip()
+# GigaChat: точка OAuth и scope (GIGACHAT_API_PERS / _B2B / _CORP) задаются явно,
+# если нужен доступ юрлица. Пусто — значения для физлица из описания провайдера.
+LMS_AI_AUTH_ENDPOINT = os.getenv("LMS_AI_AUTH_ENDPOINT", "").strip()
+LMS_AI_SCOPE = os.getenv("LMS_AI_SCOPE", "").strip()
+# TLS: GigaChat отдаёт сертификат НУЦ Минцифры — путь к нему задаётся в LMS_AI_CA_BUNDLE.
+LMS_AI_CA_BUNDLE = os.getenv("LMS_AI_CA_BUNDLE", "").strip()
+LMS_AI_VERIFY_SSL = env_bool("LMS_AI_VERIFY_SSL", True)
+# JSON-режим ответа для OpenAI-совместимых шлюзов (Ollama и часть прокси его не умеют).
+LMS_AI_JSON_MODE = env_bool("LMS_AI_JSON_MODE", True)
+# Какие файлы отправлять провайдеру как вложение: image,pdf,video,audio или none.
+LMS_AI_UPLOAD_KINDS = os.getenv("LMS_AI_UPLOAD_KINDS", "").strip()
 LMS_AI_TIMEOUT = env_int("LMS_AI_TIMEOUT", 60)
 LMS_AI_MAX_FILE_BYTES = env_int("LMS_AI_MAX_FILE_BYTES", 10 * 1024 * 1024)
 LMS_AI_MAX_BLOCKS = env_int("LMS_AI_MAX_BLOCKS", 5)

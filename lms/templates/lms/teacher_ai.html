@@ -21,6 +21,10 @@
     <span class="badge {% if mode == 'online' %}badge-turquoise{% else %}badge-outline{% endif %}">{{ mode_label }}</span>
 </div>
 
+{% if mode != 'online' and provider_hint %}
+    <p class="page-note">Провайдер по умолчанию — {{ provider.label }}: {{ provider_hint }}</p>
+{% endif %}
+
 {% if mode == 'off' %}
     <section class="card">
         <div class="empty">
@@ -51,7 +55,7 @@
                     <div class="card-head">
                         <h2 class="card-title" id="ai-preview-title">{% icon "layers" %}Что получилось: {{ material.title }}</h2>
                         <span class="badge {% if meta.result == 'online' %}badge-turquoise{% else %}badge-outline{% endif %}">
-                            {% if meta.result == 'online' %}разобрал ИИ{% else %}офлайн-разбор{% endif %}
+                            {% if meta.result == 'online' %}разобрал ИИ{% if meta.provider_label %} · {{ meta.provider_label }}{% endif %}{% else %}офлайн-разбор{% endif %}
                         </span>
                     </div>
                     <div class="stats" style="margin-bottom:16px">
