@@ -25,7 +25,7 @@ class NavToggleTests(LMSCase):
         self.assertIn("app-nav-toggle-label", html)
         self.assertIn("data-raccoon-scene", html)
         self.assertIn("raccoon-scene-canvas", html)
-        self.assertIn("raccoon-run.svg", html)
+        self.assertIn("raccoon-face.svg", html)
         self.assertNotIn("fox", html.lower())
         self.assertNotIn("🌲", html)
         self.assertNotIn("🦊", html)
@@ -255,17 +255,19 @@ class RaccoonSceneTests(LMSCase):
 
     def test_scene_is_rendered_with_new_assets(self):
         html = self.teacher_client.get("/teacher/").content.decode()
-        self.assertIn("raccoon-run.svg", html)
+        self.assertIn("raccoon-face.svg", html)
         self.assertIn("raccoon_scene.js", html)
-        self.assertIn("Енот бежит по лесной опушке", html)
+        self.assertIn("Мордочка енота в шарфе", html)
 
     def test_raccoon_assets_exist(self):
         from django.contrib.staticfiles import finders
 
         for name in (
-            "lms/img/raccoon-run.svg",
+            "lms/img/raccoon-face.svg",
+            "lms/img/raccoon-sleep.svg",
             "lms/img/raccoon-books.svg",
             "lms/js/raccoon_scene.js",
         ):
             self.assertIsNotNone(finders.find(name), name)
         self.assertIsNone(finders.find("lms/img/fox-run.svg"))
+        self.assertIsNone(finders.find("lms/img/raccoon-run.svg"))

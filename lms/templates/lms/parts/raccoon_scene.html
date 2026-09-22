@@ -1,12 +1,13 @@
 {% load static %}
 <div class="raccoon-scene"
      data-raccoon-scene
-     data-pet-src="{% static 'lms/img/raccoon-run.svg' %}"
+     data-pet-src="{% static 'lms/img/raccoon-face.svg' %}"
+     data-sleep-src="{% static 'lms/img/raccoon-sleep.svg' %}"
      data-books-src="{% static 'lms/img/raccoon-books.svg' %}"
      role="img"
-     aria-label="Енот бежит по лесной опушке к книгам, читает их, возвращается домой и засыпает">
-    <canvas class="raccoon-scene-canvas" width="640" height="46" aria-hidden="true"></canvas>
+     aria-label="Мордочка енота в шарфе бежит по опушке к книгам, переплывает озеро, читает их и засыпает">
+    <canvas class="raccoon-scene-canvas" width="640" height="56" aria-hidden="true"></canvas>
     <noscript>
-        <img class="raccoon-scene-fallback" src="{% static 'lms/img/raccoon-run.svg' %}" alt="" width="52" height="36">
+        <img class="raccoon-scene-fallback" src="{% static 'lms/img/raccoon-face.svg' %}" alt="" width="34" height="34">
     </noscript>
 </div>
