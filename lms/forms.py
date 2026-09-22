@@ -250,13 +250,13 @@ class AssignmentForm(forms.ModelForm):
         self.fields["publish_at"].input_formats = DATETIME_FORMATS
         self.fields["skills"].queryset = Skill.objects.all().order_by("order", "name")
         self.fields["skills"].required = False
-        self.fields["skills"].help_text = (
-            "Подставляются по типу задания. Нажмите чип, чтобы заменить набор."
-        )
+        self.fields[
+            "skills"
+        ].help_text = "Подставляются по типу задания. Нажмите чип, чтобы заменить набор."
         self.fields["assignment_type"].label = "Тип задания"
-        self.fields["max_points"].help_text = (
-            "Для теста максимум считается автоматически как сумма баллов вопросов."
-        )
+        self.fields[
+            "max_points"
+        ].help_text = "Для теста максимум считается автоматически как сумма баллов вопросов."
         self.fields[
             "publish_at"
         ].help_text = "Оставьте пустым, чтобы опубликовать сразу. Черновик ученикам не виден."

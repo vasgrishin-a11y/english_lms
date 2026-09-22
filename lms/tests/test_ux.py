@@ -102,7 +102,9 @@ class AssignmentSkillsTests(LMSCase):
         self.assertContains(page, "type-cards")
         self.assertContains(page, "Быстрые шаблоны заданий")
         self.assertContains(page, 'id="assignment-skills-by-type"')
-        edit = self.teacher_client.get(reverse("teacher_assignment_form", args=[self.assignment.pk]))
+        edit = self.teacher_client.get(
+            reverse("teacher_assignment_form", args=[self.assignment.pk])
+        )
         self.assertContains(edit, "quiz-editor")
         self.assertContains(edit, "Новый вопрос")
 
@@ -134,4 +136,4 @@ class SuggestSearchTests(LMSCase):
         html = self.teacher_client.get("/teacher/students/").content.decode()
         self.assertIn('data-suggest="', html)
         self.assertIn('name="q"', html)
-        self.assertIn("method=\"get\"", html.lower())
+        self.assertIn('method="get"', html.lower())

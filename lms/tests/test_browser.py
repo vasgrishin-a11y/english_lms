@@ -62,9 +62,7 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
                 page.get_by_label("Имя пользователя", exact=True).fill(username)
                 page.get_by_label("Пароль", exact=True).fill(password)
                 page.get_by_role("button", name="Войти", exact=True).click()
-                page.wait_for_url(
-                    "**/teacher/" if username == "browser_teacher" else "**/my/"
-                )
+                page.wait_for_url("**/teacher/" if username == "browser_teacher" else "**/my/")
 
             try:
                 page.goto(self.live_server_url + "/accounts/login/")
