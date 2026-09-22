@@ -29,8 +29,8 @@
             </select>
         </div>
         <div class="row">
-            <button class="btn btn-sm" type="submit">Показать</button>
-            <a class="btn btn-ghost btn-sm" href="{% url 'teacher_submissions' %}">Сбросить</a>
+            <button class="btn btn-sm" type="submit">{% t "Показать" %}</button>
+            <a class="btn btn-ghost btn-sm" href="{% url 'teacher_submissions' %}">{% t "Сбросить" %}</a>
         </div>
     </form>
 
@@ -72,7 +72,7 @@
         <tr>
             <th scope="col">Ученик</th>
             <th scope="col">Блок / тема</th>
-            <th scope="col">Задание</th>
+            <th scope="col">{% t "Задание" %}</th>
             <th scope="col">Статус</th>
             <th scope="col">Отправлено</th>
             <th scope="col">Действие</th>
@@ -107,7 +107,7 @@
                     <span class="tnum">{{ submission.submitted_at|date:"d.m.Y H:i" }}</span>
                     {% if submission.is_late %}<br><span class="badge badge-needs_revision">после дедлайна</span>{% endif %}
                 </td>
-                <td><a class="btn btn-sm" href="{% url 'teacher_submission_review' submission.pk %}{% querystring %}">Открыть</a></td>
+                <td><a class="btn btn-sm" href="{% url 'teacher_submission_review' submission.pk %}{% querystring %}">{% t "Открыть" %}</a></td>
             </tr>
         {% empty %}
             <tr><td colspan="6">

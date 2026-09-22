@@ -24,7 +24,7 @@
     </span>
     <span class="task-side">
         {% if assignment.is_flashcards %}
-            <a class="btn btn-secondary btn-sm" href="{% url 'trainer_session' assignment.pk %}">{% icon "play" %}Тренировать</a>
+            <a class="btn btn-secondary btn-sm" href="{% url 'trainer_session' assignment.pk %}">{% icon "play" %}{% t "Тренировать" %}</a>
         {% elif state.status %}
             <span class="badge badge-{{ state.status }}">{% icon state.status|status_icon "icon icon-sm" %}{{ state.status|status_label }}</span>
             {% if state.grade != None %}

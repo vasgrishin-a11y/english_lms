@@ -43,7 +43,7 @@
             <div class="empty-icon">{% icon "award" "icon icon-xl" %}</div>
             <h3>Оценок пока нет</h3>
             <p>Отправьте первую работу — оценка и комментарий преподавателя появятся здесь.</p>
-            <a class="btn" href="{% url 'student_assignments' %}">К заданиям</a>
+            <a class="btn" href="{% url 'student_assignments' %}">{% t "К заданиям" %}</a>
         </div>
     {% endfor %}
     {% include "lms/pagination.html" %}

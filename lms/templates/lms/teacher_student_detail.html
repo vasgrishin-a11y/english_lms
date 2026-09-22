@@ -7,7 +7,7 @@
 {% block content %}
 <nav aria-label="Хлебные крошки">
     <ol class="crumbs">
-        <li><a href="{% url 'teacher_students' %}">Ученики</a></li>
+        <li><a href="{% url 'teacher_students' %}">{% t "Ученики" %}</a></li>
         <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">{{ student.get_full_name|default:student.username }}</span></li>
     </ol>
 </nav>
@@ -25,12 +25,12 @@
         </div>
     </div>
     <div class="row">
-        <a class="btn btn-secondary" href="{% url 'teacher_student_edit' student.pk %}">{% icon "pencil" %}Редактировать профиль</a>
-        <a class="btn btn-secondary" href="{% url 'teacher_review_queue' %}?student={{ student.pk }}">{% icon "check-circle" %}Работы ученика</a>
+        <a class="btn btn-secondary" href="{% url 'teacher_student_edit' student.pk %}">{% icon "pencil" %}{% t "Редактировать профиль" %}</a>
+        <a class="btn btn-secondary" href="{% url 'teacher_review_queue' %}?student={{ student.pk }}">{% icon "check-circle" %}{% t "Работы ученика" %}</a>
         <form method="post" action="{% url 'teacher_impersonate_start' student.pk %}" data-confirm="Открыть English LMS глазами ученика «{{ student.get_full_name|default:student.username }}»? Вернуться можно кнопкой в верхнем баннере.">
-            {% csrf_token %}<button class="btn btn-secondary" type="submit">{% icon "eye" %}Открыть как ученик</button>
+            {% csrf_token %}<button class="btn btn-secondary" type="submit">{% icon "eye" %}{% t "Открыть как ученик" %}</button>
         </form>
-        <a class="btn btn-ghost" href="{% url 'teacher_analytics' %}">{% icon "grid" %}Журнал</a>
+        <a class="btn btn-ghost" href="{% url 'teacher_analytics' %}">{% icon "grid" %}{% t "Журнал" %}</a>
     </div>
 </div>
 

@@ -1,4 +1,4 @@
-"""Проверка настроек ИИ-помощника на площадке.
+"""Проверка настроек ИИ-помощника на площадке (локальная модель).
 
 Команда отвечает на два вопроса администратора: «что сейчас настроено» и
 «работает ли ключ». Без ``--live`` она не делает ни одного сетевого запроса,
@@ -11,7 +11,6 @@
 как и в журнале (``lms.ai``): в логи не должны попадать материалы и данные.
 """
 
-from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from lms import ai
@@ -54,24 +53,23 @@ class Command(BaseCommand):
         if mode == "offline":
             self.stdout.write(
                 self.style.WARNING(
-                    "Ключа нет: помощник работает офлайн-эвристиками, ключ не проверяем."
+                    "Локальная модель не включена: помощник работает офлайн-эвристиками. "
+                    "Включить: LMS_AI_LOCAL=1 (или задать LMS_AI_API_KEY для своего шлюза)."
                 )
             )
             return
         if not options["live"]:
             self.stdout.write(
-                "Ключ задан. Чтобы проверить его живым запросом, запустите с флагом --live."
+                "Модель включена. Чтобы проверить её живым запросом, запустите с флагом --live."
             )
             return
 
-        if spec["kind"] == "gigachat" and getattr(settings, "LMS_AI_VERIFY_SSL", True):
-            if not getattr(settings, "LMS_AI_CA_BUNDLE", ""):
-                self.stdout.write(
-                    self.style.WARNING(
-                        "LMS_AI_CA_BUNDLE не задан: если сертификат НУЦ Минцифры не установлен "
-                        "в системе, запрос упадёт с ошибкой TLS — см. docs/AI_PROVIDERS.md."
-                    )
+        if ai.ai_endpoint().startswith("http://") and not ai.provider_spec().get("keyless"):
+            self.stdout.write(
+                self.style.WARNING(
+                    "Адрес модели без HTTPS: подойдёт только для доверенной локальной сети."
                 )
+            )
 
         # Только один пробный запрос: реальные материалы и работы учеников сюда не попадают.
         try:
@@ -82,11 +80,11 @@ class Command(BaseCommand):
         if meta.get("result") != "online":
             for note in meta.get("notes") or []:
                 self.stdout.write(self.style.WARNING(f"Замечание: {note}"))
-            raise CommandError("Онлайн-разбор не сработал: ответа провайдера нет.")
+            raise CommandError("Онлайн-разбор не сработал: ответа модели нет.")
         summary = ai.material_summary(material)
         self.stdout.write(
             self.style.SUCCESS(
-                "Провайдер ответил. Черновик: блоков {blocks}, тем {topics}, заданий "
+                "Модель ответила. Черновик: блоков {blocks}, тем {topics}, заданий "
                 "{assignments}, вопросов {questions}, карточек {cards}. Импорт не выполнялся.".format(
                     **summary
                 )

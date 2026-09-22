@@ -20,14 +20,14 @@
                 {% csrf_token %}
                 {% include "lms/form_fields.html" %}
                 <div class="row">
-                    <button class="btn" type="submit">{% icon "save" %}Сохранить шаблон</button>
-                    <a class="btn btn-secondary" href="{% url 'teacher_settings' %}">Отмена</a>
+                    <button class="btn" type="submit">{% icon "save" %}{% t "Сохранить шаблон" %}</button>
+                    <a class="btn btn-secondary" href="{% url 'teacher_settings' %}">{% t "Отмена" %}</a>
                 </div>
             </form>
             {% if snippet %}
                 <form method="post" action="{% url 'teacher_snippet_delete' snippet.pk %}" data-confirm="Удалить шаблон «{{ snippet.title }}»?" style="margin-top:12px">
                     {% csrf_token %}
-                    <button class="btn btn-danger-ghost btn-sm" type="submit">{% icon "trash" %}Удалить шаблон</button>
+                    <button class="btn btn-danger-ghost btn-sm" type="submit">{% icon "trash" %}{% t "Удалить шаблон" %}</button>
                 </form>
             {% endif %}
         </section>

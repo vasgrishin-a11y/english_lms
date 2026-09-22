@@ -2,6 +2,7 @@ from django import template
 from django.utils import timezone
 from django.utils.html import format_html
 
+from lms import ui_text
 from lms.models import Submission
 
 register = template.Library()
@@ -391,3 +392,14 @@ def percent_of(value, maximum):
     if maximum <= 0:
         return 0
     return int(round(100 * value / maximum))
+
+
+@register.simple_tag(takes_context=True)
+def t(context, text):
+    """Подпись меню или действия на языке интерфейса: ``{% t "Консоль" %}``.
+
+    Ключ — русская строка, поэтому шаблон читается как обычный текст, а в режиме
+    ENG подставляется английская пара. Учебное содержимое так не переводится:
+    тег вызывают только в меню, навигации и на кнопках действий.
+    """
+    return ui_text.translate(text, context.get("ui_lang") or ui_text.DEFAULT_LANGUAGE)

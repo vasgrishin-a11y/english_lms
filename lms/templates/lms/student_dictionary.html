@@ -35,7 +35,7 @@
                             </div>
                             <div class="word-side">
                                 <form method="post" action="{% url 'student_dictionary_delete' card.pk %}" data-confirm="Удалить «{{ card.front }}» из словаря?">
-                                    {% csrf_token %}<button class="icon-btn" type="submit" aria-label="Удалить">{% icon "trash" %}</button>
+                                    {% csrf_token %}<button class="icon-btn" type="submit" aria-label="{% t 'Удалить' %}">{% icon "trash" %}</button>
                                 </form>
                             </div>
                         </div>
@@ -57,7 +57,7 @@
             <form method="post" novalidate>
                 {% csrf_token %}
                 {% include "lms/form_fields.html" with form=form %}
-                <button class="btn btn-sm btn-block" type="submit" style="margin-top:12px">{% icon "plus" %}В словарь</button>
+                <button class="btn btn-sm btn-block" type="submit" style="margin-top:12px">{% icon "plus" %}{% t "В словарь" %}</button>
             </form>
             <p class="tiny muted" style="margin-top:12px">Совет: добавляйте слова прямо со страницы задания — они попадут в этот словарь и в очередь повторения.</p>
         </div>
@@ -70,8 +70,8 @@
                 <li><strong>good</strong> — уверенно</li>
                 <li><strong>easy</strong> — слишком легко</li>
             </ul>
-            <a class="btn btn btn-sm btn-block" href="{% url 'student_dictionary_session' %}" style="margin-top:12px">{% icon "play" %}Тренировать словарь</a>
-            <a class="btn btn-secondary btn-sm btn-block" href="{% url 'student_trainer' %}" style="margin-top:8px">{% icon "cards" %}Все наборы</a>
+            <a class="btn btn btn-sm btn-block" href="{% url 'student_dictionary_session' %}" style="margin-top:12px">{% icon "play" %}{% t "Тренировать словарь" %}</a>
+            <a class="btn btn-secondary btn-sm btn-block" href="{% url 'student_trainer' %}" style="margin-top:8px">{% icon "cards" %}{% t "Все наборы" %}</a>
         </div>
 
         <div class="rail-card">

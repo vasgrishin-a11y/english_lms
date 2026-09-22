@@ -9,14 +9,14 @@
     <div>
         <nav aria-label="Хлебные крошки">
             <ol class="crumbs">
-                <li><a href="{% url 'teacher_curriculum' %}">Карта курса</a></li>
-                <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">Архив</span></li>
+                <li><a href="{% url 'teacher_curriculum' %}">{% t "Карта курса" %}</a></li>
+                <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">{% t "Архив" %}</span></li>
             </ol>
         </nav>
-        <h1>Архив</h1>
+        <h1>{% t "Архив" %}</h1>
         <p class="page-note">Сюда попадает то, что больше не нужно показывать ученикам. История сдач и оценки сохраняются — при необходимости всё можно восстановить.</p>
     </div>
-    <a class="btn btn-secondary" href="{% url 'teacher_curriculum' %}">{% icon "layers" %}Вернуться к курсу</a>
+    <a class="btn btn-secondary" href="{% url 'teacher_curriculum' %}">{% icon "layers" %}{% t "Вернуться к курсу" %}</a>
 </div>
 
 <div class="stats archive-stats">
@@ -42,14 +42,12 @@
                 <div class="archive-item__actions">
                     <form method="post" action="{% url 'teacher_archive_item' 'block' block.pk %}" data-confirm="Восстановить блок «{{ block.name }}» вместе со всеми темами и заданиями?">
                         {% csrf_token %}<input type="hidden" name="action" value="restore"><input type="hidden" name="restore_tree" value="1">
-                        <button class="btn btn-secondary btn-sm" type="submit">{% icon "refresh" %}Восстановить</button>
+                        <button class="btn btn-secondary btn-sm" type="submit">{% icon "refresh" %}{% t "Восстановить" %}</button>
                     </form>
-                    {% if not block.topic_total %}
-                        <form method="post" action="{% url 'teacher_block_delete' block.pk %}" data-confirm="Удалить блок «{{ block.name }}» навсегда? Это действие нельзя отменить.">
-                            {% csrf_token %}<input type="hidden" name="from_archive" value="1">
-                            <button class="btn btn-danger-ghost btn-sm" type="submit" title="Удалить навсегда">{% icon "trash" %}<span class="sr-only">Удалить навсегда</span></button>
-                        </form>
-                    {% endif %}
+                    <form method="post" action="{% url 'teacher_block_delete' block.pk %}" data-confirm="Удалить блок «{{ block.name }}» вместе с темами и заданиями? Работы учеников остановят удаление. Отменить это будет нельзя.">
+                        {% csrf_token %}<input type="hidden" name="from_archive" value="1"><input type="hidden" name="confirm" value="1">
+                        <button class="btn btn-danger-ghost btn-sm" type="submit" title="{% t 'Удалить блок целиком' %}">{% icon "trash" %}<span class="sr-only">{% t "Удалить блок целиком" %}</span></button>
+                    </form>
                 </div>
             </article>
         {% empty %}
@@ -72,14 +70,12 @@
                 <div class="archive-item__actions">
                     <form method="post" action="{% url 'teacher_archive_item' 'topic' topic.pk %}" data-confirm="Восстановить тему «{{ topic.title }}» и её задания?">
                         {% csrf_token %}<input type="hidden" name="action" value="restore"><input type="hidden" name="restore_tree" value="1">
-                        <button class="btn btn-secondary btn-sm" type="submit">{% icon "refresh" %}Восстановить</button>
+                        <button class="btn btn-secondary btn-sm" type="submit">{% icon "refresh" %}{% t "Восстановить" %}</button>
                     </form>
-                    {% if not topic.assignment_total %}
-                        <form method="post" action="{% url 'teacher_topic_delete' topic.pk %}" data-confirm="Удалить тему «{{ topic.title }}» навсегда? Это действие нельзя отменить.">
-                            {% csrf_token %}<input type="hidden" name="from_archive" value="1">
-                            <button class="btn btn-danger-ghost btn-sm" type="submit" title="Удалить навсегда">{% icon "trash" %}<span class="sr-only">Удалить навсегда</span></button>
-                        </form>
-                    {% endif %}
+                    <form method="post" action="{% url 'teacher_topic_delete' topic.pk %}" data-confirm="Удалить тему «{{ topic.title }}» вместе с заданиями? Работы учеников остановят удаление.">
+                        {% csrf_token %}<input type="hidden" name="from_archive" value="1"><input type="hidden" name="confirm" value="1">
+                        <button class="btn btn-danger-ghost btn-sm" type="submit" title="{% t 'Удалить тему целиком' %}">{% icon "trash" %}<span class="sr-only">{% t "Удалить тему целиком" %}</span></button>
+                    </form>
                 </div>
             </article>
         {% empty %}
@@ -102,12 +98,12 @@
                 <div class="archive-item__actions">
                     <form method="post" action="{% url 'teacher_archive_item' 'assignment' assignment.pk %}" data-confirm="Восстановить задание «{{ assignment.title }}»?">
                         {% csrf_token %}<input type="hidden" name="action" value="restore">
-                        <button class="btn btn-secondary btn-sm" type="submit">{% icon "refresh" %}Восстановить</button>
+                        <button class="btn btn-secondary btn-sm" type="submit">{% icon "refresh" %}{% t "Восстановить" %}</button>
                     </form>
                     {% if not assignment.submission_total %}
                         <form method="post" action="{% url 'teacher_assignment_delete' assignment.pk %}" data-confirm="Удалить задание «{{ assignment.title }}» навсегда? Это действие нельзя отменить.">
                             {% csrf_token %}<input type="hidden" name="from_archive" value="1">
-                            <button class="btn btn-danger-ghost btn-sm" type="submit" title="Удалить навсегда">{% icon "trash" %}<span class="sr-only">Удалить навсегда</span></button>
+                            <button class="btn btn-danger-ghost btn-sm" type="submit" title="{% t 'Удалить навсегда' %}">{% icon "trash" %}<span class="sr-only">{% t "Удалить навсегда" %}</span></button>
                         </form>
                     {% endif %}
                 </div>

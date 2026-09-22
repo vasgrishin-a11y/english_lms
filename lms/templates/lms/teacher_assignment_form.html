@@ -7,7 +7,7 @@
 {% block content %}
 <nav aria-label="Хлебные крошки">
     <ol class="crumbs">
-        <li><a href="{% url 'teacher_curriculum' %}">Карта курса</a></li>
+        <li><a href="{% url 'teacher_curriculum' %}">{% t "Карта курса" %}</a></li>
         {% if assignment %}<li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span>{{ assignment.topic.title }}</span></li>{% endif %}
         <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">{% if assignment %}{{ assignment.title }}{% else %}Новое задание{% endif %}</span></li>
     </ol>
@@ -103,9 +103,20 @@
                             {{ form.title.errors }}
                         </div>
 
-                        <div class="form-field form-field-wide{% if form.description.errors %} field-error{% endif %}">
-                            <label for="{{ form.description.id_for_label }}">{{ form.description.label }} <span class="required" aria-hidden="true">*</span></label>
+                        <div class="form-field form-field-wide editor-block{% if form.description.errors %} field-error{% endif %}" data-editor-block>
+                            <div class="editor-head">
+                                <label for="{{ form.description.id_for_label }}">{{ form.description.label }} <span class="required" aria-hidden="true">*</span></label>
+                                <div class="editor-actions">
+                                    <button type="button" class="btn btn-ghost btn-sm" data-editor-expand aria-expanded="false" aria-controls="{{ form.description.id_for_label }}">
+                                        {% icon "expand" %}<span data-editor-expand-label>Развернуть</span>
+                                    </button>
+                                    <button type="button" class="btn btn-secondary btn-sm" data-editor-restore hidden>
+                                        {% icon "minimize" %}Вернуть прежний размер
+                                    </button>
+                                </div>
+                            </div>
                             {{ form.description }}
+                            <p class="editor-note tiny muted" data-editor-note hidden>Большой редактор: страница остаётся видимой, а кнопка «Вернуть прежний размер» складывает его обратно. Esc тоже работает.</p>
                             {% if form.description.help_text %}<div class="help-text">{{ form.description.help_text }}</div>{% endif %}
                             {{ form.description.errors }}
                         </div>
@@ -174,13 +185,13 @@
                 </div>
 
                 <div class="form-actions">
-                    <button class="btn" type="submit">{% icon "save" %}Сохранить</button>
+                    <button class="btn" type="submit">{% icon "save" %}{% t "Сохранить" %}</button>
                     {% if not assignment %}
-                        <noscript><button class="btn btn-secondary" type="submit" name="_save_questions" value="1">{% icon "list" %}Сохранить тест и перейти к вопросам</button></noscript>
+                        <noscript><button class="btn btn-secondary" type="submit" name="_save_questions" value="1">{% icon "list" %}{% t "Сохранить тест и перейти к вопросам" %}</button></noscript>
                     {% elif assignment.is_quiz %}
-                        <a class="btn btn-secondary" href="{% url 'teacher_questions' assignment.pk %}">{% icon "list" %}Открыть вопросы отдельно</a>
+                        <a class="btn btn-secondary" href="{% url 'teacher_questions' assignment.pk %}">{% icon "list" %}{% t "Открыть вопросы отдельно" %}</a>
                     {% endif %}
-                    <a class="btn btn-ghost" href="{% url 'teacher_curriculum' %}">Отмена</a>
+                    <a class="btn btn-ghost" href="{% url 'teacher_curriculum' %}">{% t "Отмена" %}</a>
                 </div>
             </form>
         </section>
@@ -192,10 +203,10 @@
 
     <div class="split-side">
         <div class="card card-pad-sm">
-            <p class="rail-title">{% icon "sparkles" %}ИИ-помощник</p>
+            <p class="rail-title">{% icon "sparkles" %}{% t "ИИ-помощник" %}</p>
             <p class="small muted">Загрузите фото, Word, Excel, PDF или видео — помощник соберёт задание (а для упражнений — тест с вопросами) черновиком.</p>
-            <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_ai' %}?target=assignment{% if form.instance.topic_id %}&amp;topic={{ form.instance.topic_id }}{% endif %}">Собрать задание из материала</a>
-            <a class="btn btn-ghost btn-sm btn-block" href="{% url 'teacher_ai' %}?target=quiz">Собрать тест с вопросами</a>
+            <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_ai' %}?target=assignment{% if form.instance.topic_id %}&amp;topic={{ form.instance.topic_id }}{% endif %}">{% t "Собрать задание из материала" %}</a>
+            <a class="btn btn-ghost btn-sm btn-block" href="{% url 'teacher_ai' %}?target=quiz">{% t "Собрать тест с вопросами" %}</a>
         </div>
         <div class="card card-pad-sm">
             <p class="rail-title">Как собрать задание</p>
@@ -235,12 +246,12 @@
             <div class="card card-pad-sm">
                 <p class="rail-title">Это задание</p>
                 <div class="col">
-                    <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_assignment_preview' assignment.pk %}">{% icon "eye" %}Предпросмотр глазами ученика</a>
+                    <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_assignment_preview' assignment.pk %}">{% icon "eye" %}{% t "Предпросмотр глазами ученика" %}</a>
                     {% if assignment.is_quiz %}<a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_questions' assignment.pk %}">{% icon "list" %}Вопросы теста ({{ assignment.questions.count }})</a>{% endif %}
-                    <a class="btn btn-ghost btn-sm btn-block" href="{% url 'teacher_review_queue' %}?assignment={{ assignment.pk }}">{% icon "check-circle" %}Работы учеников</a>
+                    <a class="btn btn-ghost btn-sm btn-block" href="{% url 'teacher_review_queue' %}?assignment={{ assignment.pk }}">{% icon "check-circle" %}{% t "Работы учеников" %}</a>
                     <form method="post" action="{% url 'teacher_assignment_duplicate' assignment.pk %}">
                         {% csrf_token %}
-                        <button class="btn btn-ghost btn-sm btn-block" type="submit">{% icon "copy" %}Создать копию</button>
+                        <button class="btn btn-ghost btn-sm btn-block" type="submit">{% icon "copy" %}{% t "Создать копию" %}</button>
                     </form>
                 </div>
             </div>

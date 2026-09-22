@@ -7,9 +7,9 @@
 {% block content %}
 <nav aria-label="Хлебные крошки">
     <ol class="crumbs">
-        <li><a href="{% url 'teacher_curriculum' %}">Карта курса</a></li>
+        <li><a href="{% url 'teacher_curriculum' %}">{% t "Карта курса" %}</a></li>
         <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_assignment_form' assignment.pk %}">{{ assignment.title }}</a></li>
-        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">Вопросы</span></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">{% t "Вопросы" %}</span></li>
     </ol>
 </nav>
 
@@ -19,8 +19,8 @@
         <p class="page-note">Максимум баллов задания пересчитывается автоматически по сумме вопросов: сейчас <strong class="tnum">{{ total_points }}</strong> из {{ questions|length }} вопросов.</p>
     </div>
     <div class="row">
-        <a class="btn btn-secondary" href="{% url 'teacher_assignment_preview' assignment.pk %}?answers=1">{% icon "eye" %}Предпросмотр с ответами</a>
-        <a class="btn btn-ghost" href="{% url 'teacher_assignment_form' assignment.pk %}">{% icon "pencil" %}Настройки задания</a>
+        <a class="btn btn-secondary" href="{% url 'teacher_assignment_preview' assignment.pk %}?answers=1">{% icon "eye" %}{% t "Предпросмотр с ответами" %}</a>
+        <a class="btn btn-ghost" href="{% url 'teacher_assignment_form' assignment.pk %}">{% icon "pencil" %}{% t "Настройки задания" %}</a>
     </div>
 </div>
 

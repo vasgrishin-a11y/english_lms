@@ -1,4 +1,4 @@
-/* Живая сцена лисы: walk, параллакс, микрошум. Без emoji. */
+/* Живая сцена енота: прогулка к книгам, чтение, сон. Без emoji и сторонних библиотек. */
 (function () {
   "use strict";
 
@@ -30,9 +30,9 @@
     var roofH = h - wallH;
     ctx.save();
     ctx.translate(x, y);
-    ctx.fillStyle = "#c9b08a";
+    ctx.fillStyle = "#d3bba0";
     ctx.fillRect(2, roofH, w - 4, wallH);
-    ctx.fillStyle = "#8b5a3c";
+    ctx.fillStyle = "#7c5a45";
     ctx.beginPath();
     ctx.moveTo(0, roofH + 2);
     ctx.lineTo(w / 2, 0);
@@ -103,7 +103,7 @@
     if (!canvas || !canvas.getContext) return;
     var reduced =
       window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    var foxImg = null;
+    var petImg = null;
     var booksImg = null;
     var startAt = performance.now();
     var trees = [
@@ -169,38 +169,38 @@
       }
 
       var state = reduced ? { x: 0.04, facing: 1, pose: "sleep", p: 1 } : sceneState(t);
-      var foxW = 52;
-      var foxH = 36;
+      var petW = 52;
+      var petH = 36;
       var noiseX = reduced ? 0 : Math.sin(t / 180) * 1.2;
       var bounce =
         state.pose === "walk" && !reduced ? Math.abs(Math.sin(t / 90)) * 2.4 : 0;
-      var foxX = state.x * (w - foxW) + noiseX;
-      var foxY = h - 8 - foxH - bounce;
-      if (state.pose === "sleep") foxY += 3;
+      var petX = state.x * (w - petW) + noiseX;
+      var petY = h - 8 - petH - bounce;
+      if (state.pose === "sleep") petY += 3;
 
       ctx.save();
-      ctx.translate(foxX + foxW / 2, foxY + foxH / 2);
+      ctx.translate(petX + petW / 2, petY + petH / 2);
       ctx.scale(state.facing, 1);
       if (state.pose === "sleep") ctx.rotate(0.16);
-      if (foxImg) {
-        ctx.drawImage(foxImg, -foxW / 2, -foxH / 2, foxW, foxH);
+      if (petImg) {
+        ctx.drawImage(petImg, -petW / 2, -petH / 2, petW, petH);
       } else {
         ctx.fillStyle = "#d0783a";
-        ctx.fillRect(-foxW / 2, -foxH / 4, foxW * 0.7, foxH * 0.45);
+        ctx.fillRect(-petW / 2, -petH / 4, petW * 0.7, petH * 0.45);
       }
       ctx.restore();
 
       if (state.pose === "read" && !reduced) {
         ctx.fillStyle = "#3f5a47";
-        ctx.fillRect(foxX + 18, foxY - 8, 12, 9);
+        ctx.fillRect(petX + 18, petY - 8, 12, 9);
       }
       if (state.pose === "sleep" && !reduced) {
         var z = 0.5 + 0.5 * Math.sin(t / 600);
         ctx.fillStyle = "rgba(63,90,71," + (0.35 + 0.5 * z) + ")";
         ctx.font = "700 11px sans-serif";
-        ctx.fillText("z", foxX + 40, foxY + 4);
+        ctx.fillText("z", petX + 40, petY + 4);
         ctx.font = "700 13px sans-serif";
-        ctx.fillText("Z", foxX + 48, foxY - 4);
+        ctx.fillText("Z", petX + 48, petY - 4);
       }
 
       if (!reduced) requestAnimationFrame(draw);
@@ -208,9 +208,9 @@
 
     resize();
     window.addEventListener("resize", resize);
-    Promise.all([loadImage(root.getAttribute("data-fox-src")), loadImage(root.getAttribute("data-books-src"))]).then(
+    Promise.all([loadImage(root.getAttribute("data-pet-src")), loadImage(root.getAttribute("data-books-src"))]).then(
       function (images) {
-        foxImg = images[0];
+        petImg = images[0];
         booksImg = images[1];
         requestAnimationFrame(draw);
       }
@@ -218,7 +218,7 @@
   }
 
   ready(function () {
-    var root = document.querySelector("[data-fox-scene]");
+    var root = document.querySelector("[data-raccoon-scene]");
     if (root) start(root);
   });
 })();

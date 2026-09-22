@@ -7,7 +7,6 @@
 import io
 import json
 import ssl
-import time
 import urllib.error
 import zipfile
 from unittest.mock import patch
@@ -216,8 +215,8 @@ class OfflineParsingTests(LMSCase):
     def test_extensions_and_notes_are_explained(self):
         self.assertEqual(ai.upload_kind("page.jpg"), "image")
         self.assertEqual(ai.upload_kind("lesson.docx"), "docx")
-        self.assertIn("нужен ключ", ai.offline_notes("page.jpg"))
-        self.assertIn("нужен ключ", ai.offline_notes("clip.mp4"))
+        self.assertIn("LMS_AI_LOCAL", ai.offline_notes("page.jpg"))
+        self.assertIn("LMS_AI_LOCAL", ai.offline_notes("clip.mp4"))
         self.assertEqual(ai.offline_notes("text.txt"), "")
 
 
@@ -376,9 +375,11 @@ class OnlineModeTests(LMSCase):
         ],
     }
 
-    @override_settings(LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="gemini")
+    @override_settings(
+        LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="ollama", LMS_AI_LOCAL=True
+    )
     def test_online_answer_is_imported_as_drafts(self):
-        with patch("lms.ai._gemini_material", return_value=self.AI_PAYLOAD):
+        with patch("lms.ai._provider_material", return_value=self.AI_PAYLOAD):
             response = self.teacher_client.post(
                 reverse("teacher_ai"), {"target": "mixed", "prompt": "Сделай блок B1"}
             )
@@ -389,29 +390,37 @@ class OnlineModeTests(LMSCase):
         self.assertEqual(Block.objects.get(name="Travel B1").cefr_level, "B1")
         self.assertEqual(Flashcard.objects.count(), 2)
 
-    @override_settings(LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="gemini")
+    @override_settings(
+        LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="ollama", LMS_AI_LOCAL=True
+    )
     def test_provider_failure_falls_back_to_offline(self):
-        with patch("lms.ai._gemini_material", side_effect=ai.AiError("Провайдер недоступен")):
+        with patch("lms.ai._provider_material", side_effect=ai.AiError("Модель недоступна")):
             response = self.teacher_client.post(
                 reverse("teacher_ai"), {"target": "mixed", "text": MARKDOWN}
             )
         self.assertContains(response, "разобран офлайн")
         self.assertContains(response, "Что получилось")
 
-    @override_settings(LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="gemini")
+    @override_settings(
+        LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="ollama", LMS_AI_LOCAL=True
+    )
     def test_online_mode_sends_only_the_prompt_and_file(self):
         captured = {}
 
-        def fake(parts):
-            captured["parts"] = parts
+        def fake(spec, prompt_text, **kwargs):
+            captured["prompt"] = prompt_text
+            captured["spec"] = spec
+            captured["kwargs"] = kwargs
             return self.AI_PAYLOAD
 
-        with patch("lms.ai._gemini_material", side_effect=fake):
+        with patch("lms.ai._provider_material", side_effect=fake):
             self.teacher_client.post(
                 reverse("teacher_ai"), {"target": "cards", "text": "gate | выход"}
             )
-        self.assertEqual(len(captured["parts"]), 1)
-        self.assertIn("карточки", captured["parts"][0]["text"].lower())
+        self.assertEqual(captured["spec"]["key"], "ollama")
+        self.assertEqual(captured["kwargs"], {"filename": "", "blob": b""})
+        self.assertIn("карточки", captured["prompt"].lower())
+        self.assertIn("gate | выход", captured["prompt"])
 
 
 class AssistantModelTests(LMSCase):
@@ -421,10 +430,15 @@ class AssistantModelTests(LMSCase):
             self.assertEqual(ai.ai_mode(), "offline")
         with override_settings(LMS_AI_API_KEY="key"):
             self.assertEqual(ai.ai_mode(), "online")
-            self.assertIn("GigaChat", ai.ai_mode_label())
-            self.assertIn("GigaChat-2", ai.ai_mode_label())
-        with override_settings(LMS_AI_API_KEY="key", LMS_AI_PROVIDER="gemini"):
-            self.assertIn("gemini-2.0-flash", ai.ai_mode_label())
+            self.assertIn("Ollama", ai.ai_mode_label())
+            self.assertIn("qwen3-vl:8b", ai.ai_mode_label())
+        with override_settings(LMS_AI_API_KEY="", LMS_AI_LOCAL=True):
+            self.assertEqual(ai.ai_mode(), "online")
+            self.assertIn("локально", ai.ai_mode_label())
+            self.assertIn("локальная модель", ai.ai_mode_label(mode=None).split("—")[0] or "")
+        with override_settings(LMS_AI_API_KEY="", LMS_AI_LOCAL=False, LMS_AI_PROVIDER="lmstudio"):
+            self.assertEqual(ai.ai_mode(), "offline")
+            self.assertIn("LMS_AI_LOCAL", ai.ai_mode_label())
         with override_settings(LMS_AI_ENABLED=False):
             self.assertEqual(ai.ai_mode(), "off")
             self.assertIn("выключен", ai.ai_mode_label())
@@ -439,73 +453,87 @@ class AssistantModelTests(LMSCase):
 
 
 class ProviderSettingsTests(SimpleTestCase):
-    """Выбор провайдера: доступный из РФ по умолчанию, пресеты и переопределения."""
+    """Локальная модель по умолчанию: Ollama, LM Studio и свой шлюз."""
 
-    def test_default_provider_works_in_russia_without_vpn(self):
-        self.assertEqual(ai.ai_provider(), "gigachat")
+    def test_default_provider_is_local_ollama_with_vision(self):
+        self.assertEqual(ai.ai_provider(), "ollama")
         spec = ai.provider_spec()
-        self.assertEqual(spec["kind"], "gigachat")
-        self.assertEqual(spec["label"], "GigaChat (Сбер)")
-        self.assertEqual(ai.ai_model(), "GigaChat-2")
-        self.assertEqual(ai.ai_endpoint(), "https://api.giga.chat/v1")
+        self.assertEqual(spec["kind"], "openai")
+        self.assertEqual(spec["label"], "Ollama (локальная модель)")
+        self.assertEqual(ai.ai_endpoint(), "http://localhost:11434/v1")
+        self.assertEqual(ai.ai_model(), "qwen3-vl:8b")
         self.assertIn("image", ai.provider_uploads())
-        self.assertIn("сертификат", ai.provider_hint())
+        self.assertIn("vision-модель", ai.provider_hint())
+        self.assertTrue(spec["keyless"])
 
-    def test_legacy_gemini_model_and_endpoint_do_not_leak(self):
-        with override_settings(
-            LMS_AI_PROVIDER="gigachat",
-            LMS_AI_MODEL="gemini-2.0-flash",
-            LMS_AI_ENDPOINT="https://generativelanguage.googleapis.com/v1beta/models",
-        ):
-            self.assertEqual(ai.ai_model(), "GigaChat-2")
-            self.assertEqual(ai.ai_endpoint(), "https://api.giga.chat/v1")
+    def test_there_is_no_cloud_provider_anymore(self):
+        for gone in ("gemini", "gigachat", "yandex", "proxyapi", "openrouter", "deepseek"):
+            self.assertNotIn(gone, ai.PROVIDERS)
+            # Незнакомое имя остаётся рабочим: это свой OpenAI-совместимый шлюз.
+            with override_settings(LMS_AI_PROVIDER=gone, LMS_AI_ENDPOINT="https://gw.example/v1"):
+                self.assertEqual(ai.provider_spec()["kind"], "openai")
+                self.assertEqual(ai.ai_endpoint(), "https://gw.example/v1")
 
-    def test_own_model_value_is_kept_for_openai_compatible_gateway(self):
+    def test_legacy_model_name_does_not_leak(self):
         with override_settings(
-            LMS_AI_PROVIDER="openrouter",
-            LMS_AI_MODEL="google/gemma-3-27b-it:free",
-            LMS_AI_ENDPOINT="",
+            LMS_AI_PROVIDER="ollama", LMS_AI_MODEL="gemini-2.0-flash", LMS_AI_ENDPOINT=""
         ):
-            self.assertEqual(ai.ai_endpoint(), "https://openrouter.ai/api/v1")
-            self.assertEqual(ai.ai_model(), "google/gemma-3-27b-it:free")
-            self.assertEqual(ai.provider_spec()["kind"], "openai")
-
-    def test_yandex_preset_has_no_vision_and_ollama_can_be_local(self):
-        with override_settings(LMS_AI_PROVIDER="yandex", LMS_AI_ENDPOINT=""):
-            self.assertEqual(ai.ai_endpoint(), "https://ai.api.cloud.yandex.net/v1")
-            self.assertEqual(ai.provider_uploads(), ())
-        with override_settings(
-            LMS_AI_PROVIDER="ollama", LMS_AI_MODEL="qwen3:8b", LMS_AI_ENDPOINT=""
-        ):
+            self.assertEqual(ai.ai_model(), "qwen3-vl:8b")
             self.assertEqual(ai.ai_endpoint(), "http://localhost:11434/v1")
-            self.assertEqual(ai.ai_model(), "qwen3:8b")
 
-    def test_unknown_provider_is_treated_as_openai_compatible(self):
+    def test_lmstudio_requires_model_from_settings(self):
+        with override_settings(LMS_AI_PROVIDER="lmstudio", LMS_AI_MODEL="", LMS_AI_ENDPOINT=""):
+            self.assertEqual(ai.ai_endpoint(), "http://localhost:1234/v1")
+            self.assertEqual(ai.ai_model(), "")
+
+    def test_own_model_value_is_kept(self):
         with override_settings(
-            LMS_AI_PROVIDER="my-gateway", LMS_AI_ENDPOINT="https://gw.example/v1/"
+            LMS_AI_PROVIDER="lmstudio", LMS_AI_MODEL="qwen/qwen3-vl-8b", LMS_AI_ENDPOINT=""
         ):
-            spec = ai.provider_spec()
-            self.assertEqual(spec["kind"], "openai")
-            self.assertIn("my-gateway", spec["label"])
-            self.assertEqual(ai.ai_endpoint(), "https://gw.example/v1")
+            self.assertEqual(ai.ai_model(), "qwen/qwen3-vl-8b")
+            self.assertEqual(ai.ai_endpoint(), "http://localhost:1234/v1")
 
     def test_upload_kinds_are_overridable_and_typos_fall_back(self):
-        with override_settings(LMS_AI_UPLOAD_KINDS="pdf"):
-            self.assertEqual(ai.provider_uploads(), ("pdf",))
+        with override_settings(LMS_AI_UPLOAD_KINDS="image"):
+            self.assertEqual(ai.provider_uploads(), ("image",))
         with override_settings(LMS_AI_UPLOAD_KINDS="none"):
             self.assertEqual(ai.provider_uploads(), ())
+        with override_settings(LMS_AI_UPLOAD_KINDS="image,none"):
+            self.assertEqual(ai.provider_uploads(), ("image",))  # лишнее значение отброшено
         with override_settings(LMS_AI_UPLOAD_KINDS="мусор"):
             self.assertEqual(ai.provider_uploads(), ai.provider_spec()["uploads"])
 
-    def test_unsupported_upload_note_explains_provider_limits(self):
-        spec = ai.provider_spec("yandex")
+    def test_local_mode_needs_an_explicit_flag(self):
+        with override_settings(LMS_AI_LOCAL=False, LMS_AI_API_KEY=""):
+            self.assertEqual(ai.ai_mode(), "offline")
+            self.assertIn("LMS_AI_LOCAL", ai.ai_mode_label())
+        with override_settings(LMS_AI_LOCAL=True):
+            self.assertEqual(ai.ai_mode(), "online")
+            self.assertTrue(ai.ai_local())
+        with override_settings(LMS_AI_LOCAL=True, LMS_AI_PROVIDER="openai"):
+            self.assertFalse(ai.ai_local())  # свой шлюз ключом и включается
+            self.assertEqual(ai.ai_mode(), "offline")
+
+    def test_unsupported_upload_note_explains_limits(self):
+        spec = ai.provider_spec()
         self.assertIn("не читает видео", ai.unsupported_upload_note("clip.mp4", spec))
-        self.assertIn("не читает фото", ai.unsupported_upload_note("page.jpg", spec))
+        self.assertIn("vision-модель", ai.unsupported_upload_note("clip.mp4", spec))
+        self.assertIn("не читает PDF", ai.unsupported_upload_note("book.pdf", spec))
         self.assertEqual(ai.unsupported_upload_note("lesson.docx", spec), "")
         self.assertIn("вставьте текст", ai.unsupported_upload_note("virus.exe", spec))
 
-    def test_mov_extension_maps_to_quicktime(self):
-        self.assertEqual(ai._mime_type("clip.mov", b"x"), "video/quicktime")
+    def test_json_mode_defaults_to_off_for_local_models(self):
+        with override_settings(LMS_AI_JSON_MODE=False, LMS_AI_PROVIDER="ollama"):
+            self.assertFalse(ai._json_mode(ai.provider_spec()))
+        with override_settings(LMS_AI_JSON_MODE=True, LMS_AI_PROVIDER="ollama"):
+            self.assertTrue(ai._json_mode(ai.provider_spec()))
+        with override_settings(LMS_AI_JSON_MODE=False, LMS_AI_PROVIDER="openai"):
+            self.assertFalse(ai._json_mode(ai.provider_spec()))
+
+    def test_image_mime_by_extension(self):
+        self.assertEqual(ai._image_mime("page.png"), "image/png")
+        self.assertEqual(ai._image_mime("page.webp"), "image/webp")
+        self.assertEqual(ai._image_mime("scan.heic"), "image/jpeg")
 
     def test_json_from_text_strips_fences_and_prose(self):
         self.assertEqual(ai._json_from_text('```json\n{"blocks": []}\n```'), {"blocks": []})
@@ -519,172 +547,120 @@ class ProviderSettingsTests(SimpleTestCase):
 
 
 class ProviderTransportTests(SimpleTestCase):
-    """Транспорт адаптеров: Gemini, OpenAI-совместимый шлюз и GigaChat с OAuth."""
-
-    def setUp(self):
-        ai._GIGACHAT_TOKEN.update(value="", expires_at=0.0)
-
-    def gemini_response(self, payload=None):
-        return {"candidates": [{"content": {"parts": [{"text": json.dumps(payload or {})}]}}]}
+    """Транспорт локальной модели: запрос, фото data-url, ошибки сервера."""
 
     def openai_response(self, payload=None):
         return {"choices": [{"message": {"content": json.dumps(payload or {})}}]}
 
-    def test_gemini_sends_key_in_header_and_photo_inline(self):
+    def test_request_goes_to_ollama_without_key(self):
         material = {"blocks": [{"name": "Travel"}]}
-        transport = FakeTransport(self.gemini_response(material))
-        with (
-            patch("lms.ai.urllib.request.urlopen", transport),
-            override_settings(LMS_AI_API_KEY="secret", LMS_AI_PROVIDER="gemini"),
-        ):
-            payload = ai._provider_material(
-                ai.provider_spec(), "промпт", filename="page.jpg", blob=b"\xff\xd8\xff"
-            )
-        self.assertEqual(payload, material)
-        request = transport.requests[0]
-        self.assertEqual(
-            request["url"],
-            "https://generativelanguage.googleapis.com/v1beta/models/"
-            "gemini-2.0-flash:generateContent",
-        )
-        self.assertEqual(request["headers"]["x-goog-api-key"], "secret")
-        body = json.loads(request["body"])
-        self.assertEqual(body["contents"][0]["parts"][0]["text"], "промпт")
-        self.assertEqual(body["contents"][0]["parts"][1]["inline_data"]["mime_type"], "image/jpeg")
-
-    def test_openai_compatible_sends_data_url_and_json_mode(self):
-        material = {"blocks": []}
         transport = FakeTransport(self.openai_response(material))
         with (
             patch("lms.ai.urllib.request.urlopen", transport),
-            override_settings(
-                LMS_AI_API_KEY="k",
-                LMS_AI_PROVIDER="openrouter",
-                LMS_AI_MODEL="google/gemma-3-27b-it:free",
-            ),
+            override_settings(LMS_AI_LOCAL=True, LMS_AI_API_KEY=""),
         ):
-            payload = ai._provider_material(
-                ai.provider_spec(), "промпт", filename="page.png", blob=b"\x89PNG"
-            )
+            payload = ai._provider_material(ai.provider_spec(), "промпт")
         self.assertEqual(payload, material)
         request = transport.requests[0]
+        self.assertEqual(request["url"], "http://localhost:11434/v1/chat/completions")
+        self.assertNotIn("authorization", request["headers"])
         body = json.loads(request["body"])
-        self.assertEqual(request["url"], "https://openrouter.ai/api/v1/chat/completions")
-        self.assertEqual(request["headers"]["authorization"], "Bearer k")
-        self.assertEqual(body["model"], "google/gemma-3-27b-it:free")
-        self.assertEqual(body["response_format"], {"type": "json_object"})
-        image = body["messages"][0]["content"][1]["image_url"]["url"]
-        self.assertTrue(image.startswith("data:image/png;base64,"))
+        self.assertEqual(body["model"], "qwen3-vl:8b")
+        self.assertEqual(body["messages"][0]["content"], "промпт")
+        self.assertNotIn("response_format", body)
 
-    def test_local_model_without_json_mode_and_without_key_header(self):
-        transport = FakeTransport(self.openai_response(), self.openai_response())
+    def test_photo_goes_as_data_url_for_vision_model(self):
+        transport = FakeTransport(self.openai_response({"blocks": []}))
         with (
             patch("lms.ai.urllib.request.urlopen", transport),
-            override_settings(
-                LMS_AI_API_KEY="local",
-                LMS_AI_PROVIDER="ollama",
-                LMS_AI_JSON_MODE=False,
-                LMS_AI_UPLOAD_KINDS="none",
-            ),
+            override_settings(LMS_AI_LOCAL=True, LMS_AI_MODEL="qwen2.5vl:7b"),
         ):
-            ai._provider_material(ai.provider_spec(), "промпт")
+            ai._provider_material(
+                ai.provider_spec(), "Разбери страницу", filename="page.png", blob=b"\x89PNG"
+            )
         body = json.loads(transport.requests[0]["body"])
-        self.assertEqual(transport.requests[0]["url"], "http://localhost:11434/v1/chat/completions")
-        self.assertNotIn("response_format", body)
-        self.assertEqual(body["messages"][0]["content"], "промпт")
+        content = body["messages"][0]["content"]
+        self.assertEqual(content[0], {"type": "text", "text": "Разбери страницу"})
+        self.assertTrue(content[1]["image_url"]["url"].startswith("data:image/png;base64,"))
 
-    def test_openai_provider_requires_endpoint(self):
-        with override_settings(LMS_AI_PROVIDER="openai", LMS_AI_ENDPOINT=""):
+    def test_json_mode_and_key_are_used_for_own_gateway(self):
+        transport = FakeTransport(self.openai_response({"blocks": []}))
+        with override_settings(
+            LMS_AI_PROVIDER="my-gateway",
+            LMS_AI_ENDPOINT="https://gw.example/v1",
+            LMS_AI_API_KEY="secret",
+            LMS_AI_MODEL="my-model",
+            LMS_AI_JSON_MODE=True,
+        ):
+            with patch("lms.ai.urllib.request.urlopen", transport):
+                ai._provider_material(ai.provider_spec(), "промпт")
+        body = json.loads(transport.requests[0]["body"])
+        self.assertEqual(transport.requests[0]["url"], "https://gw.example/v1/chat/completions")
+        self.assertEqual(transport.requests[0]["headers"]["authorization"], "Bearer secret")
+        self.assertEqual(body["response_format"], {"type": "json_object"})
+        self.assertEqual(body["model"], "my-model")
+
+    def test_missing_model_and_endpoint_are_explained(self):
+        with override_settings(LMS_AI_PROVIDER="lmstudio", LMS_AI_MODEL="", LMS_AI_ENDPOINT=""):
+            with self.assertRaisesMessage(ai.AiError, "LMS_AI_MODEL"):
+                ai._provider_material(ai.provider_spec(), "промпт")
+        with override_settings(LMS_AI_PROVIDER="my-gateway", LMS_AI_ENDPOINT=""):
             with self.assertRaisesMessage(ai.AiError, "LMS_AI_ENDPOINT"):
                 ai._provider_material(ai.provider_spec(), "промпт")
 
-    def test_gigachat_uploads_attachment_then_reuses_oauth_token(self):
-        material = {"blocks": [{"name": "Travel"}]}
-        transport = FakeTransport(
-            {"access_token": "tok-1", "expires_at": (time.time() + 1800) * 1000},
-            {"id": "file-1"},
-            {"choices": [{"message": {"content": f"```json\n{json.dumps(material)}\n```"}}]},
-        )
+    def test_connection_error_points_to_ollama(self):
+        transport = FakeTransport(urllib.error.URLError(ConnectionRefusedError("refused")))
         with (
             patch("lms.ai.urllib.request.urlopen", transport),
-            override_settings(LMS_AI_API_KEY="auth-key"),
+            override_settings(LMS_AI_LOCAL=True),
         ):
-            payload = ai._provider_material(
-                ai.provider_spec(), "промпт", filename="page.jpg", blob=b"\xff\xd8\xff"
-            )
-        self.assertEqual(payload, material)
-        oauth, upload, chat = transport.requests
-        self.assertEqual(oauth["url"], "https://ngw.devices.sberbank.ru:9443/api/v2/oauth")
-        self.assertEqual(oauth["headers"]["authorization"], "Basic auth-key")
-        self.assertEqual(len(oauth["headers"]["rquid"]), 36)
-        self.assertIn("scope=GIGACHAT_API_PERS", oauth["body"])
-        self.assertEqual(upload["url"], "https://api.giga.chat/v1/files")
-        self.assertEqual(upload["headers"]["authorization"], "Bearer tok-1")
-        self.assertIn('filename="page.jpg"', upload["body"])
-        self.assertIn("Content-Type: image/jpeg", upload["body"])
-        self.assertEqual(json.loads(chat["body"])["messages"][0]["attachments"], ["file-1"])
-        self.assertEqual(json.loads(chat["body"])["model"], "GigaChat-2")
-
-        cached = FakeTransport(self.openai_response())
-        with (
-            patch("lms.ai.urllib.request.urlopen", cached),
-            override_settings(LMS_AI_API_KEY="auth-key"),
-        ):
-            ai._provider_material(ai.provider_spec(), "промпт")
-        self.assertEqual(len(cached.requests), 1)  # токен взят из кэша
-
-    def test_gigachat_reads_v2_content_parts_and_expired_token(self):
-        ai._GIGACHAT_TOKEN.update(value="old", expires_at=0.0)
-        transport = FakeTransport(
-            {"access_token": "tok-2", "expires_at": 0},
-            {"choices": [{"message": {"content": [{"text": '{"blocks": []}'}]}}]},
-        )
-        with (
-            patch("lms.ai.urllib.request.urlopen", transport),
-            override_settings(LMS_AI_API_KEY="auth-key"),
-        ):
-            payload = ai._provider_material(ai.provider_spec(), "промпт")
-        self.assertEqual(payload, {"blocks": []})
-        self.assertEqual(len(transport.requests), 2)  # OAuth + генерация
-
-    def test_gigachat_scope_and_auth_endpoint_can_be_overridden(self):
-        transport = FakeTransport(
-            {"access_token": "tok"}, {"choices": [{"message": {"content": "{}"}}]}
-        )
-        with (
-            patch("lms.ai.urllib.request.urlopen", transport),
-            override_settings(
-                LMS_AI_API_KEY="key",
-                LMS_AI_SCOPE="GIGACHAT_API_B2B",
-                LMS_AI_AUTH_ENDPOINT="https://auth.example/oauth",
-            ),
-        ):
-            ai._provider_material(ai.provider_spec(), "промпт")
-        self.assertEqual(transport.requests[0]["url"], "https://auth.example/oauth")
-        self.assertIn("scope=GIGACHAT_API_B2B", transport.requests[0]["body"])
-
-    def test_key_is_rejected_with_a_readable_error(self):
-        error = urllib.error.HTTPError(
-            "https://api.giga.chat/v1/chat/completions", 401, "Unauthorized", {}, io.BytesIO(b"{}")
-        )
-        transport = FakeTransport({"access_token": "tok"}, error)
-        with (
-            patch("lms.ai.urllib.request.urlopen", transport),
-            override_settings(LMS_AI_API_KEY="bad"),
-        ):
-            with self.assertRaisesMessage(ai.AiError, "Ключ ИИ отклонён"):
+            with self.assertRaisesMessage(ai.AiError, "Запущен ли Ollama"):
                 ai._provider_material(ai.provider_spec(), "промпт")
 
-    def test_tls_error_points_to_mindigital_certificate(self):
+    def test_unknown_model_suggests_ollama_list(self):
+        error = urllib.error.HTTPError(
+            "http://localhost:11434/v1", 404, "Not Found", {}, io.BytesIO(b"")
+        )
+        transport = FakeTransport(error)
+        with (
+            patch("lms.ai.urllib.request.urlopen", transport),
+            override_settings(LMS_AI_LOCAL=True),
+        ):
+            with self.assertRaisesMessage(ai.AiError, "ollama list"):
+                ai._provider_material(ai.provider_spec(), "промпт")
+
+    def test_model_without_json_support_gets_a_readable_error(self):
+        error = urllib.error.HTTPError(
+            "http://localhost:11434/v1", 400, "Bad Request", {}, io.BytesIO(b'{"error":"json"}')
+        )
+        with (
+            patch("lms.ai.urllib.request.urlopen", FakeTransport(error)),
+            override_settings(LMS_AI_LOCAL=True),
+        ):
+            with self.assertRaisesMessage(ai.AiError, "LMS_AI_JSON_MODE=0"):
+                ai._provider_material(ai.provider_spec(), "промпт")
+
+    def test_content_parts_are_joined(self):
+        payload = {
+            "choices": [{"message": {"content": [{"text": '{"blocks":'}, {"text": " []}"}]}}]
+        }
+        transport = FakeTransport(payload)
+        with (
+            patch("lms.ai.urllib.request.urlopen", transport),
+            override_settings(LMS_AI_LOCAL=True),
+        ):
+            self.assertEqual(ai._provider_material(ai.provider_spec(), "п"), {"blocks": []})
+
+    def test_tls_error_explains_ca_bundle(self):
         transport = FakeTransport(
             urllib.error.URLError(ssl.SSLCertVerificationError("self-signed certificate in chain"))
         )
-        with (
-            patch("lms.ai.urllib.request.urlopen", transport),
-            override_settings(LMS_AI_API_KEY="k"),
+        with override_settings(
+            LMS_AI_PROVIDER="gw", LMS_AI_ENDPOINT="https://gw.example/v1", LMS_AI_MODEL="my-model"
         ):
-            with self.assertRaisesMessage(ai.AiError, "НУЦ Минцифры"):
-                ai._provider_material(ai.provider_spec(), "промпт")
+            with patch("lms.ai.urllib.request.urlopen", transport):
+                with self.assertRaisesMessage(ai.AiError, "LMS_AI_CA_BUNDLE"):
+                    ai._provider_material(ai.provider_spec(), "промпт")
 
     def test_ssl_settings_build_the_context(self):
         with override_settings(LMS_AI_VERIFY_SSL=True, LMS_AI_CA_BUNDLE=""):
@@ -696,15 +672,35 @@ class ProviderTransportTests(SimpleTestCase):
             self.assertFalse(ai._ssl_context().verify_mode)  # CERT_NONE — явный отказ админа
 
 
-class ProviderFallbackTests(SimpleTestCase):
-    """Файл, который провайдер не читает, честно уходит в офлайн-разбор."""
+class LocalModelFallbackTests(SimpleTestCase):
+    """Что уходит в модель, что разбирается офлайн и как это объясняется."""
 
-    @override_settings(LMS_AI_ENABLED=True, LMS_AI_API_KEY="key", LMS_AI_PROVIDER="yandex")
-    def test_video_is_not_sent_to_text_provider_and_is_reported(self):
+    @override_settings(LMS_AI_ENABLED=True, LMS_AI_LOCAL=True)
+    def test_photo_goes_to_vision_model_with_text_from_document(self):
         captured = {}
 
         def fake(spec, prompt_text, *, filename="", blob=b""):
-            captured.update(filename=filename, blob=blob, label=spec["label"])
+            captured.update(filename=filename, blob=blob, prompt=prompt_text, label=spec["label"])
+            raise ai.AiError("нет сети")
+
+        upload = SimpleUploadedFile("page.jpg", b"\xff\xd8\xff")
+        with patch("lms.ai._provider_material", side_effect=fake):
+            material, meta = ai.build_material(upload=upload, text=MARKDOWN)
+        self.assertEqual(captured["filename"], "page.jpg")
+        self.assertEqual(captured["blob"], b"\xff\xd8\xff")
+        self.assertIn("# Travel B1", captured["prompt"])
+        self.assertEqual(meta["result"], "offline")
+        self.assertEqual(meta["provider"], "ollama")
+        self.assertIn("Ollama", meta["provider_label"])
+        self.assertTrue(any("разобран офлайн" in note for note in meta["notes"]))
+        self.assertTrue(material["blocks"])
+
+    @override_settings(LMS_AI_ENABLED=True, LMS_AI_LOCAL=True)
+    def test_video_is_not_sent_to_model_and_is_reported(self):
+        captured = {}
+
+        def fake(spec, prompt_text, *, filename="", blob=b""):
+            captured.update(filename=filename, blob=blob)
             raise ai.AiError("нет сети")
 
         upload = SimpleUploadedFile("clip.mp4", b"\x00\x00\x00\x18ftypmp42")
@@ -712,30 +708,27 @@ class ProviderFallbackTests(SimpleTestCase):
             material, meta = ai.build_material(upload=upload, text=MARKDOWN)
         self.assertEqual(captured["filename"], "")
         self.assertEqual(captured["blob"], b"")
-        self.assertEqual(meta["result"], "offline")
-        self.assertEqual(meta["provider"], "yandex")
-        self.assertIn("Yandex AI Studio", meta["provider_label"])
         self.assertTrue(any("не читает видео" in note for note in meta["notes"]))
-        self.assertTrue(any("разобран офлайн" in note for note in meta["notes"]))
+        self.assertTrue(any("vision-модель" in note for note in meta["notes"]))
         self.assertTrue(material["blocks"])
 
-    @override_settings(LMS_AI_ENABLED=True, LMS_AI_API_KEY="key", LMS_AI_PROVIDER="yandex")
-    def test_photo_without_text_asks_for_manual_text(self):
-        upload = SimpleUploadedFile("page.jpg", b"\xff\xd8\xff")
+    @override_settings(LMS_AI_ENABLED=True, LMS_AI_LOCAL=True)
+    def test_video_without_text_asks_for_manual_text(self):
+        upload = SimpleUploadedFile("clip.mp4", b"\x00\x00\x00\x18ftypmp42")
         with patch("lms.ai._provider_material", side_effect=AssertionError("не вызывается")):
             with self.assertRaisesMessage(ai.AiError, "вставьте текст вручную"):
                 ai.build_material(upload=upload)
 
-    @override_settings(LMS_AI_ENABLED=True, LMS_AI_API_KEY="")
+    @override_settings(LMS_AI_ENABLED=True, LMS_AI_LOCAL=False, LMS_AI_API_KEY="")
     def test_offline_mode_reports_that_photo_cannot_be_read(self):
         upload = SimpleUploadedFile("page.jpg", b"\xff\xd8\xff")
         _, meta = ai.build_material(upload=upload, prompt="Соберите тему Travel")
         self.assertEqual(meta["result"], "offline")
-        self.assertTrue(any("нужен ключ ИИ" in note for note in meta["notes"]))
+        self.assertTrue(any("LMS_AI_LOCAL=1" in note for note in meta["notes"]))
 
 
 class AiCheckCommandTests(SimpleTestCase):
-    """`manage.py ai_check`: показать настройки и по флагу --live проверить ключ."""
+    """`manage.py ai_check`: показать настройки и по флагу --live проверить модель."""
 
     SAMPLE_MATERIAL = {
         "blocks": [
@@ -768,46 +761,58 @@ class AiCheckCommandTests(SimpleTestCase):
         ]
     }
 
-    def setUp(self):
-        ai._GIGACHAT_TOKEN.update(value="", expires_at=0.0)
-
     def test_offline_mode_is_reported_without_network(self):
         output = io.StringIO()
         call_command("ai_check", stdout=output)
         text = output.getvalue()
         self.assertIn("Офлайн-разбор", text)
-        self.assertIn("GigaChat (Сбер)", text)
-        self.assertIn("https://api.giga.chat/v1", text)
+        self.assertIn("Ollama (локальная модель)", text)
+        self.assertIn("http://localhost:11434/v1", text)
+        self.assertIn("LMS_AI_LOCAL", text)
 
     @override_settings(LMS_AI_ENABLED=False)
     def test_disabled_assistant_stops_the_check(self):
         with self.assertRaisesMessage(CommandError, "выключен"):
             call_command("ai_check")
 
-    @override_settings(LMS_AI_API_KEY="key")
-    def test_live_check_confirms_the_provider_answer(self):
+    @override_settings(LMS_AI_LOCAL=True)
+    def test_live_check_confirms_the_model_answer(self):
         transport = FakeTransport(
-            {"access_token": "tok", "expires_at": (time.time() + 1800) * 1000},
-            {"choices": [{"message": {"content": json.dumps(self.SAMPLE_MATERIAL)}}]},
+            {"choices": [{"message": {"content": json.dumps(self.SAMPLE_MATERIAL)}}]}
         )
         output = io.StringIO()
         with patch("lms.ai.urllib.request.urlopen", transport):
             call_command("ai_check", "--live", stdout=output)
-        self.assertIn("Провайдер ответил", output.getvalue())
+        self.assertIn("Модель ответила", output.getvalue())
         self.assertIn("Импорт не выполнялся", output.getvalue())
         self.assertEqual(
             [request["url"] for request in transport.requests],
-            [
-                "https://ngw.devices.sberbank.ru:9443/api/v2/oauth",
-                "https://api.giga.chat/v1/chat/completions",
-            ],
+            ["http://localhost:11434/v1/chat/completions"],
         )
+        json.loads(transport.requests[0]["body"])  # тело — корректный JSON
+        self.assertIn("Travel A2", transport.requests[0]["body"])
 
-    @override_settings(LMS_AI_API_KEY="key")
-    def test_live_check_fails_with_the_provider_reason(self):
-        transport = FakeTransport(
-            urllib.error.URLError("network down"), urllib.error.URLError("network down")
-        )
+    @override_settings(LMS_AI_LOCAL=True)
+    def test_live_check_fails_with_the_model_reason(self):
+        transport = FakeTransport(urllib.error.URLError("network down"))
         with patch("lms.ai.urllib.request.urlopen", transport):
             with self.assertRaisesMessage(CommandError, "Онлайн-разбор не сработал"):
                 call_command("ai_check", "--live")
+
+    @override_settings(LMS_AI_LOCAL=True)
+    def test_live_check_warns_about_plain_http_gateway(self):
+        transport = FakeTransport(
+            {"choices": [{"message": {"content": json.dumps(self.SAMPLE_MATERIAL)}}]}
+        )
+        output = io.StringIO()
+        with (
+            patch("lms.ai.urllib.request.urlopen", transport),
+            override_settings(
+                LMS_AI_PROVIDER="gw",
+                LMS_AI_ENDPOINT="http://gw.internal/v1",
+                LMS_AI_MODEL="m",
+                LMS_AI_API_KEY="secret",
+            ),
+        ):
+            call_command("ai_check", "--live", stdout=output)
+        self.assertIn("без HTTPS", output.getvalue())

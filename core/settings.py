@@ -64,6 +64,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    "lms.middleware.UILanguageMiddleware",
     "lms.middleware.UploadLimitMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -169,37 +170,27 @@ if (
 FILE_UPLOAD_PERMISSIONS = 0o600
 FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o700
 # ── ИИ-помощник преподавателя ─────────────────────────────────────────────
-# Гибрид: с ключом провайдера разбираем файл моделью, без ключа — офлайн-эвристиками.
-# Пустой ключ не ошибка: помощник просто работает офлайн. Выключить целиком — LMS_AI_ENABLED=0.
+# Локальная модель: помощник не ходит в облако, материалы остаются на сервере.
+# Пустое включение не делается молча: без LMS_AI_LOCAL=1 (или ключа для своего
+# шлюза) помощник работает офлайн-эвристиками. Выключить целиком — LMS_AI_ENABLED=0.
 LMS_AI_ENABLED = env_bool("LMS_AI_ENABLED", True)
-# Провайдер: gigachat (по умолчанию, доступен из РФ без VPN), gemini, yandex,
-# proxyapi, vsegpt, aitunnel, openrouter, deepseek, qwen, ollama или свой
-# OpenAI-совместимый шлюз через LMS_AI_ENDPOINT. Модель и адрес по умолчанию
-# берутся из lms.ai.PROVIDERS; незнакомое имя провайдера не ошибка.
-LMS_AI_PROVIDER = os.getenv("LMS_AI_PROVIDER", "gigachat").strip().lower() or "gigachat"
+# Провайдер: ollama (по умолчанию), lmstudio или свой OpenAI-совместимый шлюз
+# (незнакомое имя тоже считается OpenAI-совместимым — задайте LMS_AI_ENDPOINT).
+LMS_AI_PROVIDER = os.getenv("LMS_AI_PROVIDER", "ollama").strip().lower() or "ollama"
 LMS_AI_API_KEY = os.getenv("LMS_AI_API_KEY", "").strip()
+# Локальная модель работает без ключа: включается явным флагом.
+LMS_AI_LOCAL = env_bool("LMS_AI_LOCAL", False)
 LMS_AI_MODEL = os.getenv("LMS_AI_MODEL", "").strip()
 LMS_AI_ENDPOINT = os.getenv("LMS_AI_ENDPOINT", "").strip()
-# GigaChat: точка OAuth и scope (GIGACHAT_API_PERS / _B2B / _CORP) задаются явно,
-# если нужен доступ юрлица. Пусто — значения для физлица из описания провайдера.
-LMS_AI_AUTH_ENDPOINT = os.getenv("LMS_AI_AUTH_ENDPOINT", "").strip()
-LMS_AI_SCOPE = os.getenv("LMS_AI_SCOPE", "").strip()
-# TLS: GigaChat отдаёт сертификат НУЦ Минцифры — путь к нему задаётся в LMS_AI_CA_BUNDLE.
+# TLS: нужно только для своего шлюза с внутренним удостоверяющим центром.
 LMS_AI_CA_BUNDLE = os.getenv("LMS_AI_CA_BUNDLE", "").strip()
 LMS_AI_VERIFY_SSL = env_bool("LMS_AI_VERIFY_SSL", True)
-# JSON-режим ответа для OpenAI-совместимых шлюзов (Ollama и часть прокси его не умеют).
-LMS_AI_JSON_MODE = env_bool("LMS_AI_JSON_MODE", True)
-# Какие файлы отправлять провайдеру как вложение: image,pdf,video,audio или none.
+# response_format=json_object: у Ollama/LM Studio выключен по умолчанию,
+# принудительно включается LMS_AI_JSON_MODE=1 (или выключается =0).
+LMS_AI_JSON_MODE = env_bool("LMS_AI_JSON_MODE", False)
+# Какие файлы отправлять модели как вложение: image или none. Пусто — по провайдеру.
 LMS_AI_UPLOAD_KINDS = os.getenv("LMS_AI_UPLOAD_KINDS", "").strip()
 LMS_AI_TIMEOUT = env_int("LMS_AI_TIMEOUT", 60)
-LMS_AI_MAX_FILE_BYTES = env_int("LMS_AI_MAX_FILE_BYTES", 10 * 1024 * 1024)
-LMS_AI_MAX_BLOCKS = env_int("LMS_AI_MAX_BLOCKS", 5)
-LMS_AI_MAX_TOPICS = env_int("LMS_AI_MAX_TOPICS", 30)
-LMS_AI_MAX_ASSIGNMENTS = env_int("LMS_AI_MAX_ASSIGNMENTS", 60)
-LMS_AI_MAX_QUESTIONS = env_int("LMS_AI_MAX_QUESTIONS", 20)
-LMS_AI_MAX_CARDS = env_int("LMS_AI_MAX_CARDS", 300)
-LMS_AI_MAX_TEXT_CHARS = env_int("LMS_AI_MAX_TEXT_CHARS", 12000)
-
 LMS_MAX_FILE_BYTES = env_int("LMS_MAX_FILE_BYTES", 20 * 1024 * 1024)
 LMS_STUDENT_QUOTA_BYTES = env_int("LMS_STUDENT_QUOTA_BYTES", 200 * 1024 * 1024)
 LMS_SUBMISSIONS_PER_HOUR = env_int("LMS_SUBMISSIONS_PER_HOUR", 30)

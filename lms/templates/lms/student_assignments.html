@@ -14,8 +14,8 @@
         </div>
         <input type="hidden" name="mode" value="{{ mode }}">
         <div class="row" style="margin-top:12px">
-            <button class="btn btn-sm" type="submit">Найти</button>
-            {% if query %}<a class="btn btn-ghost btn-sm" href="{% url 'student_assignments' %}">Сбросить</a>{% endif %}
+            <button class="btn btn-sm" type="submit">{% t "Найти" %}</button>
+            {% if query %}<a class="btn btn-ghost btn-sm" href="{% url 'student_assignments' %}">{% t "Сбросить" %}</a>{% endif %}
         </div>
     </form>
 
@@ -57,7 +57,7 @@
 {% block content %}
 <div class="classes-head">
     <div>
-        <h1 class="classes-title">Карта курса</h1>
+        <h1 class="classes-title">{% t "Карта курса" %}</h1>
         <p class="page-note mb-0">Блоки → темы → задания: поиск, фильтр, обложки и быстрый переход в урок.</p>
     </div>
     <div class="classes-toolbar">
@@ -160,7 +160,7 @@
             <div class="empty-ill">🔍</div>
             <h3>{% if query %}Ничего не нашлось{% else %}Пока нет опубликованных заданий{% endif %}</h3>
             <p>{% if query %}Попробуйте другой запрос — например, название темы или блока.{% else %}Как только преподаватель опубликует задания, они появятся на этой странице.{% endif %}</p>
-            {% if query %}<a class="btn btn-secondary" href="{% url 'student_assignments' %}">Показать все задания</a>{% endif %}
+            {% if query %}<a class="btn btn-secondary" href="{% url 'student_assignments' %}">{% t "Показать все задания" %}</a>{% endif %}
         </div>
     </div>
 {% endif %}

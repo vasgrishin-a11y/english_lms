@@ -17,10 +17,10 @@
                         {% include "lms/parts/question_choices.html" with reveal=True %}
                         {% if question.explanation %}<p class="tiny muted mb-0" style="margin-top:6px">{% icon "lightbulb" "icon icon-sm" %} {{ question.explanation }}</p>{% endif %}
                         <div class="row" style="margin-top:8px">
-                            <a class="btn btn-secondary btn-sm" href="{% url 'teacher_question_edit' question.pk %}">{% icon "pencil" %}Изменить</a>
+                            <a class="btn btn-secondary btn-sm" href="{% url 'teacher_question_edit' question.pk %}">{% icon "pencil" %}{% t "Изменить" %}</a>
                             <form method="post" action="{% url 'teacher_question_delete' question.pk %}" data-confirm="Удалить вопрос «{{ question.text|truncatechars:60 }}»?">
                                 {% csrf_token %}
-                                <button class="btn btn-danger-ghost btn-sm" type="submit">{% icon "trash" %}Удалить</button>
+                                <button class="btn btn-danger-ghost btn-sm" type="submit">{% icon "trash" %}{% t "Удалить" %}</button>
                             </form>
                         </div>
                     </li>
@@ -42,7 +42,7 @@
               hx-swap="outerHTML">
             {% csrf_token %}
             {% include "lms/form_fields.html" %}
-            <button class="btn btn-block" type="submit">{% icon "plus" %}Добавить вопрос</button>
+            <button class="btn btn-block" type="submit">{% icon "plus" %}{% t "Добавить вопрос" %}</button>
         </form>
         <p class="tiny muted">Один вариант оценивается целиком; в тесте на несколько вариантов балл делится между верными; в соответствиях — по числу верных пар.</p>
     </section>

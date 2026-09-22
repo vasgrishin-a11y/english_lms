@@ -1,29 +1,31 @@
 """ИИ-помощник преподавателя: файл или текст → структура курса черновиками.
 
-Режим работы гибридный (решение продукта):
+Помощник работает на **локальной модели** — ничего не уходит в облако:
 
-* **online** — задан ключ провайдера (по умолчанию GigaChat, Сбер):
-  материал отправляется в модель вместе с фото/PDF/видео, ответ разбирается
-  в структуру курса;
-* **offline** — ключа нет: работаем без сети, извлекаем текст из файла
-  (DOCX, XLSX, PDF, TXT/MD/CSV) и раскладываем его по структуре эвристиками;
+* ``ollama`` (по умолчанию) — Ollama на http://localhost:11434;
+* ``lmstudio`` — LM Studio на http://localhost:1234;
+* ``openai`` — свой OpenAI-совместимый шлюз через ``LMS_AI_ENDPOINT``.
+
+Фото страницы учебника читает vision-модель (qwen3-vl, qwen2.5vl, gemma3,
+minicpm-v, llava) — картинка уходит в запрос data-url. Текст из DOCX, XLSX,
+PDF и TXT извлекается офлайн и уходит промптом, поэтому модель нужна только
+для «понять материал и собрать структуру».
+
+Режимы:
+
+* **online** — модель включена (``LMS_AI_LOCAL=1`` для локальной или
+  непустой ``LMS_AI_API_KEY`` для своего шлюза);
+* **offline** — модель не включена: работаем без сети, извлекаем текст из
+  файла и раскладываем его по структуре эвристиками;
 * **off** — помощник выключен переменной окружения ``LMS_AI_ENABLED=0``.
-
-Провайдер выбирается переменной ``LMS_AI_PROVIDER`` (см. ``PROVIDERS`` и
-``docs/AI_PROVIDERS.md``): ``gigachat`` — Сбер, работает из России без VPN и
-без карты; ``gemini`` — Google, из России недоступен без VPN; ``openai`` и
-пресеты (``yandex``, ``proxyapi``, ``vsegpt``, ``aitunnel``, ``openrouter``,
-``deepseek``, ``qwen``, ``ollama``) — любой OpenAI-совместимый
-``/chat/completions``. Адаптеры изолированы: смена провайдера — одна строка
-в окружении, код помощника не меняется.
 
 Гарантии: ИИ ничего не публикует сам — импорт всегда создаёт **черновики**;
 ответ модели валидируется и обрезается по лимитам; содержимое файлов не
 логируется (в журнал попадают только счётчики).
 
-Внешних зависимостей нет: запрос к REST API выполняется через ``urllib``,
-архивы Office разбираются стандартным ``zipfile``. Это важно для сборки
-Amvera: ``requirements.txt`` с хешами не меняется.
+Внешних зависимостей нет: запрос к модели идёт через ``urllib``, архивы
+Office разбираются стандартным ``zipfile``. Это важно для сборки Amvera:
+``requirements.txt`` с хешами не меняется.
 """
 
 from __future__ import annotations
@@ -33,15 +35,12 @@ import json
 import logging
 import re
 import ssl
-import time
 import urllib.error
 import urllib.request
-import uuid
 import zipfile
 import zlib
 from dataclasses import dataclass, field
 from io import BytesIO
-from urllib.parse import urlencode
 
 from django.conf import settings
 from django.db import transaction
@@ -121,111 +120,60 @@ class AiError(Exception):
 
 
 # ── Провайдеры ─────────────────────────────────────────────────────────────
-# Ключ задаётся в LMS_AI_PROVIDER. Поле ``kind`` выбирает транспорт:
-#   gemini   — нативный REST Google Gemini (фото, PDF, видео, аудио);
-#   gigachat — нативный REST GigaChat (Сбер): OAuth, вложения, работает в РФ;
-#   openai   — OpenAI-совместимый POST {endpoint}/chat/completions.
-# ``uploads`` — категории файлов, которые провайдер принимает как есть
-# (текст из DOCX/XLSX/PDF/TXT всегда извлекается офлайн и уходит промптом).
-def _openai_provider(label, endpoint, *, model="", uploads=("image",), hint=""):
+# Локальные модели: ни ключа, ни облака, материалы не покидают сервер.
+#   ollama    — Ollama (http://localhost:11434), по умолчанию;
+#   lmstudio  — LM Studio (http://localhost:1234);
+#   openai    — свой OpenAI-совместимый шлюз через LMS_AI_ENDPOINT.
+# Адаптер у всех один: POST {endpoint}/chat/completions. Vision умеют модели
+# qwen3-vl, qwen2.5vl, gemma3, minicpm-v, llava — фото уходят как data-url.
+def _openai_provider(
+    label, endpoint, *, model="", uploads=("image",), keyless=False, json_mode=False, hint=""
+):
     return {
         "kind": "openai",
         "label": label,
         "model": model,
         "endpoint": endpoint,
         "uploads": tuple(uploads),
+        "keyless": keyless,
+        "json_mode": json_mode,
         "hint": hint,
     }
 
 
 PROVIDERS = {
-    # ── доступно из России без VPN и без иностранной карты ──
-    "gigachat": {
-        "kind": "gigachat",
-        "label": "GigaChat (Сбер)",
-        "model": "GigaChat-2",
-        "endpoint": "https://api.giga.chat/v1",
-        "auth_endpoint": "https://ngw.devices.sberbank.ru:9443/api/v2/oauth",
-        "scope": "GIGACHAT_API_PERS",
-        "uploads": ("image", "pdf"),
-        "hint": (
-            "Ключ авторизации — в личном кабинете GigaChat API (developers.sber.ru). "
-            "Freemium для физлиц: бесплатно, без VPN, лимит обновляется раз в год. "
-            "Нужен корневой сертификат НУЦ Минцифры — см. LMS_AI_CA_BUNDLE."
-        ),
-    },
-    "yandex": _openai_provider(
-        "Yandex AI Studio (YandexGPT)",
-        "https://ai.api.cloud.yandex.net/v1",
-        model="gpt://<folder_id>/yandexgpt-5.1",
-        uploads=(),
-        hint=(
-            "Api-Key сервисного аккаунта, модель — gpt://<folder_id>/yandexgpt-5.1. "
-            "Новым аккаунтам Yandex Cloud дают стартовый грант; текст, без фото."
-        ),
-    ),
-    "proxyapi": _openai_provider(
-        "ProxyAPI",
-        "https://api.proxyapi.ru/openai/v1",
-        hint="Российский шлюз к зарубежным моделям, оплата картой РФ, есть дешёвые модели.",
-    ),
-    "vsegpt": _openai_provider(
-        "VseGPT",
-        "https://api.vsegpt.ru/v1",
-        hint="Агрегатор с оплатой в рублях; есть недорогие и бесплатные модели для тестов.",
-    ),
-    "aitunnel": _openai_provider(
-        "AITUNNEL",
-        "https://api.aitunnel.ru/v1",
-        hint="Агрегатор с оплатой в рублях и договором для юрлиц.",
-    ),
-    # ── доступно, но с оговорками ──
-    "openrouter": _openai_provider(
-        "OpenRouter",
-        "https://openrouter.ai/api/v1",
-        hint=(
-            "Есть бесплатные модели (суффикс :free, лимиты запросов в сутки). "
-            "Регистрация из РФ не всегда проходит, часть моделей блокирует РФ-IP."
-        ),
-    ),
-    "deepseek": _openai_provider(
-        "DeepSeek",
-        "https://api.deepseek.com/v1",
-        uploads=(),
-        hint="Дешёвый и доступный из РФ текст без фото; бесплатного тарифа API нет.",
-    ),
-    "qwen": _openai_provider(
-        "Qwen (DashScope)",
-        "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
-        hint="Новым аккаунтам Alibaba дают бесплатную квоту; есть vision-модели Qwen-VL.",
-    ),
     "ollama": _openai_provider(
-        "Локальный Ollama / LM Studio",
+        "Ollama (локальная модель)",
         "http://localhost:11434/v1",
-        uploads=(),
+        model="qwen3-vl:8b",
+        keyless=True,
         hint=(
-            "Совсем без облака: модель работает на своём сервере. "
-            "Ключ не нужен — укажите любой непустой LMS_AI_API_KEY (например, local)."
+            "Модель работает на вашем сервере: ollama pull qwen3-vl:8b. "
+            "Для фото нужна vision-модель (qwen3-vl, qwen2.5vl, gemma3, minicpm-v); "
+            "для слабых машин — gemma3:4b или moondream."
         ),
     ),
-    # ── зарубежные провайдеры: работают, но из РФ недоступны без VPN ──
-    "gemini": {
-        "kind": "gemini",
-        "label": "Google Gemini",
-        "model": "gemini-2.0-flash",
-        "endpoint": "https://generativelanguage.googleapis.com/v1beta/models",
-        "uploads": ("image", "pdf", "video", "audio"),
-        "hint": "Из России API недоступен без VPN и зарубежного аккаунта.",
-    },
+    "lmstudio": _openai_provider(
+        "LM Studio (локальная модель)",
+        "http://localhost:1234/v1",
+        keyless=True,
+        hint=(
+            "В LM Studio запустите сервер (Developer → Start Server) и загрузите "
+            "vision-модель (Qwen3-VL, Gemma, MiniCPM-V). Идентификатор модели "
+            "скопируйте в LMS_AI_MODEL."
+        ),
+    ),
     "openai": _openai_provider(
-        "OpenAI-совместимый API",
+        "Свой OpenAI-совместимый шлюз",
         "",
+        keyless=False,
+        json_mode=True,
         hint="Задайте LMS_AI_ENDPOINT — подойдёт любой шлюз с /chat/completions.",
     ),
 }
 
-DEFAULT_PROVIDER = "gigachat"
-UPLOAD_KINDS = ("image", "pdf", "video", "audio")
+DEFAULT_PROVIDER = "ollama"
+UPLOAD_KINDS = ("image",)
 UPLOAD_KIND_LABELS = {
     "image": "фото и картинки",
     "pdf": "PDF",
@@ -233,11 +181,9 @@ UPLOAD_KIND_LABELS = {
     "audio": "аудио",
     "other": "файлы такого формата",
 }
-# Значения по умолчанию прежних версий: если в .env осталась модель или адрес
-# Gemini, а провайдер уже другой, берём настройки нового провайдера.
-KNOWN_MODEL_PREFIXES = {"gemini": ("gemini",), "gigachat": ("gigachat",)}
-# Кэш OAuth-токена GigaChat: живёт 30 минут, продлеваем заранее (см. _gigachat_token).
-_GIGACHAT_TOKEN = {"value": "", "expires_at": 0.0}
+# Модели прошлых версий: если в .env осталось значение зарубежного провайдера,
+# берём модель выбранного, иначе Ollama попытается скачать чужое имя.
+KNOWN_MODELS = {"gemini-2.0-flash", "GigaChat-2", "gpt://<folder_id>/yandexgpt-5.1"}
 
 
 # ── Настройки и режим ──────────────────────────────────────────────────────
@@ -288,13 +234,11 @@ def ai_model(name=None):
         _setting("LMS_AI_MODEL", ""),
         spec,
         "model",
-        {item["model"] for item in PROVIDERS.values() if item.get("model")},
+        {item["model"] for item in PROVIDERS.values() if item.get("model")} | KNOWN_MODELS,
     )
-    prefixes = KNOWN_MODEL_PREFIXES.get(spec["kind"], ())
-    if configured and prefixes and not configured.lower().startswith(prefixes):
-        logger.warning("ai_model_mismatch provider=%s", spec["key"])
-        return spec["model"] or configured
-    return configured or spec["model"]
+    if not configured:
+        return spec["model"]
+    return configured
 
 
 def ai_endpoint(name=None):
@@ -330,11 +274,23 @@ def provider_hint(spec=None):
     return (spec or provider_spec()).get("hint") or ""
 
 
+def ai_local():
+    """Локальная модель: ключ не нужен, включение — явным LMS_AI_LOCAL=1.
+
+    Без флага помощник остаётся офлайн: иначе каждая страница ждала бы ответа
+    от localhost, которого может и не быть.
+    """
+    spec = provider_spec()
+    return bool(_setting("LMS_AI_LOCAL", False)) and bool(spec.get("keyless"))
+
+
 def ai_mode():
     """Режим помощника: off, offline или online."""
     if not ai_enabled():
         return "off"
-    return "online" if ai_api_key() else "offline"
+    if ai_api_key() or ai_local():
+        return "online"
+    return "offline"
 
 
 def ai_mode_label(mode=None):
@@ -343,8 +299,11 @@ def ai_mode_label(mode=None):
         return "ИИ-помощник выключен администратором"
     if mode == "online":
         spec = provider_spec()
-        return f"ИИ подключён: {spec['label']} · {ai_model(spec['key'])}"
-    return "Офлайн-разбор: ключа нет, работаем без сети"
+        suffix = " · локально, без ключа" if ai_local() and not ai_api_key() else ""
+        return f"ИИ подключён: {spec['label']} · {ai_model(spec['key'])}{suffix}"
+    if ai_enabled() and provider_spec().get("keyless"):
+        return "Офлайн-разбор: локальная модель не включена (LMS_AI_LOCAL=1)"
+    return "Офлайн-разбор: модель не подключена, работаем без сети"
 
 
 def unsupported_upload_note(filename, spec=None):
@@ -357,8 +316,8 @@ def unsupported_upload_note(filename, spec=None):
     label = UPLOAD_KIND_LABELS.get(kind, "этот формат")
     spec = spec or provider_spec()
     return (
-        f"Провайдер {spec['label']} не читает {label}: материал разберём офлайн "
-        f"(текст из документа) — для фото и PDF нужен провайдер с поддержкой вложений."
+        f"{spec['label']} не читает {label}: текст из документа разберём офлайн, "
+        f"а для фото нужна vision-модель (qwen3-vl, qwen2.5vl, gemma3, minicpm-v)."
     )
 
 
@@ -411,9 +370,9 @@ def offline_notes(filename):
     """Чего офлайн-режим сделать не может — показываем честно."""
     kind = upload_kind(filename)
     if kind == "image":
-        return "Офлайн-режим не распознаёт текст на картинках — нужен ключ ИИ."
+        return "Офлайн-режим не распознаёт текст на картинках — включите локальную модель (LMS_AI_LOCAL=1)."
     if kind in {"video", "audio"}:
-        return "Офлайн-режим не смотрит видео и не слушает аудио — нужен ключ ИИ."
+        return "Офлайн-режим не смотрит видео и не слушает аудио — включите локальную модель (LMS_AI_LOCAL=1)."
     if kind == "other":
         return "Такой формат офлайн не разбирается — вставьте текст вручную."
     return ""
@@ -803,47 +762,26 @@ def build_prompt(text, *, prompt="", target="mixed", filename="", kind="text"):
     return "\n\n".join(parts)
 
 
-def _inline_part(filename, blob):
-    kind = upload_kind(filename)
-    if kind == "image":
-        mime = {
-            ".png": "image/png",
-            ".webp": "image/webp",
-            ".gif": "image/gif",
-            ".bmp": "image/bmp",
-        }.get(extension_of(filename), "image/jpeg")
-    elif kind == "pdf":
-        mime = "application/pdf"
-    elif kind == "video":
-        mime = {".mov": "video/quicktime", ".webm": "video/webm"}.get(
-            extension_of(filename), "video/mp4"
-        )
-    elif kind == "audio":
-        mime = {
-            ".mp3": "audio/mpeg",
-            ".wav": "audio/wav",
-            ".ogg": "audio/ogg",
-            ".opus": "audio/opus",
-            ".flac": "audio/flac",
-        }.get(extension_of(filename), "audio/mp4")
-    else:
-        return None
-    return {"inline_data": {"mime_type": mime, "data": base64.b64encode(blob).decode("ascii")}}
+def _image_part(blob, mime):
+    """Картинка для vision-модели: base64 в data-url (Ollama и LM Studio так умеют)."""
+    return base64.b64encode(blob).decode("ascii"), mime
 
 
-def _mime_type(filename, blob=b""):
-    """MIME для вложения: по расширению, иначе — общий бинарный тип."""
-    part = _inline_part(filename, blob or b"\x00")
-    return part["inline_data"]["mime_type"] if part else "application/octet-stream"
+def _image_mime(filename):
+    return {
+        ".png": "image/png",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+        ".bmp": "image/bmp",
+    }.get(extension_of(filename), "image/jpeg")
 
 
 def _ssl_context():
-    """Контекст TLS для запросов к провайдеру.
+    """Контекст TLS для запросов к модели.
 
-    GigaChat отдаёт сертификат НУЦ Минцифры, которого нет в стандартных
-    хранилищах: укажите ``LMS_AI_CA_BUNDLE=/путь/russian_trusted_root_ca.pem``.
-    ``LMS_AI_VERIFY_SSL=0`` полностью отключает проверку — крайняя мера для
-    закрытого контура, потому что открывает дорогу MITM-подмене ключа.
+    Локальные Ollama и LM Studio работают по http и сертификата не требуют.
+    Для своего шлюза с внутренним УЦ укажите ``LMS_AI_CA_BUNDLE``;
+    ``LMS_AI_VERIFY_SSL=0`` отключает проверку целиком — крайняя мера.
     """
     if not bool(_setting("LMS_AI_VERIFY_SSL", True)):
         logger.warning("ai_tls_verification_disabled")
@@ -874,12 +812,19 @@ def _http_json(request, *, provider="", timeout=None):
             detail = ""
         logger.warning("ai_http_error provider=%s status=%s", provider or "?", exc.code)
         if exc.code in {401, 403}:
-            raise AiError("Ключ ИИ отклонён провайдером — проверьте LMS_AI_API_KEY.") from exc
-        if exc.code == 402:
-            raise AiError("Бесплатный лимит провайдера исчерпан — нужен платный пакет.") from exc
-        if exc.code == 429:
-            raise AiError("Лимит запросов бесплатного тарифа исчерпан. Попробуйте позже.") from exc
-        raise AiError(f"Провайдер ИИ вернул ошибку {exc.code}. {detail}") from exc
+            raise AiError("Модель отклонила ключ — проверьте LMS_AI_API_KEY.") from exc
+        if exc.code == 404:
+            raise AiError(
+                f"Модель «{ai_model()}» не найдена. Проверьте имя модели "
+                "(для Ollama: ollama list) — оно должно совпадать с LMS_AI_MODEL."
+            ) from exc
+        if exc.code in {400, 422}:
+            raise AiError(
+                "Модель отклонила запрос — обычно это значит, что она не понимает "
+                "изображения или не поддерживает JSON-ответ (LMS_AI_JSON_MODE=0)."
+                f" Ответ: {detail}"
+            ) from exc
+        raise AiError(f"Модель вернула ошибку {exc.code}. {detail}") from exc
     except urllib.error.URLError as exc:
         reason = getattr(exc, "reason", None)
         if isinstance(reason, ssl.SSLCertVerificationError) or "CERTIFICATE_VERIFY_FAILED" in str(
@@ -887,24 +832,30 @@ def _http_json(request, *, provider="", timeout=None):
         ):
             logger.warning("ai_tls_error provider=%s", provider or "?")
             raise AiError(
-                "TLS-сертификат провайдера не удалось проверить. Для GigaChat нужен корневой "
-                "сертификат НУЦ Минцифры: скачайте его и задайте LMS_AI_CA_BUNDLE "
-                "(см. docs/AI_PROVIDERS.md)."
+                "TLS-сертификат модели не удалось проверить: для своего шлюза задайте "
+                "LMS_AI_CA_BUNDLE или отключите проверку через LMS_AI_VERIFY_SSL=0."
             ) from exc
-        raise AiError("Не удалось связаться с ИИ — сработал офлайн-разбор.") from exc
+        raise AiError(
+            f"Нет связи с моделью по адресу {ai_endpoint() or 'не задан'}. "
+            "Запущен ли Ollama или LM Studio и тот ли адрес в LMS_AI_ENDPOINT? "
+            "Материал разобран офлайн."
+        ) from exc
     except (TimeoutError, OSError) as exc:
-        raise AiError("Не удалось связаться с ИИ — сработал офлайн-разбор.") from exc
+        raise AiError(
+            "Модель не ответила за отведённое время — увеличьте LMS_AI_TIMEOUT "
+            "или возьмите модель поменьше. Материал разобран офлайн."
+        ) from exc
     try:
         return json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise AiError("Провайдер ИИ вернул не JSON — попробуйте ещё раз.") from exc
+        raise AiError("Модель вернула не JSON — попробуйте ещё раз.") from exc
 
 
 def _json_from_text(raw):
     """Ответ модели → JSON материала: снимаем ```-обёртки и текст вокруг объекта."""
     text = re.sub(r"^```(?:json)?|```$", "", str(raw or "").strip(), flags=re.MULTILINE).strip()
     if not text:
-        raise AiError("ИИ вернул пустой ответ — попробуйте ещё раз.")
+        raise AiError("Модель вернула пустой ответ — попробуйте ещё раз.")
     if not text.startswith("{"):
         start, end = text.find("{"), text.rfind("}")
         if start > -1 and end > start:
@@ -912,91 +863,69 @@ def _json_from_text(raw):
     try:
         return json.loads(text)
     except json.JSONDecodeError as exc:
-        raise AiError("Не удалось разобрать ответ ИИ — попробуйте ещё раз.") from exc
+        raise AiError(
+            "Не удалось разобрать ответ модели: возможно, она вернула текст вместо JSON. "
+            "Попробуйте модель побольше или повторите запрос."
+        ) from exc
 
 
 def _chat_text(payload):
-    """Текст ответа из формата OpenAI/GigaChat (``choices[0].message.content``)."""
+    """Текст ответа из формата OpenAI (``choices[0].message.content``)."""
     try:
         content = payload["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as exc:
-        raise AiError("ИИ вернул пустой ответ — попробуйте ещё раз.") from exc
-    if isinstance(content, list):  # /v2/chat/completions GigaChat отдаёт список частей
+        raise AiError("Модель вернула пустой ответ — попробуйте ещё раз.") from exc
+    if isinstance(content, list):  # некоторые локальные серверы отдают список частей
         content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
     return content
 
 
-# ── Адаптеры провайдеров ──────────────────────────────────────────────────
+# ── Адаптер локальной модели ──────────────────────────────────────────────
+def _json_mode(spec):
+    """response_format=json_object: по умолчанию выключен, локальные модели его не любят."""
+    configured = _setting("LMS_AI_JSON_MODE", None)
+    if configured is None:
+        return bool(spec.get("json_mode"))
+    return bool(configured)
+
+
 def _provider_material(spec, prompt_text, *, filename="", blob=b""):
-    """Отправить материал выбранному провайдеру и вернуть разобранный JSON."""
-    if spec["kind"] == "gigachat":
-        return _gigachat_material(spec, prompt_text, filename=filename, blob=blob)
-    if spec["kind"] == "gemini":
-        parts = [{"text": prompt_text}]
-        inline = _inline_part(filename, blob) if blob else None
-        if inline:
-            parts.append(inline)
-        return _gemini_material(parts)
-    return _openai_material(spec, prompt_text, filename=filename, blob=blob)
+    """Отправить материал локальной модели (Ollama, LM Studio, свой шлюз).
 
-
-def _gemini_material(parts):
-    """Google Gemini: generateContent с inline-частями (фото, PDF, видео, аудио)."""
-    model = ai_model()
-    endpoint = ai_endpoint()
-    url = f"{endpoint}/{model}:generateContent"
-    if not url.startswith(("https://", "http://")):
-        raise AiError("Адрес провайдера ИИ настроен неверно — нужен http(s).")
-    body = json.dumps(
-        {
-            "contents": [{"role": "user", "parts": parts}],
-            "generationConfig": {"temperature": 0.2, "responseMimeType": "application/json"},
-        }
-    ).encode("utf-8")
-    request = urllib.request.Request(
-        url,
-        data=body,
-        headers={
-            "Content-Type": "application/json",
-            "x-goog-api-key": ai_api_key(),
-        },
-        method="POST",
-    )
-    payload = _http_json(request, provider="gemini")
-    try:
-        chunks = payload["candidates"][0]["content"]["parts"]
-        raw = "".join(part.get("text", "") for part in chunks)
-    except (KeyError, IndexError, TypeError) as exc:
-        raise AiError("ИИ вернул пустой ответ — попробуйте ещё раз.") from exc
-    return _json_from_text(raw)
-
-
-def _openai_material(spec, prompt_text, *, filename="", blob=b""):
-    """OpenAI-совместимый ``/chat/completions``: Yandex AI Studio, шлюзы, Ollama."""
+    Единый транспорт: ``POST {endpoint}/chat/completions``. Фото уходит
+    data-url в content, как того ждут vision-модели; остальные файлы
+    (DOCX, XLSX, PDF, TXT) к этому моменту уже превращены в текст.
+    """
     endpoint = ai_endpoint()
     if not endpoint:
         raise AiError(
-            "Для OpenAI-совместимого провайдера задайте LMS_AI_ENDPOINT "
-            "(например, https://ai.api.cloud.yandex.net/v1 или https://api.openai.com/v1)."
+            "Задайте LMS_AI_ENDPOINT — адрес OpenAI-совместимого сервера модели "
+            "(например, http://localhost:11434/v1)."
+        )
+    if not endpoint.startswith(("http://", "https://")):
+        raise AiError("Адрес модели настроен неверно — нужен http(s).")
+    model = ai_model()
+    if not model:
+        raise AiError(
+            "Не выбрана модель: укажите LMS_AI_MODEL (для LM Studio — идентификатор "
+            "загруженной модели, для Ollama — имя из `ollama list`)."
         )
     content = prompt_text
-    inline = _inline_part(filename, blob) if blob else None
-    if inline:
-        mime = inline["inline_data"]["mime_type"]
-        data = inline["inline_data"]["data"]
+    if blob:
+        data, mime = _image_part(blob, _image_mime(filename))
         content = [
             {"type": "text", "text": prompt_text},
             {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{data}"}},
         ]
     body = {
-        "model": ai_model(),
+        "model": model,
         "messages": [{"role": "user", "content": content}],
         "temperature": 0.2,
     }
-    if bool(_setting("LMS_AI_JSON_MODE", True)):
+    if _json_mode(spec):
         body["response_format"] = {"type": "json_object"}
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
-    if ai_api_key():  # локальный Ollama работает без ключа
+    if ai_api_key():  # локальные Ollama и LM Studio ключа не требуют
         headers["Authorization"] = f"Bearer {ai_api_key()}"
     request = urllib.request.Request(
         f"{endpoint}/chat/completions",
@@ -1005,79 +934,6 @@ def _openai_material(spec, prompt_text, *, filename="", blob=b""):
         method="POST",
     )
     return _json_from_text(_chat_text(_http_json(request, provider=spec["label"])))
-
-
-def _gigachat_token(spec):
-    """OAuth GigaChat: access_token живёт 30 минут, поэтому кэшируем его в памяти."""
-    now = time.time()
-    if _GIGACHAT_TOKEN["value"] and _GIGACHAT_TOKEN["expires_at"] > now + 60:
-        return _GIGACHAT_TOKEN["value"]
-    auth_url = str(_setting("LMS_AI_AUTH_ENDPOINT", "") or "").strip() or spec["auth_endpoint"]
-    scope = str(_setting("LMS_AI_SCOPE", "") or "").strip() or spec["scope"]
-    request = urllib.request.Request(
-        auth_url,
-        data=urlencode({"scope": scope}).encode("ascii"),
-        headers={
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Accept": "application/json",
-            "RqUID": str(uuid.uuid4()),
-            "Authorization": f"Basic {ai_api_key()}",
-        },
-        method="POST",
-    )
-    payload = _http_json(request, provider="gigachat")
-    token = str(payload.get("access_token") or "")
-    if not token:
-        raise AiError("GigaChat не выдал токен доступа — проверьте ключ авторизации.")
-    expires_at = float(payload.get("expires_at") or 0) / 1000
-    _GIGACHAT_TOKEN.update(value=token, expires_at=expires_at or (now + 25 * 60))
-    return token
-
-
-def _gigachat_attachment(spec, token, filename, blob):
-    """Загрузить фото или PDF в хранилище GigaChat и вернуть id вложения."""
-    name = re.sub(r'[\\/\r\n"]', "_", (filename or "material").strip()) or "material"
-    boundary = f"----lms{uuid.uuid4().hex}"
-    head = (
-        f'--{boundary}\r\nContent-Disposition: form-data; name="purpose"\r\n\r\ngeneral\r\n'
-        f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{name}"\r\n'
-        f"Content-Type: {_mime_type(filename, blob)}\r\n\r\n"
-    ).encode("utf-8")
-    request = urllib.request.Request(
-        f"{ai_endpoint()}/files",
-        data=head + blob + f"\r\n--{boundary}--\r\n".encode("ascii"),
-        headers={
-            "Content-Type": f"multipart/form-data; boundary={boundary}",
-            "Accept": "application/json",
-            "Authorization": f"Bearer {token}",
-        },
-        method="POST",
-    )
-    file_id = str(_http_json(request, provider="gigachat").get("id") or "")
-    if not file_id:
-        raise AiError("GigaChat не принял файл — попробуйте другой формат или сжатую копию.")
-    return file_id
-
-
-def _gigachat_material(spec, prompt_text, *, filename="", blob=b""):
-    """GigaChat (Сбер): OAuth → вложение → chat/completions, работает в РФ без VPN."""
-    token = _gigachat_token(spec)
-    message = {"role": "user", "content": prompt_text}
-    if blob:
-        message["attachments"] = [_gigachat_attachment(spec, token, filename, blob)]
-    request = urllib.request.Request(
-        f"{ai_endpoint()}/chat/completions",
-        data=json.dumps({"model": ai_model(), "messages": [message], "temperature": 0.2}).encode(
-            "utf-8"
-        ),
-        headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "Authorization": f"Bearer {token}",
-        },
-        method="POST",
-    )
-    return _json_from_text(_chat_text(_http_json(request, provider="gigachat")))
 
 
 # ── Нормализация и валидация ──────────────────────────────────────────────

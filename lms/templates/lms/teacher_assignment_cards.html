@@ -7,9 +7,9 @@
 {% block content %}
 <nav aria-label="Хлебные крошки">
     <ol class="crumbs">
-        <li><a href="{% url 'teacher_curriculum' %}">Карта курса</a></li>
+        <li><a href="{% url 'teacher_curriculum' %}">{% t "Карта курса" %}</a></li>
         <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_assignment_form' assignment.pk %}">{{ assignment.title }}</a></li>
-        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">Карточки</span></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">{% t "Карточки" %}</span></li>
     </ol>
 </nav>
 
@@ -19,10 +19,10 @@
         <p class="page-note">{{ assignment.topic.block.name }} · {{ assignment.topic.title }} · {{ cards|length }} карточек · тренировали {{ learners }} учеников</p>
     </div>
     <div class="row">
-        <a class="btn btn-secondary" href="{% url 'teacher_assignment_form' assignment.pk %}">{% icon "pencil" %}Настройки задания</a>
+        <a class="btn btn-secondary" href="{% url 'teacher_assignment_form' assignment.pk %}">{% icon "pencil" %}{% t "Настройки задания" %}</a>
         <form method="post" action="{% url 'teacher_assignment_delete' assignment.pk %}" data-confirm="Удалить задание «{{ assignment.title }}» вместе с карточками?">
             {% csrf_token %}
-            <button class="btn btn-danger-ghost" type="submit">{% icon "trash" %}Удалить задание</button>
+            <button class="btn btn-danger-ghost" type="submit">{% icon "trash" %}{% t "Удалить задание" %}</button>
         </form>
     </div>
 </div>
@@ -81,11 +81,11 @@
                                     </span>
                                 </span>
                                 <span class="preset-pick-actions">
-                                    <button class="btn btn-secondary btn-sm" type="button" data-card-preset="{{ preset.id }}">{% icon "upload" %}В импорт</button>
+                                    <button class="btn btn-secondary btn-sm" type="button" data-card-preset="{{ preset.id }}">{% icon "upload" %}{% t "В импорт" %}</button>
                                     <form method="post">
                                         {% csrf_token %}
                                         <input type="hidden" name="preset_id" value="{{ preset.id }}">
-                                        <button class="btn btn-sm" type="submit" name="_preset" value="1">{% icon "plus" %}Добавить сразу</button>
+                                        <button class="btn btn-sm" type="submit" name="_preset" value="1">{% icon "plus" %}{% t "Добавить сразу" %}</button>
                                     </form>
                                 </span>
                             </li>
@@ -104,7 +104,7 @@
             <form method="post" novalidate>
                 {% csrf_token %}
                 {% include "lms/form_fields.html" with form=card_form %}
-                <button class="btn btn-block" type="submit" name="_single" value="1">{% icon "plus" %}Добавить карточку</button>
+                <button class="btn btn-block" type="submit" name="_single" value="1">{% icon "plus" %}{% t "Добавить карточку" %}</button>
             </form>
         </section>
 
@@ -113,7 +113,7 @@
             <form method="post" novalidate>
                 {% csrf_token %}
                 {% include "lms/form_fields.html" with form=bulk_form %}
-                <button class="btn btn-secondary btn-block" type="submit" name="_bulk" value="1">{% icon "upload" %}Импортировать список</button>
+                <button class="btn btn-secondary btn-block" type="submit" name="_bulk" value="1">{% icon "upload" %}{% t "Импортировать список" %}</button>
             </form>
             <p class="tiny muted mb-0">Формат: <code>front | back</code> или <code>front | back | example</code>, по одной карточке на строку. Пустые строки пропускаются.</p>
         </section>

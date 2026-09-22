@@ -13,8 +13,8 @@
             <input id="id_q" type="search" name="q" maxlength="200" value="{{ query }}" placeholder="Задание, тема, блок…" data-suggest="{% url 'suggest' %}" data-suggest-scope="curriculum" autocomplete="off">
         </div>
         <div class="row" style="margin-top:12px">
-            <button class="btn btn-sm" type="submit">Найти</button>
-            {% if query %}<a class="btn btn-ghost btn-sm" href="{% url 'teacher_curriculum' %}">Сбросить</a>{% endif %}
+            <button class="btn btn-sm" type="submit">{% t "Найти" %}</button>
+            {% if query %}<a class="btn btn-ghost btn-sm" href="{% url 'teacher_curriculum' %}">{% t "Сбросить" %}</a>{% endif %}
         </div>
     </form>
     <div class="rail-card">
@@ -31,10 +31,10 @@
     <div class="rail-card">
         <p class="rail-title">Добавить</p>
         <div class="col" style="gap:8px">
-            <a class="btn btn-sm btn-block" href="{% url 'teacher_assignment_new' %}">{% icon "plus" %}Задание</a>
-            <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_block_new' %}">{% icon "plus" %}Блок</a>
-            <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_topic_new' %}">{% icon "plus" %}Тема</a>
-            <a class="btn btn-ghost btn-sm btn-block" href="{% url 'teacher_library' %}">{% icon "database" %}Из библиотеки</a>
+            <a class="btn btn-sm btn-block" href="{% url 'teacher_assignment_new' %}">{% icon "plus" %}{% t "Задание" %}</a>
+            <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_block_new' %}">{% icon "plus" %}{% t "Блок" %}</a>
+            <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_topic_new' %}">{% icon "plus" %}{% t "Тема" %}</a>
+            <a class="btn btn-ghost btn-sm btn-block" href="{% url 'teacher_library' %}">{% icon "database" %}{% t "Из библиотеки" %}</a>
         </div>
     </div>
 </aside>
@@ -43,7 +43,7 @@
 {% block content %}
 <div class="classes-head">
     <div>
-        <h1 class="classes-title">Курс</h1>
+        <h1 class="classes-title">{% t "Курс" %}</h1>
         <p class="muted small mb-0">Карта курса: блоки, темы и задания — с обложкой, типом, счётчиками и быстрым доступом.</p>
     </div>
     <div class="classes-toolbar">
@@ -51,10 +51,10 @@
             {% icon "search" %}
             <input type="search" value="{{ query }}" placeholder="Поиск по курсу" readonly aria-label="Поиск">
         </div>
-        <a class="btn btn-secondary btn-sm" href="{% url 'teacher_library' %}">{% icon "database" %}Библиотека</a>
-        <a class="btn btn-ghost btn-sm" href="{% url 'teacher_archive' %}">{% icon "archive" %}Архив</a>
-        <a class="btn btn-secondary btn-sm" href="{% url 'teacher_ai' %}">{% icon "sparkles" %}ИИ-помощник</a>
-        <a class="btn btn-sm" href="{% url 'teacher_block_new' %}">{% icon "plus" %}Новый блок</a>
+        <a class="btn btn-secondary btn-sm" href="{% url 'teacher_library' %}">{% icon "database" %}{% t "Библиотека" %}</a>
+        <a class="btn btn-ghost btn-sm" href="{% url 'teacher_archive' %}">{% icon "archive" %}{% t "Архив" %}</a>
+        <a class="btn btn-secondary btn-sm" href="{% url 'teacher_ai' %}">{% icon "sparkles" %}{% t "ИИ-помощник" %}</a>
+        <a class="btn btn-sm" href="{% url 'teacher_block_new' %}">{% icon "plus" %}{% t "Новый блок" %}</a>
     </div>
 </div>
 
@@ -106,15 +106,32 @@
                 </div>
                 <div class="row row-tight">
                     <span class="tiny muted tnum">{{ block_item.topics|length }} тем · {{ block_item.assignments }} заданий{% if block_item.flashcards %} · {{ block_item.flashcards }} с карточками{% endif %}</span>
-                    <a class="btn btn-ghost btn-sm" href="{% url 'teacher_block_edit' block.pk %}">{% icon "pencil" %}Изменить</a>
+                    <a class="btn btn-ghost btn-sm" href="{% url 'teacher_block_edit' block.pk %}">{% icon "pencil" %}{% t "Изменить" %}</a>
                     <form method="post" action="{% url 'teacher_archive_item' 'block' block.pk %}" data-confirm="Переместить блок «{{ block.name }}» в архив вместе со всеми темами и заданиями?">
-                        {% csrf_token %}<button class="btn btn-ghost btn-sm" type="submit">{% icon "archive" %}<span class="sr-only">Архивировать блок</span></button>
+                        {% csrf_token %}<button class="btn btn-ghost btn-sm" type="submit">{% icon "archive" %}<span class="sr-only">{% t "Архивировать блок" %}</span></button>
                     </form>
-                    {% if not block_item.topics %}
-                        <form method="post" action="{% url 'teacher_block_delete' block.pk %}" data-confirm="Удалить блок «{{ block.name }}» навсегда? Это действие нельзя отменить.">
-                            {% csrf_token %}<button class="btn btn-danger-ghost btn-sm" type="submit" title="Удалить навсегда">{% icon "trash" %}<span class="sr-only">Удалить блок навсегда</span></button>
-                        </form>
-                    {% endif %}
+                    <details class="danger-zone">
+                        <summary class="btn btn-danger-ghost btn-sm" title="{% t 'Удалить блок целиком' %}">{% icon "trash" %}<span class="sr-only">{% t "Удалить блок целиком" %}</span></summary>
+                        <div class="panel danger-panel">
+                            <p class="small strong mb-0">Удалить блок «{{ block.name }}» целиком?</p>
+                            <p class="tiny muted mb-0">
+                                Вместе с блоком исчезнут темы ({{ block_item.topics|length }}),
+                                задания и карточки. Работы учеников не удаляются: если они есть,
+                                удаление будет отклонено — используйте архив.
+                            </p>
+                            <div class="row row-tight">
+                                <form method="post" action="{% url 'teacher_block_delete' block.pk %}" data-confirm="Удалить блок «{{ block.name }}» вместе со всеми темами, заданиями, вопросами и карточками? Отменить это будет нельзя.">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="confirm" value="1">
+                                    <button class="btn btn-danger btn-sm" type="submit">{% icon "trash" %}{% t "Удалить всё" %}</button>
+                                </form>
+                                <form method="post" action="{% url 'teacher_archive_item' 'block' block.pk %}" data-confirm="Переместить блок «{{ block.name }}» в архив вместе со всеми темами и заданиями?">
+                                    {% csrf_token %}
+                                    <button class="btn btn-ghost btn-sm" type="submit">{% icon "archive" %}{% t "В архив" %}</button>
+                                </form>
+                            </div>
+                        </div>
+                    </details>
                 </div>
             </div>
 
@@ -127,16 +144,29 @@
                                 <p class="tiny muted mb-0">{{ topic_item.assignments|length }} задани{{ topic_item.assignments|length|pluralize:"е,я,й" }}{% if topic_item.flashcards %} · {{ topic_item.flashcards }} с карточками{% endif %}{% if topic_item.waiting %} · ждут {{ topic_item.waiting }}{% endif %}{% if not topic.is_active %} · скрыта{% endif %}</p>
                             </div>
                             <div class="row row-tight">
-                                <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_new' %}?topic={{ topic.pk }}">{% icon "plus" %}Задание</a>
-                                <a class="btn btn-ghost btn-sm" href="{% url 'teacher_topic_edit' topic.pk %}">{% icon "pencil" %}<span class="sr-only">Изменить тему</span></a>
+                                <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_new' %}?topic={{ topic.pk }}">{% icon "plus" %}{% t "Задание" %}</a>
+                                <a class="btn btn-ghost btn-sm" href="{% url 'teacher_topic_edit' topic.pk %}">{% icon "pencil" %}<span class="sr-only">{% t "Изменить тему" %}</span></a>
                                 <form method="post" action="{% url 'teacher_archive_item' 'topic' topic.pk %}" data-confirm="Переместить тему «{{ topic.title }}» в архив вместе со всеми заданиями?">
-                                    {% csrf_token %}<button class="btn btn-ghost btn-sm" type="submit">{% icon "archive" %}<span class="sr-only">Архивировать тему</span></button>
+                                    {% csrf_token %}<button class="btn btn-ghost btn-sm" type="submit">{% icon "archive" %}<span class="sr-only">{% t "Архивировать тему" %}</span></button>
                                 </form>
-                                {% if not topic_item.assignments %}
-                                    <form method="post" action="{% url 'teacher_topic_delete' topic.pk %}" data-confirm="Удалить тему «{{ topic.title }}» навсегда? Это действие нельзя отменить.">
-                                        {% csrf_token %}<button class="btn btn-danger-ghost btn-sm" type="submit" title="Удалить навсегда">{% icon "trash" %}<span class="sr-only">Удалить тему навсегда</span></button>
-                                    </form>
-                                {% endif %}
+                                <details class="danger-zone">
+                                    <summary class="btn btn-danger-ghost btn-sm" title="{% t 'Удалить тему целиком' %}">{% icon "trash" %}<span class="sr-only">{% t "Удалить тему целиком" %}</span></summary>
+                                    <div class="panel danger-panel">
+                                        <p class="small strong mb-0">Удалить тему «{{ topic.title }}» целиком?</p>
+                                        <p class="tiny muted mb-0">Задания ({{ topic_item.assignments|length }}), вопросы тестов и карточки темы будут удалены. Работы учеников защищены: с ними удаление отклонится.</p>
+                                        <div class="row row-tight">
+                                            <form method="post" action="{% url 'teacher_topic_delete' topic.pk %}" data-confirm="Удалить тему «{{ topic.title }}» вместе с заданиями, вопросами и карточками? Отменить это будет нельзя.">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="confirm" value="1">
+                                                <button class="btn btn-danger btn-sm" type="submit">{% icon "trash" %}{% t "Удалить всё" %}</button>
+                                            </form>
+                                            <form method="post" action="{% url 'teacher_archive_item' 'topic' topic.pk %}" data-confirm="Переместить тему «{{ topic.title }}» в архив вместе со всеми заданиями?">
+                                                {% csrf_token %}
+                                                <button class="btn btn-ghost btn-sm" type="submit">{% icon "archive" %}{% t "В архив" %}</button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </details>
                             </div>
                         </div>
                         {% if topic.description %}<p class="small muted">{{ topic.description }}</p>{% endif %}
@@ -161,16 +191,16 @@
                                                 </span>
                                                 <span class="row-side">
                                                     {% if assignment.is_flashcards %}
-                                                        <a class="btn btn-secondary btn-sm" href="{% url 'teacher_assignment_cards' assignment.pk %}">{% icon "cards" %}Карточки</a>
+                                                        <a class="btn btn-secondary btn-sm" href="{% url 'teacher_assignment_cards' assignment.pk %}">{% icon "cards" %}{% t "Карточки" %}</a>
                                                     {% endif %}
                                                     <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_preview' assignment.pk %}">{% icon "eye" %}</a>
-                                                    <a class="btn btn-secondary btn-sm" href="{% url 'teacher_assignment_form' assignment.pk %}">Изменить</a>
+                                                    <a class="btn btn-secondary btn-sm" href="{% url 'teacher_assignment_form' assignment.pk %}">{% t "Изменить" %}</a>
                                                     <form method="post" action="{% url 'teacher_archive_item' 'assignment' assignment.pk %}" data-confirm="Переместить задание «{{ assignment.title }}» в архив? История сдач сохранится.">
-                                                        {% csrf_token %}<button class="btn btn-ghost btn-sm" type="submit" title="Архивировать">{% icon "archive" %}<span class="sr-only">Архивировать задание</span></button>
+                                                        {% csrf_token %}<button class="btn btn-ghost btn-sm" type="submit" title="Архивировать">{% icon "archive" %}<span class="sr-only">{% t "Архивировать задание" %}</span></button>
                                                     </form>
                                                     {% if not stats.students %}
                                                         <form method="post" action="{% url 'teacher_assignment_delete' assignment.pk %}" data-confirm="Удалить задание «{{ assignment.title }}» навсегда? Это действие нельзя отменить.">
-                                                            {% csrf_token %}<button class="btn btn-danger-ghost btn-sm" type="submit" title="Удалить навсегда">{% icon "trash" %}<span class="sr-only">Удалить задание навсегда</span></button>
+                                                            {% csrf_token %}<button class="btn btn-danger-ghost btn-sm" type="submit" title="{% t 'Удалить навсегда' %}">{% icon "trash" %}<span class="sr-only">{% t "Удалить задание навсегда" %}</span></button>
                                                         </form>
                                                     {% endif %}
                                                 </span>
@@ -180,12 +210,12 @@
                                 {% endfor %}
                             </ul>
                         {% else %}
-                            <p class="small muted mb-0">В теме нет заданий. <a href="{% url 'teacher_assignment_new' %}?topic={{ topic.pk }}">Добавить задание</a> или <a href="{% url 'teacher_assignment_new' %}?type=flashcards&amp;topic={{ topic.pk }}">карточки-тренажёр</a>.</p>
+                            <p class="small muted mb-0">В теме нет заданий. <a href="{% url 'teacher_assignment_new' %}?topic={{ topic.pk }}">{% t "Добавить задание" %}</a> или <a href="{% url 'teacher_assignment_new' %}?type=flashcards&amp;topic={{ topic.pk }}">карточки-тренажёр</a>.</p>
                         {% endif %}
                     </div>
                 {% endwith %}
             {% empty %}
-                <p class="muted small">В блоке нет тем. <a href="{% url 'teacher_topic_new' %}?block={{ block.pk }}">Добавить тему</a>.</p>
+                <p class="muted small">В блоке нет тем. <a href="{% url 'teacher_topic_new' %}?block={{ block.pk }}">{% t "Добавить тему" %}</a>.</p>
             {% endfor %}
         </section>
     {% endwith %}
@@ -195,10 +225,10 @@
             <div class="empty-ill">🌍</div>
             <h3>Курс пока пустой</h3>
             <p>Создайте первый блок: обложка генерируется автоматически, внутри — темы с заданиями и карточками.</p>
-            <p><a class="btn btn-secondary" href="{% url 'teacher_ai' %}">{% icon "sparkles" %}Собрать блок из файла</a></p>
+            <p><a class="btn btn-secondary" href="{% url 'teacher_ai' %}">{% icon "sparkles" %}{% t "Собрать блок из файла" %}</a></p>
             <div class="row row-tight">
-                <a class="btn" href="{% url 'teacher_block_new' %}">Создать блок</a>
-                <a class="btn btn-secondary" href="{% url 'teacher_library' %}">{% icon "database" %}Взять готовый курс</a>
+                <a class="btn" href="{% url 'teacher_block_new' %}">{% t "Создать блок" %}</a>
+                <a class="btn btn-secondary" href="{% url 'teacher_library' %}">{% icon "database" %}{% t "Взять готовый курс" %}</a>
             </div>
         </div>
     </div>

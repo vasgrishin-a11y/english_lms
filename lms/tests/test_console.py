@@ -5,11 +5,16 @@
 чужие шаблоны комментариев, отбрасывание мусорных параметров фильтра.
 """
 
+import io
+import zipfile
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.test import SimpleTestCase
+from django.urls import reverse
 from django.utils import timezone
 
+from lms import xlsx
 from lms.models import (
     AnswerDraft,
     Assignment,
@@ -380,11 +385,73 @@ class CurriculumTreeTests(LMSCase):
         self.assertTrue(second.slug.startswith("english"))
 
     def test_protected_block_delete_reports_reason(self):
-        response = self.teacher_client.post(f"/teacher/curriculum/blocks/{self.block.pk}/delete/")
+        """Работы учеников защищают поддерево: удаление отклоняется, предлагается архив."""
+        assignment = Assignment.objects.create(
+            topic=self.topic,
+            title="Quiz",
+            description="Answer.",
+            assignment_type=Assignment.Type.TEXT,
+            max_points=10,
+            status=Assignment.Publication.PUBLISHED,
+        )
+        self.student_client.post(
+            reverse("assignment_detail", args=[assignment.pk]),
+            {"expected_version": 0, "text_answer": "My answer"},
+        )
+        response = self.teacher_client.post(
+            f"/teacher/curriculum/blocks/{self.block.pk}/delete/", {"confirm": "1"}
+        )
         self.assertRedirects(response, "/teacher/curriculum/")
         self.assertTrue(Block.objects.filter(pk=self.block.pk).exists())
         messages = list(response.wsgi_request._messages)
         self.assertIn("нельзя удалить", str(messages[0]))
+        self.assertIn("работы учеников", str(messages[0]))
+
+    def test_block_with_contents_is_deleted_in_one_action(self):
+        assignment = Assignment.objects.create(
+            topic=self.topic,
+            title="Grammar drill",
+            description="Fill in the gaps.",
+            assignment_type=Assignment.Type.TEXT,
+            max_points=10,
+            status=Assignment.Publication.PUBLISHED,
+        )
+        Question.objects.create(
+            assignment=assignment, text="___ you like tea?", kind=Question.Kind.GAP, order=1
+        )
+        Flashcard.objects.create(assignment=assignment, front="tea", back="чай", order=1)
+        response = self.teacher_client.post(
+            f"/teacher/curriculum/blocks/{self.block.pk}/delete/", {"confirm": "1"}
+        )
+        self.assertRedirects(response, "/teacher/curriculum/")
+        self.assertFalse(Block.objects.filter(pk=self.block.pk).exists())
+        self.assertFalse(Topic.objects.filter(pk=self.topic.pk).exists())
+        self.assertEqual(Assignment.objects.filter(pk=assignment.pk).count(), 0)
+        self.assertEqual(Flashcard.objects.count(), 0)
+        message = str(list(response.wsgi_request._messages)[0])
+        self.assertIn("вместе с содержимым", message)
+        self.assertIn("тем 1", message)
+        self.assertIn("вопросов 1", message)
+        self.assertIn("карточек 1", message)
+
+    def test_cascade_delete_needs_confirmation(self):
+        self.teacher_client.post(f"/teacher/curriculum/blocks/{self.block.pk}/delete/")
+        self.assertTrue(Block.objects.filter(pk=self.block.pk).exists())
+
+    def test_topic_with_assignments_is_deleted_in_one_action(self):
+        Assignment.objects.create(
+            topic=self.topic,
+            title="Only task",
+            description="Do it.",
+            assignment_type=Assignment.Type.TEXT,
+            max_points=5,
+        )
+        response = self.teacher_client.post(
+            f"/teacher/curriculum/topics/{self.topic.pk}/delete/", {"confirm": "1"}
+        )
+        self.assertRedirects(response, "/teacher/curriculum/")
+        self.assertFalse(Topic.objects.filter(pk=self.topic.pk).exists())
+        self.assertTrue(Block.objects.filter(pk=self.block.pk).exists())
 
     def test_block_move_reorders_and_reports_edges(self):
         second = Block.objects.create(name="Second", slug="second", order=0)
@@ -931,22 +998,18 @@ class AnalyticsTests(LMSCase):
         response = self.teacher_client.get("/teacher/analytics/?block=abc&topic=xyz")
         self.assertEqual(len(response.context["assignments"]), 2)
 
-    def test_csv_export(self):
-        attempt = self.submit()
-        self.review(attempt, grade=80)
-        response = self.teacher_client.get("/teacher/analytics/export.csv")
+    def test_xlsx_export_opens_as_a_spreadsheet(self):
+        response = self.teacher_client.get("/teacher/analytics/export.xlsx")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("text/csv", response["Content-Type"])
-        self.assertIn("attachment", response["Content-Disposition"])
-        body = response.content.decode("utf-8")
-        self.assertTrue(body.startswith("\ufeff"))
-        lines = body.strip().splitlines()
-        self.assertIn("Ученик;Прогресс, %;Сдано;Проверено", lines[0])
-        self.assertIn("English / Grammar / Past tense", lines[0])
-        self.assertTrue(any("80/100" in line for line in lines[1:]))
+        self.assertIn("spreadsheetml.sheet", response["Content-Type"])
+        self.assertIn("journal.xlsx", response["Content-Disposition"])
+        with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+            self.assertIn("xl/worksheets/sheet1.xml", archive.namelist())
+            sheet = archive.read("xl/worksheets/sheet1.xml").decode("utf-8")
+        self.assertIn("<sheetData>", sheet)
+        self.assertIn("Ученик", sheet)
+        self.assertIn(self.student.username, sheet)
 
-
-class ConsoleSettingsTests(LMSCase):
     def test_settings_page_renders_profile_and_snippets(self):
         CommentSnippet.objects.create(
             title="Praise", code="praise", text="Хорошо!", author=self.teacher
@@ -1055,3 +1118,46 @@ class DraftAndAttemptHousekeepingTests(LMSCase):
         self.assertEqual(attempt.text_answer, text_before)
         self.assertTrue(attempt.events.filter(action="reviewed").exists())
         self.assertEqual(attempt.review_revision, 1)
+
+
+class XlsxWriterTests(SimpleTestCase):
+    """Встроенный писатель XLSX: книга Excel без новых зависимостей."""
+
+    def table(self, rows):
+        with zipfile.ZipFile(io.BytesIO(xlsx.build_xlsx(rows))) as archive:
+            self.assertIn("xl/workbook.xml", archive.namelist())
+            self.assertIn("xl/styles.xml", archive.namelist())
+            return archive.read("xl/worksheets/sheet1.xml").decode("utf-8"), archive.read(
+                "xl/workbook.xml"
+            ).decode("utf-8")
+
+    def test_sheet_has_frozen_header_and_autofilter(self):
+        sheet, workbook = self.table([["Ученик", "Балл"], ["student", 42]])
+        self.assertIn('<pane ySplit="1"', sheet)
+        self.assertIn('<autoFilter ref="A1:B2"/>', sheet)
+        self.assertIn('name="Лист1"', workbook)
+        self.assertIn('<col min="1"', sheet)
+
+    def test_numbers_stay_numbers_and_text_escaped(self):
+        sheet, _ = self.table([["Ученик", "Балл"], ["Smith & Sons <тест>", 42.5]])
+        self.assertIn("<v>42.5</v>", sheet)
+        self.assertIn("Smith &amp; Sons &lt;тест&gt;", sheet)
+        self.assertNotIn("<тест>", sheet)
+
+    def test_control_characters_are_dropped(self):
+        sheet, _ = self.table([["Заголовок"], ["текст\x07с мусором"]])
+        self.assertIn("текстс мусором", sheet)
+        self.assertNotIn("\x07", sheet)
+
+    def test_column_names_go_beyond_z(self):
+        sheet, _ = self.table([["Заголовок"], [0] + [""] * 26 + ["далеко"]])
+        self.assertIn('r="AB2"', sheet)
+
+    def test_sheet_name_is_escaped_and_trimmed(self):
+        _, workbook = self.table([["a"]])
+        self.assertIn('name="Лист1"', workbook)
+        long_name = "Журнал & <оценки> " + "х" * 40
+        with zipfile.ZipFile(io.BytesIO(xlsx.build_xlsx([["a"]], sheet_name=long_name))) as archive:
+            workbook = archive.read("xl/workbook.xml").decode("utf-8")
+        self.assertIn("Журнал &amp; &lt;оценки&gt;", workbook)
+        self.assertLessEqual(len(workbook.split('name="')[1].split('"')[0]), 31)

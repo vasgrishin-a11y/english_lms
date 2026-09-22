@@ -7,8 +7,8 @@
 {% block content %}
 <nav aria-label="Хлебные крошки">
     <ol class="crumbs">
-        <li><a href="{% url 'teacher_curriculum' %}">Карта курса</a></li>
-        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">Библиотека</span></li>
+        <li><a href="{% url 'teacher_curriculum' %}">{% t "Карта курса" %}</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">{% t "Библиотека" %}</span></li>
     </ol>
 </nav>
 
@@ -18,8 +18,8 @@
         <p class="muted small mb-0">Готовые наборы: блоки → темы → задания (текст, аудио, тесты, упражнения на порядок, колонки и буквы) + карточки. Импорт — черновиками.</p>
     </div>
     <div class="classes-toolbar">
-        <a class="btn btn-secondary btn-sm" href="{% url 'teacher_curriculum' %}">{% icon "layers" %}Карта курса</a>
-        <a class="btn btn-sm" href="{% url 'teacher_assignment_new' %}">{% icon "plus" %}Новое задание</a>
+        <a class="btn btn-secondary btn-sm" href="{% url 'teacher_curriculum' %}">{% icon "layers" %}{% t "Карта курса" %}</a>
+        <a class="btn btn-sm" href="{% url 'teacher_assignment_new' %}">{% icon "plus" %}{% t "Новое задание" %}</a>
     </div>
 </div>
 
@@ -45,7 +45,7 @@
                 </div>
                 {% if counts.imported_blocks %}<p class="tiny muted" style="margin-top:8px">{% icon "check-circle" "icon icon-sm" %}Уже: {{ counts.imported_blocks }}/{{ counts.blocks }} блоков</p>{% endif %}
                 <form method="post" action="{% url 'teacher_library_import' pack.slug %}" style="margin-top:auto;padding-top:12px">
-                    {% csrf_token %}<button class="btn btn-sm btn-block" type="submit">{% icon "download" %}Добавить в курс</button>
+                    {% csrf_token %}<button class="btn btn-sm btn-block" type="submit">{% icon "download" %}{% t "Добавить в курс" %}</button>
                 </form>
             </div>
         </div>

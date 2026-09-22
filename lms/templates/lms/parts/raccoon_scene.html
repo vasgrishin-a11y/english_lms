@@ -1,0 +1,12 @@
+{% load static %}
+<div class="raccoon-scene"
+     data-raccoon-scene
+     data-pet-src="{% static 'lms/img/raccoon-run.svg' %}"
+     data-books-src="{% static 'lms/img/raccoon-books.svg' %}"
+     role="img"
+     aria-label="Енот бежит по лесной опушке к книгам, читает их, возвращается домой и засыпает">
+    <canvas class="raccoon-scene-canvas" width="640" height="46" aria-hidden="true"></canvas>
+    <noscript>
+        <img class="raccoon-scene-fallback" src="{% static 'lms/img/raccoon-run.svg' %}" alt="" width="52" height="36">
+    </noscript>
+</div>

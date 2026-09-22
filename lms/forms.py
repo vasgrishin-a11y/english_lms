@@ -60,6 +60,15 @@ class SubmissionForm(forms.Form):
                 f".{ext}" for ext in sorted(extensions)
             )
             self.fields["file_answer"].label = "Аудиофайл" if audio else "Файл ответа"
+            self.fields["file_answer"].widget.attrs.update(
+                {
+                    "data-dropzone": "1",
+                    "data-max-mb": str(settings.LMS_MAX_FILE_BYTES // (1024 * 1024)),
+                    "data-dropzone-hint": (
+                        "Перетащите аудио сюда" if audio else "Перетащите файл сюда"
+                    ),
+                }
+            )
             self.fields[
                 "file_answer"
             ].help_text = f"До {settings.LMS_MAX_FILE_BYTES // (1024 * 1024)} MiB. Отправка создаёт новую попытку; старый ответ сохранится в истории."
@@ -234,6 +243,7 @@ class AssignmentForm(forms.ModelForm):
                 attrs={
                     "rows": 8,
                     "placeholder": "Что нужно сделать, объём, критерии, пример ответа",
+                    "data-description-editor": "1",
                 }
             ),
             "deadline": _datetime_widget(),
@@ -802,6 +812,9 @@ class AIMaterialForm(forms.Form):
             attrs={
                 "accept": ",".join(sorted(ai.UPLOAD_EXTENSIONS)),
                 "data-ai-upload": "1",
+                "data-dropzone": "1",
+                "data-max-mb": str(ai.max_upload_bytes() // (1024 * 1024)),
+                "data-dropzone-hint": "Перетащите фото или документ сюда",
             }
         ),
         help_text=(

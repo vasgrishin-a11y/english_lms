@@ -7,7 +7,7 @@
 {% block content %}
 <nav aria-label="Хлебные крошки">
     <ol class="crumbs">
-        <li><a href="{% url 'student_trainer' %}">Тренажёр</a></li>
+        <li><a href="{% url 'student_trainer' %}">{% t "Тренажёр" %}</a></li>
         <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">{{ title }}</span></li>
     </ol>
 </nav>

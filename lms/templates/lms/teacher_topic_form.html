@@ -7,7 +7,7 @@
 {% block content %}
 <nav aria-label="Хлебные крошки">
     <ol class="crumbs">
-        <li><a href="{% url 'teacher_curriculum' %}">Карта курса</a></li>
+        <li><a href="{% url 'teacher_curriculum' %}">{% t "Карта курса" %}</a></li>
         {% if form.instance.pk %}<li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span>{{ form.instance.block.name }}</span></li>{% endif %}
         <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">{% if form.instance.pk %}{{ form.instance.title }}{% else %}Новая тема{% endif %}</span></li>
     </ol>
@@ -21,10 +21,10 @@
                 {% csrf_token %}
                 {% include "lms/form_fields.html" %}
                 <div class="form-actions">
-                    <button class="btn" type="submit">{% icon "save" %}Сохранить тему</button>
-                    <a class="btn btn-secondary" href="{% url 'teacher_curriculum' %}">Отмена</a>
+                    <button class="btn" type="submit">{% icon "save" %}{% t "Сохранить тему" %}</button>
+                    <a class="btn btn-secondary" href="{% url 'teacher_curriculum' %}">{% t "Отмена" %}</a>
                     {% if form.instance.pk %}
-                        <a class="btn btn-ghost" href="{% url 'teacher_assignment_new' %}?topic={{ form.instance.pk }}">{% icon "plus" %}Добавить задание</a>
+                        <a class="btn btn-ghost" href="{% url 'teacher_assignment_new' %}?topic={{ form.instance.pk }}">{% icon "plus" %}{% t "Добавить задание" %}</a>
                     {% endif %}
                 </div>
             </form>
@@ -51,9 +51,9 @@
             {{ suggestion_payload|json_script:"topic-suggestions" }}
         </div>
         <div class="card card-pad-sm">
-            <p class="rail-title">{% icon "sparkles" %}ИИ-помощник</p>
+            <p class="rail-title">{% icon "sparkles" %}{% t "ИИ-помощник" %}</p>
             <p class="small muted">Разберите файл в задания и карточки и добавьте их сразу в эту тему.</p>
-            <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_ai' %}?target=assignment{% if form.instance.pk %}&amp;topic={{ form.instance.pk }}{% endif %}">Собрать материал для темы</a>
+            <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_ai' %}?target=assignment{% if form.instance.pk %}&amp;topic={{ form.instance.pk }}{% endif %}">{% t "Собрать материал для темы" %}</a>
         </div>
         <div class="card card-pad-sm">
             <p class="rail-title">Подсказка</p>

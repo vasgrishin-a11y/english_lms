@@ -934,6 +934,237 @@
     });
   }
 
+  var UPLOAD_ICON =
+    '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="M12 16V4"/><path d="m7 9 5-5 5 5"/>' +
+    '<path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>';
+
+  function humanSize(bytes) {
+    if (!bytes) return "";
+    var units = ["Б", "КБ", "МБ", "ГБ"];
+    var index = 0;
+    var value = bytes;
+    while (value >= 1024 && index < units.length - 1) {
+      value = value / 1024;
+      index += 1;
+    }
+    var rounded = index === 0 ? String(value) : value.toFixed(value < 10 ? 1 : 0);
+    return rounded.replace(".", ",") + " " + units[index];
+  }
+
+  function acceptLabel(accept) {
+    var parts = (accept || "")
+      .split(",")
+      .map(function (item) {
+        return item.trim();
+      })
+      .filter(Boolean);
+    var extensions = parts
+      .filter(function (item) {
+        return item.charAt(0) === ".";
+      })
+      .map(function (item) {
+        return item.slice(1).toUpperCase();
+      });
+    if (!extensions.length) return "";
+    if (extensions.length > 6) return extensions.slice(0, 6).join(", ") + " и другие";
+    return extensions.join(", ");
+  }
+
+  function uploadDropzones() {
+    var inputs = document.querySelectorAll('input[type="file"][data-dropzone]');
+    Array.prototype.forEach.call(inputs, function (input) {
+      if (input.dataset.dropzoneReady === "1" || input.disabled) return;
+      input.dataset.dropzoneReady = "1";
+      if (!input.id) input.id = "dropzone-" + Math.floor(Math.random() * 1000000);
+
+      var maxMb = parseFloat(input.getAttribute("data-max-mb")) || 0;
+      var maxBytes = maxMb * 1024 * 1024;
+      var accept = input.getAttribute("accept") || "";
+      var zone = document.createElement("label");
+      zone.className = "dropzone";
+      zone.setAttribute("for", input.id);
+      var hint =
+        input.getAttribute("data-dropzone-hint") || "Перетащите файл сюда или выберите на диске";
+      var limits = [];
+      var extensions = acceptLabel(accept);
+      if (extensions) limits.push(extensions);
+      if (maxMb) limits.push("до " + maxMb + " МБ");
+      zone.innerHTML =
+        '<span class="dropzone-icon">' +
+        UPLOAD_ICON +
+        "</span>" +
+        '<span class="dropzone-body">' +
+        '<span class="dropzone-title">' +
+        hint +
+        "</span>" +
+        '<span class="dropzone-hint">' +
+        (limits.join(" · ") || "Любой поддерживаемый формат") +
+        "</span>" +
+        '<span class="dropzone-file" data-dropzone-name hidden></span>' +
+        '<span class="dropzone-error" data-dropzone-error role="alert" hidden></span>' +
+        "</span>" +
+        '<span class="btn btn-secondary btn-sm">Выбрать файл</span>' +
+        '<button type="button" class="btn btn-ghost btn-sm" data-dropzone-clear hidden>Убрать файл</button>';
+
+      input.parentNode.insertBefore(zone, input);
+      input.classList.add("dropzone-native");
+
+      var name = zone.querySelector("[data-dropzone-name]");
+      var error = zone.querySelector("[data-dropzone-error]");
+      var clear = zone.querySelector("[data-dropzone-clear]");
+
+      function showError(message) {
+        if (!error) return;
+        error.textContent = message || "";
+        error.hidden = !message;
+      }
+
+      function render() {
+        var file = input.files && input.files[0];
+        if (!file) {
+          name.hidden = true;
+          name.textContent = "";
+          clear.hidden = true;
+          zone.classList.remove("is-filled");
+          return;
+        }
+        name.hidden = false;
+        name.textContent = "";
+        var title = document.createElement("span");
+        title.textContent = file.name;
+        var size = document.createElement("span");
+        size.className = "dropzone-size";
+        size.textContent = humanSize(file.size);
+        name.appendChild(title);
+        name.appendChild(size);
+        clear.hidden = false;
+        zone.classList.add("is-filled");
+      }
+
+      function check(file) {
+        if (!file) return true;
+        if (maxBytes && file.size > maxBytes) {
+          showError("Файл больше " + maxMb + " МБ: выберите файл поменьше.");
+          return false;
+        }
+        var allowed = accept
+          .split(",")
+          .map(function (item) {
+            return item.trim().toLowerCase();
+          })
+          .filter(function (item) {
+            return item.charAt(0) === ".";
+          });
+        var dot = file.name.lastIndexOf(".");
+        var extension = dot > -1 ? file.name.slice(dot).toLowerCase() : "";
+        if (allowed.length && allowed.indexOf(extension) === -1) {
+          showError("Формат " + (extension || "без расширения") + " здесь не принимается.");
+          return false;
+        }
+        showError("");
+        return true;
+      }
+
+      function accept(files) {
+        if (!files || !files.length) return;
+        if (!check(files[0])) {
+          input.value = "";
+          render();
+          return;
+        }
+        try {
+          var transfer = new DataTransfer();
+          transfer.items.add(files[0]);
+          input.files = transfer.files;
+        } catch (error) {
+          /* Браузер без DataTransfer: остаётся обычный выбор файла. */
+        }
+        render();
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+
+      ["dragenter", "dragover"].forEach(function (name) {
+        zone.addEventListener(name, function (event) {
+          event.preventDefault();
+          zone.classList.add("is-dragging");
+        });
+      });
+      ["dragleave", "dragend", "drop"].forEach(function (name) {
+        zone.addEventListener(name, function (event) {
+          event.preventDefault();
+          if (name !== "drop" || !event.dataTransfer || !event.dataTransfer.files.length) {
+            zone.classList.remove("is-dragging");
+          }
+        });
+      });
+      zone.addEventListener("drop", function (event) {
+        zone.classList.remove("is-dragging");
+        accept(event.dataTransfer ? event.dataTransfer.files : null);
+      });
+      if (clear) {
+        clear.addEventListener("click", function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          input.value = "";
+          var clearBox = document.querySelector('input[name="' + input.name + '-clear"]');
+          if (clearBox) clearBox.checked = true;
+          showError("");
+          render();
+        });
+      }
+      input.addEventListener("change", function () {
+        if (input.files && input.files[0] && !check(input.files[0])) {
+          input.value = "";
+        }
+        render();
+      });
+      render();
+    });
+  }
+
+  function descriptionEditors() {
+    var blocks = document.querySelectorAll("[data-editor-block]");
+    Array.prototype.forEach.call(blocks, function (block) {
+      var textarea = block.querySelector("textarea");
+      var expand = block.querySelector("[data-editor-expand]");
+      var restore = block.querySelector("[data-editor-restore]");
+      var note = block.querySelector("[data-editor-note]");
+      if (!textarea || !expand) return;
+      var label = expand.querySelector("[data-editor-expand-label]");
+
+      function apply(open) {
+        block.classList.toggle("is-expanded", open);
+        expand.setAttribute("aria-expanded", open ? "true" : "false");
+        if (label) label.textContent = open ? "Свернуть" : "Развернуть";
+        if (restore) restore.hidden = !open;
+        if (note) note.hidden = !open;
+      }
+
+      expand.addEventListener("click", function () {
+        var open = !block.classList.contains("is-expanded");
+        apply(open);
+        if (open) {
+          textarea.focus();
+          textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+        }
+      });
+      if (restore) {
+        restore.addEventListener("click", function () {
+          apply(false);
+          textarea.focus();
+        });
+      }
+      textarea.addEventListener("keydown", function (event) {
+        if (event.key === "Escape" && block.classList.contains("is-expanded")) {
+          event.stopPropagation();
+          apply(false);
+        }
+      });
+    });
+  }
+
   ready(function () {
     autohideAlerts();
     confirmForms();
@@ -950,5 +1181,7 @@
     presetLevelFilter();
     assignmentTypeForm();
     typeahead();
+    uploadDropzones();
+    descriptionEditors();
   });
 })();

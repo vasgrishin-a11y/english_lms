@@ -8,7 +8,7 @@
         <div class="empty-icon">{% icon "shield" "icon icon-xl" %}</div>
         <h1>Слишком много попыток входа</h1>
         <p>Для этой учётной записи и адреса вход временно ограничен. Подождите и попробуйте снова либо обратитесь к администратору.</p>
-        <a class="btn btn-secondary" href="{% url 'login' %}">Вернуться ко входу</a>
+        <a class="btn btn-secondary" href="{% url 'login' %}">{% t "Вернуться ко входу" %}</a>
     </div>
 </div>
 {% endblock %}

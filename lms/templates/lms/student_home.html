@@ -14,11 +14,11 @@
             {% if totals.revision %}· <strong>{{ totals.revision }}</strong> ждут доработки{% endif %}
         </p>
         <div class="row" style="margin-top:16px">
-            <a class="btn" href="{% url 'student_assignments' %}">{% icon "layers" %}Карта курса</a>
+            <a class="btn" href="{% url 'student_assignments' %}">{% icon "layers" %}{% t "Карта курса" %}</a>
             <a class="btn btn-secondary" href="{% url 'student_trainer' %}">{% icon "cards" %}Тренажёр слов
                 {% if due_total %}<span class="chip count">{{ due_total }}</span>{% endif %}</a>
-            <a class="btn btn-ghost" href="{% url 'student_dictionary' %}">{% icon "language" %}Мой словарь</a>
-            <a class="btn btn-ghost" href="{% url 'student_upcoming' %}">{% icon "calendar" %}Сроки</a>
+            <a class="btn btn-ghost" href="{% url 'student_dictionary' %}">{% icon "language" %}{% t "Мой словарь" %}</a>
+            <a class="btn btn-ghost" href="{% url 'student_upcoming' %}">{% icon "calendar" %}{% t "Сроки" %}</a>
         </div>
     </div>
     <div class="hero-side">
@@ -62,7 +62,7 @@
     <section class="card">
         <div class="card-head">
             <h2 class="card-title">{% icon "clock" %}Ближайшие сроки</h2>
-            <a class="btn btn-ghost btn-sm" href="{% url 'student_upcoming' %}">Все сроки</a>
+            <a class="btn btn-ghost btn-sm" href="{% url 'student_upcoming' %}">{% t "Все сроки" %}</a>
         </div>
         {% if due_soon %}
             <ul class="task-list">
@@ -79,7 +79,7 @@
 <section class="card">
     <div class="card-head">
         <h2 class="card-title">{% icon "layers" %}Мои классы</h2>
-        <a class="btn btn-ghost btn-sm" href="{% url 'student_assignments' %}">Открыть карту</a>
+        <a class="btn btn-ghost btn-sm" href="{% url 'student_assignments' %}">{% t "Открыть карту" %}</a>
     </div>
     {% regroup assignments by topic.block as block_groups %}
     {% if block_groups %}
@@ -118,7 +118,7 @@
 <section class="card">
     <div class="card-head">
         <h2 class="card-title">{% icon "cards" %}Словарь и тренажёр</h2>
-        <a class="btn btn-ghost btn-sm" href="{% url 'student_dictionary' %}">Мой словарь</a>
+        <a class="btn btn-ghost btn-sm" href="{% url 'student_dictionary' %}">{% t "Мой словарь" %}</a>
     </div>
     <div class="home-grid">
         <div>
@@ -133,7 +133,7 @@
                             </span>
                             <span class="row-side">
                                 {% if item.due_count %}<span class="badge badge-submitted tnum">{{ item.due_count }} к повтору</span>{% endif %}
-                                <a class="btn btn-secondary btn-sm" href="{{ item.session_url }}">Тренировать</a>
+                                <a class="btn btn-secondary btn-sm" href="{{ item.session_url }}">{% t "Тренировать" %}</a>
                             </span>
                         </div>
                     {% endfor %}
@@ -157,7 +157,7 @@
 <section class="card">
     <div class="card-head">
         <h2 class="card-title">{% icon "award" %}Последние оценки</h2>
-        <a class="btn btn-ghost btn-sm" href="{% url 'student_grades' %}">Все оценки</a>
+        <a class="btn btn-ghost btn-sm" href="{% url 'student_grades' %}">{% t "Все оценки" %}</a>
     </div>
     {% if recent %}
         <div class="rows">
