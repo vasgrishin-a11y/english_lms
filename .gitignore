@@ -38,4 +38,7 @@ coverage/
 dist/
 build/
 *.egg-info/
+
+# Собранная статика Django (collectstatic) — артефакт сборки, не коммитим.
+staticfiles/
 ```

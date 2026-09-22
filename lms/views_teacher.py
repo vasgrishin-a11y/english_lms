@@ -45,7 +45,12 @@ from .forms import (
 from .library import (
     ASSIGNMENT_PRESETS,
     BLOCK_SUGGESTIONS,
+    DECK_LEVELS,
+    DECK_PRESETS,
     TOPIC_SUGGESTIONS,
+    create_cards_from_preset,
+    deck_preset_topics,
+    get_deck_preset,
     import_course_pack,
     packs_with_state,
 )
@@ -932,10 +937,11 @@ def question_delete(request, pk):
     return redirect("teacher_questions", pk=assignment_id)
 
 
-# ── Квизлеты: наборы карточек ──────────────────────────────────────────────
+# ── Квизлеты: наборы карточек как задания тренажёрного типа ────────────────
 @teacher_required
 @require_http_methods(["GET", "POST"])
 def deck_form(request, pk=None):
+    """Квизлет — задание тренажёрного типа: шаблон подставляет название, описание и карточки."""
     deck = (
         get_object_or_404(FlashcardDeck.objects.select_related("topic__block"), pk=pk)
         if pk
@@ -944,10 +950,32 @@ def deck_form(request, pk=None):
     initial = {}
     if request.GET.get("topic"):
         initial["topic"] = request.GET["topic"]
+    preset_id = request.GET.get("preset") or request.POST.get("preset_id") or ""
+    preset = get_deck_preset(preset_id) if preset_id else None
+    if preset and not deck and request.method == "GET":
+        initial.update(
+            {
+                "title": preset["fields"]["title"],
+                "description": preset["fields"]["description"],
+            }
+        )
     form = FlashcardDeckForm(request.POST or None, instance=deck, initial=initial or None)
     if request.method == "POST" and form.is_valid():
+        is_new = deck is None
         instance = form.save()
-        messages.success(request, f"Набор карточек сохранён: {instance.title}")
+        added = 0
+        if preset_id:
+            try:
+                added = create_cards_from_preset(instance, preset_id)
+            except LookupError:
+                preset = None
+        if is_new and added:
+            messages.success(
+                request,
+                f"Квизлет «{instance.title}» создан из шаблона: добавлено карточек: {added}.",
+            )
+        else:
+            messages.success(request, f"Набор карточек сохранён: {instance.title}")
         return redirect("teacher_deck_cards", pk=instance.pk)
     return render(
         request,
@@ -958,6 +986,10 @@ def deck_form(request, pk=None):
             "topics": Topic.objects.select_related("block").order_by(
                 "block__order", "order", "title"
             ),
+            "presets": DECK_PRESETS,
+            "preset_topics": deck_preset_topics(),
+            "preset_levels": DECK_LEVELS,
+            "active_preset": preset["id"] if preset else "",
             "workspace": "curriculum",
         },
     )
@@ -966,13 +998,28 @@ def deck_form(request, pk=None):
 @teacher_required
 @require_http_methods(["GET", "POST"])
 def deck_cards(request, pk):
-    """Карточки набора: одиночное добавление и массовый импорт списком."""
+    """Карточки набора: одиночное добавление, массовый импорт и шаблоны библиотеки."""
     deck = get_object_or_404(
         FlashcardDeck.objects.select_related("topic__block").prefetch_related("cards"), pk=pk
     )
     card_form = FlashcardForm(request.POST or None, prefix="card")
     bulk_form = FlashcardBulkForm(request.POST or None, prefix="bulk")
     if request.method == "POST":
+        preset_id = request.POST.get("preset_id", "").strip()
+        if preset_id and "_preset" in request.POST:
+            try:
+                added = create_cards_from_preset(
+                    deck, preset_id, replace=bool(request.POST.get("preset_replace"))
+                )
+            except LookupError:
+                messages.error(request, "Неизвестный шаблон квизлета.")
+            else:
+                preset = get_deck_preset(preset_id)
+                messages.success(
+                    request,
+                    f"Из шаблона «{preset['label']}» добавлено карточек: {added}.",
+                )
+            return redirect("teacher_deck_cards", pk=deck.pk)
         if "bulk-cards_text" in request.POST and bulk_form.is_valid():
             if bulk_form.cleaned_data["replace"]:
                 deck.cards.all().delete()
@@ -1010,6 +1057,9 @@ def deck_cards(request, pk):
             "cards": list(deck.cards.all()),
             "card_form": card_form,
             "bulk_form": bulk_form,
+            "presets": DECK_PRESETS,
+            "preset_topics": deck_preset_topics(),
+            "preset_levels": DECK_LEVELS,
             "learners": CardReview.objects.filter(card__deck=deck)
             .values("student_id")
             .distinct()

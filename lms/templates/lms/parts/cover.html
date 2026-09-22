@@ -1,0 +1,19 @@
+{% load lms_tags %}
+{# Обложка карточки курса: сцена по теме + название на цветном фоне. #}
+{# Вход: course=... (объект с .name) или name="..."; theme="..." задаёт #}
+{# тему явно (у наборов библиотеки это поле cover); badge="..." — бейдж, #}
+{# badge_class="..." — его стиль, badge_suffix="..." — дописка к бейджу. #}
+{% firstof course.name name "Курс" as cover_name %}
+<div class="class-cover{% if theme %} cover-theme-{{ theme }}{% else %} cover-theme-{{ cover_name|cover_theme }}{% endif %}"
+     style="background: var(--cover-{{ cover_name|cover_variant }});"
+     role="img" aria-label="Обложка: {{ cover_name }}">
+    <span class="cover-scene" aria-hidden="true">{{ theme|default:cover_name|cover_emoji }}</span>
+    <span class="cover-plate" aria-hidden="true">
+        <span class="cover-initials">{{ cover_name|cover_initials }}</span>
+        <span class="cover-words">
+            <span class="cover-name">{{ cover_name|truncatechars:40 }}</span>
+            <span class="cover-tag">{{ theme|default:cover_name|cover_label }}</span>
+        </span>
+    </span>
+    {% if badge %}<span class="badge {{ badge_class|default:"badge-accent" }}">{{ badge }}{{ badge_suffix }}</span>{% endif %}
+</div>

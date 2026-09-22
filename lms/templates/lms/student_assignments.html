@@ -73,18 +73,7 @@
             {% for block_group in block_groups %}
                 {% with block=block_group.list.0.topic.block %}
                 <a class="class-card" href="#block-{{ block.pk }}" style="text-decoration:none">
-                    <div class="class-cover" style="background: var(--cover-{{ forloop.counter|add:0|divisibleby:8|yesno:'8,1' }}); background: var(--cover-{{ forloop.counter0|add:1 }});">
-                        {% with cover=block_group.list.0.topic.block.name|lower %}
-                            {% if "travel" in cover %} <span class="class-cover-emoji">🧳</span>
-                            {% elif "movie" in cover %} <span class="class-cover-emoji">🎬</span>
-                            {% elif "business" in cover %} <span class="class-cover-emoji">💼</span>
-                            {% elif "exam" in cover or "огэ" in cover or "егэ" in cover %} <span class="class-cover-emoji">📝</span>
-                            {% elif "grammar" in cover %} <span class="class-cover-emoji">📚</span>
-                            {% else %} <span class="class-cover-emoji">🌍</span>
-                            {% endif %}
-                        {% endwith %}
-                        {% if block.cefr_level %}<span class="badge tag-cefr">{{ block.cefr_level }}</span>{% endif %}
-                    </div>
+                    {% include "lms/parts/cover.html" with course=block badge=block.cefr_level badge_class="tag-cefr" %}
                     <div class="class-body">
                         <h2 class="class-title">{{ block.name }}</h2>
                         <div class="class-meta">

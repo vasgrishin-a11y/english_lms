@@ -20,7 +20,38 @@ TYPE_ICONS = {
     "audio": "mic",
     "mixed": "layers",
     "quiz": "target",
+    "flashcards": "cards",
+    "deck": "cards",
 }
+
+COVER_THEMES = {
+    "travel": {"emoji": "🧳", "label": "Путешествия"},
+    "movie": {"emoji": "🎬", "label": "Кино"},
+    "business": {"emoji": "💼", "label": "Бизнес"},
+    "exam": {"emoji": "📝", "label": "Экзамены"},
+    "it": {"emoji": "💻", "label": "IT"},
+    "kids": {"emoji": "🧒", "label": "Детям"},
+    "teens": {"emoji": "🎧", "label": "Подросткам"},
+    "ielts": {"emoji": "🎓", "label": "IELTS"},
+    "happy": {"emoji": "🥽", "label": "Марафон"},
+    "grammar": {"emoji": "📚", "label": "Грамматика"},
+    "general": {"emoji": "🌍", "label": "Общий курс"},
+}
+
+# Ключевые слова названия → тема обложки. Порядок важен: первые совпадения точнее.
+COVER_KEYWORDS = [
+    (("travel", "travell", "путешеств", "scandinav", "denmark", "hotel", "airport", "trip"), "travel"),
+    (("movie", "cinema", "film", "кино", "фильм"), "movie"),
+    (("business", "делов", "бизнес", "finance", "market", "meeting", "negotiat"), "business"),
+    (("exam", "огэ", "егэ", "ielts", "test prep", "экзамен"), "exam"),
+    (("ielts",), "ielts"),
+    (("it ", " it", "python", "code", "agile", "scrum", "develop", "разработ"), "it"),
+    (("kid", "child", "дет", "ребён", "ребен"), "kids"),
+    (("teen", "подрост"), "teens"),
+    (("happy", "marathon", "марафон"), "happy"),
+    (("grammar", "грамматик", "tenses", "passive", "conditional"), "grammar"),
+    (("vocab", "словар", "слов", "dictionary", "words", "word"), "grammar"),
+]
 SKILL_ICONS = {
     "grammar": "book",
     "vocabulary": "cards",
@@ -261,6 +292,101 @@ def answered(mapping, key):
     if isinstance(given, dict):
         return ", ".join(f"{value}" for value in given.values())
     return "" if given is None else str(given)
+
+
+@register.filter
+def cover_theme(name):
+    """Тема обложки курса по названию: travel, movie, business… или general."""
+    lowered = str(name or "").lower()
+    for keywords, theme in COVER_KEYWORDS:
+        if any(keyword in lowered for keyword in keywords):
+            # IELTS точнее экзамена: проверяем его раньше общего exam-правила.
+            if theme == "exam" and "ielts" in lowered:
+                return "ielts"
+            return theme
+    return "general"
+
+
+@register.filter
+def cover_emoji(theme_or_name):
+    """Эмодзи обложки: принимает и тему, и произвольное название курса."""
+    key = str(theme_or_name or "").strip().lower()
+    if key in COVER_THEMES:
+        return COVER_THEMES[key]["emoji"]
+    return COVER_THEMES[cover_theme(theme_or_name)]["emoji"]
+
+
+@register.filter
+def cover_label(theme_or_name):
+    key = str(theme_or_name or "").strip().lower()
+    if key in COVER_THEMES:
+        return COVER_THEMES[key]["label"]
+    return COVER_THEMES[cover_theme(theme_or_name)]["label"]
+
+
+@register.filter
+def cover_variant(name):
+    """Детерминированный номер градиента 1–8 по названию курса.
+
+    Свои курсы получают стабильный цвет: одно и то же название всегда
+    выглядит одинаково, разные названия — чаще всего по-разному.
+    """
+    text = str(name or "")
+    total = sum(ord(char) for char in text) + len(text) * 7
+    return (total % 8) + 1
+
+
+@register.filter
+def cover_initials(name):
+    """Крупные инициалы для обложки своего курса: первые буквы двух слов."""
+    words = [word for word in str(name or "").replace("·", " ").split() if word[:1].isalnum()]
+    if not words:
+        return "EL"
+    if len(words) == 1:
+        return words[0][:2].upper()
+    return (words[0][:1] + words[1][:1]).upper()
+
+
+@register.filter
+def deck_cards_map(presets):
+    """Текст «лицо | оборот | пример» по строкам для каждого шаблона квизлета.
+
+    Отдаётся в ``json_script`` на странице карточек: кнопка «Подставить
+    в импорт» заполняет textarea массового импорта без перезагрузки.
+    """
+
+    def line(card):
+        parts = [card.get("front", ""), card.get("back", "")]
+        if card.get("example"):
+            parts.append(card["example"])
+        return " | ".join(parts)
+
+    return {
+        preset["id"]: "\n".join(line(card) for card in preset.get("cards", []))
+        for preset in presets or []
+        if preset.get("id")
+    }
+
+
+@register.filter
+def deck_cards_map(presets):
+    """Текст «лицо | оборот | пример» по строкам для каждого шаблона квизлета.
+
+    Отдаётся в ``json_script`` на странице карточек: кнопка «Подставить
+    в импорт» заполняет textarea массового импорта без перезагрузки.
+    """
+
+    def line(card):
+        parts = [card.get("front", ""), card.get("back", "")]
+        if card.get("example"):
+            parts.append(card["example"])
+        return " | ".join(parts)
+
+    return {
+        preset["id"]: "\n".join(line(card) for card in preset.get("cards", []))
+        for preset in presets or []
+        if preset.get("id")
+    }
 
 
 @register.filter

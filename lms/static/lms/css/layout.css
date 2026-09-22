@@ -54,19 +54,8 @@
     stroke-width: 2;
 }
 
-.topbar-nav {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-1);
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow-x: auto;
-    scrollbar-width: none;
-}
-
-.topbar-nav::-webkit-scrollbar {
-    display: none;
-}
+/* Верхнее меню убрано: единственная навигация — боковая панель слева.
+   Центр шапки занимает сцена «Лиса на опушке» (см. .fox-scene ниже). */
 
 .nav-link {
     display: inline-flex;
@@ -839,67 +828,224 @@
   font-size: var(--fs-16);
 }
 
-/* ── ProgressMe-гибрид: узкий icon-rail слева (desktop) ─── */
+/* ── Боковая навигация: разворачиваемая панель слева (desktop) ──
+   Состояние хранится в html[data-nav]: expanded | collapsed.
+   Переключатель — кнопка #nav-toggle в шапке панели. */
 .app {
+    --nav-w: var(--nav-w-expanded, 232px);
     display: grid;
-    grid-template-columns: 72px minmax(0, 1fr);
+    grid-template-columns: var(--nav-w) minmax(0, 1fr);
     min-height: 100vh;
+    transition: grid-template-columns var(--dur-3) var(--ease);
+}
+
+html[data-nav="collapsed"] .app {
+    --nav-w: var(--nav-w-collapsed, 76px);
 }
 
 .app-no-rail {
     grid-template-columns: minmax(0, 1fr);
 }
 
-.app-rail {
+.app-nav {
     position: sticky;
     top: 0;
     height: 100vh;
     display: flex;
     flex-direction: column;
-    align-items: center;
     gap: var(--sp-2);
-    padding: var(--sp-4) var(--sp-2);
+    padding: var(--sp-4) var(--sp-3);
     background: var(--surface);
     border-right: 1px solid var(--border);
     z-index: var(--z-rail);
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
 }
 
-.app-rail-logo {
-    display: grid;
-    place-items: center;
-    width: 40px;
-    height: 40px;
-    background: linear-gradient(135deg, var(--turquoise-500), var(--accent-600));
+.app-nav-head {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding-bottom: var(--sp-3);
+    margin-bottom: var(--sp-2);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.app-nav-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    width: 100%;
+    padding: var(--sp-2) var(--sp-3);
+    font-family: inherit;
+    font-size: var(--fs-13);
+    font-weight: 700;
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    color: var(--text-muted);
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-subtle);
     border-radius: var(--r-md);
-    color: #fff;
-    margin-bottom: var(--sp-4);
-    box-shadow: var(--shadow-1);
+    cursor: pointer;
+    transition:
+        color var(--dur-2) var(--ease),
+        background var(--dur-2) var(--ease),
+        border-color var(--dur-2) var(--ease);
 }
 
-.app-rail-link {
-    display: grid;
-    place-items: center;
-    width: 40px;
-    height: 40px;
-    border-radius: var(--r-md);
-    color: var(--text-subtle);
-    text-decoration: none;
-    transition: all var(--dur-2) var(--ease);
-}
-
-.app-rail-link:hover {
-    background: var(--canvas-alt);
-    color: var(--text);
-}
-
-.app-rail-link.is-active {
-    background: var(--accent-tint);
+.app-nav-toggle:hover {
     color: var(--accent-800);
+    background: var(--accent-soft);
+    border-color: var(--accent-200);
 }
 
-.app-rail-link.is-active.turquoise {
-    background: var(--turquoise-bg);
-    color: var(--turquoise-ink);
+.app-nav-toggle:focus-visible {
+    outline: 2px solid var(--accent-500);
+    outline-offset: 2px;
+}
+
+.app-nav-toggle .icon {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+    transition: transform var(--dur-3) var(--ease);
+}
+
+html[data-nav="collapsed"] .app-nav-toggle .toggle-chevron {
+    transform: rotate(180deg);
+}
+
+.app-nav-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-1);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.app-nav-link {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-2) var(--sp-3);
+    min-height: 44px;
+    font-size: var(--fs-14);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-decoration: none;
+    border: 1px solid transparent;
+    border-radius: var(--r-md);
+    white-space: nowrap;
+    transition:
+        color var(--dur-2) var(--ease),
+        background var(--dur-2) var(--ease),
+        border-color var(--dur-2) var(--ease);
+}
+
+.app-nav-link:hover {
+    color: var(--text);
+    background: var(--canvas-alt);
+}
+
+.app-nav-link.is-active {
+    color: var(--accent-900);
+    background: var(--accent-tint);
+    border-color: var(--accent-200);
+}
+
+.app-nav-link .icon {
+    width: 19px;
+    height: 19px;
+    flex: 0 0 auto;
+}
+
+.app-nav-label {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.app-nav-count {
+    flex: 0 0 auto;
+    padding: 1px 7px;
+    font-size: var(--fs-11);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--warning-ink);
+    background: var(--warning-bg);
+    border-radius: var(--r-pill);
+}
+
+.app-nav-link.is-active .app-nav-count {
+    color: var(--on-accent);
+    background: var(--accent-600);
+}
+
+.app-nav-foot {
+    margin-top: auto;
+    padding-top: var(--sp-3);
+    border-top: 1px solid var(--border-subtle);
+}
+
+/* Свёрнутое состояние: только иконки по центру, подписи скрыты. */
+html[data-nav="collapsed"] .app-nav {
+    padding-left: var(--sp-2);
+    padding-right: var(--sp-2);
+}
+
+html[data-nav="collapsed"] .app-nav-head {
+    justify-content: center;
+    border-bottom-color: transparent;
+}
+
+html[data-nav="collapsed"] .app-nav-toggle {
+    justify-content: center;
+    padding-left: var(--sp-2);
+    padding-right: var(--sp-2);
+}
+
+html[data-nav="collapsed"] .app-nav-toggle .toggle-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+
+html[data-nav="collapsed"] .app-nav-link {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+html[data-nav="collapsed"] .app-nav-label,
+html[data-nav="collapsed"] .app-nav-count {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+
+/* Счётчик в свёрнутом виде — точка-индикатор поверх иконки. */
+html[data-nav="collapsed"] .app-nav-link {
+    position: relative;
+}
+
+html[data-nav="collapsed"] .app-nav-link:has(.app-nav-count)::after {
+    content: "";
+    position: absolute;
+    top: 7px;
+    right: 9px;
+    width: 9px;
+    height: 9px;
+    background: var(--warning-ink);
+    border: 2px solid var(--surface);
+    border-radius: 50%;
 }
 
 .app-main {
@@ -908,12 +1054,264 @@
     flex-direction: column;
 }
 
-/* На узких экранах icon-rail прячем — остаётся mobile-nav */
+/* На узких экранах боковую панель прячем — остаётся mobile-nav */
 @media (max-width: 960px) {
     .app {
         grid-template-columns: minmax(0, 1fr);
     }
-    .app-rail {
+    .app-nav {
+        display: none;
+    }
+}
+
+/* ── Сцена «Лиса на опушке» в шапке ─────────────────────────
+   Цикл 52 c: бег к книгам (8 c) → чтение (5 c) → возврат (8 c) →
+   сон с ZZZ (31 c, из них ~30 c неподвижного сна). */
+.fox-scene {
+    --fox-cycle: 52s;
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 180px;
+    max-width: 640px;
+    height: 46px;
+    margin: 0 auto;
+    overflow: hidden;
+    border-radius: var(--r-lg);
+    background: linear-gradient(180deg, #dcefe9 0%, #eef3e6 55%, #e9e2cf 100%);
+    border: 1px solid var(--border-subtle);
+}
+
+.fox-scene-sky {
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(circle at 88% 18%, rgba(255, 251, 235, 0.95) 0 7px, transparent 8px),
+        radial-gradient(circle at 20% 22%, rgba(255, 255, 255, 0.8) 0 5px, transparent 6px),
+        radial-gradient(circle at 27% 20%, rgba(255, 255, 255, 0.7) 0 4px, transparent 5px);
+}
+
+.fox-scene-trees {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.fox-tree {
+    position: absolute;
+    bottom: 12px;
+    line-height: 1;
+    opacity: 0.9;
+    filter: saturate(0.9);
+}
+
+.fox-scene-ground {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 14px;
+    background: linear-gradient(180deg, #a6c3aa 0%, #7fa786 100%);
+}
+
+.fox-scene-path {
+    position: absolute;
+    left: 4%;
+    right: 6%;
+    bottom: 3px;
+    height: 5px;
+    background: #ead9c0;
+    border-radius: var(--r-pill);
+    opacity: 0.85;
+}
+
+.fox-scene-den {
+    position: absolute;
+    left: 1%;
+    bottom: 10px;
+    font-size: 15px;
+    line-height: 1;
+    letter-spacing: -6px;
+    opacity: 0.95;
+}
+
+.fox-scene-books {
+    position: absolute;
+    right: 2.5%;
+    bottom: 10px;
+    line-height: 0;
+    filter: drop-shadow(0 2px 2px rgba(38, 55, 44, 0.25));
+}
+
+.fox-scene-books img {
+    display: block;
+    width: 44px;
+    height: 34px;
+}
+
+/* Бегун: left ведёт путешествие, поза — разворот/наклон/подпрыгивание. */
+.fox-runner {
+    position: absolute;
+    bottom: 8px;
+    left: 4%;
+    width: 52px;
+    height: 36px;
+    animation: fox-journey var(--fox-cycle) linear infinite;
+}
+
+.fox-pose {
+    display: block;
+    width: 100%;
+    height: 100%;
+    transform-origin: 50% 90%;
+    animation: fox-pose var(--fox-cycle) linear infinite;
+}
+
+.fox-runner-img {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+/* Книжка над головой во время чтения. */
+.fox-read {
+    position: absolute;
+    left: 50%;
+    bottom: 100%;
+    margin-bottom: -4px;
+    font-size: 18px;
+    line-height: 1;
+    opacity: 0;
+    transform: translateX(-50%) scale(0.6);
+    animation: fox-read var(--fox-cycle) linear infinite;
+}
+
+/* ZZZ во время сна. */
+.fox-zzz {
+    position: absolute;
+    left: 62%;
+    bottom: 78%;
+    display: flex;
+    gap: 1px;
+    font-weight: 800;
+    font-style: normal;
+    color: #3f5a47;
+    opacity: 0;
+    animation: fox-zzz-window var(--fox-cycle) linear infinite;
+}
+
+.fox-zzz i {
+    font-style: normal;
+    display: inline-block;
+    opacity: 0;
+    animation: fox-zz-float 3s ease-in-out infinite;
+}
+
+.fox-zzz i:nth-child(1) { font-size: 10px; animation-delay: 0s; }
+.fox-zzz i:nth-child(2) { font-size: 13px; animation-delay: 0.5s; }
+.fox-zzz i:nth-child(3) { font-size: 17px; animation-delay: 1s; }
+
+@keyframes fox-zz-float {
+    0%, 100% { opacity: 0.25; transform: translate(0, 2px) rotate(-6deg); }
+    50% { opacity: 1; transform: translate(3px, -3px) rotate(5deg); }
+}
+
+/* Путешествие: 0–15.4% бег туда, 15.4–25% чтение, 25–40.4% бег обратно,
+   40.4–100% сон дома (~31 c). */
+@keyframes fox-journey {
+    0% { left: 4%; }
+    15.4% { left: 76%; }
+    25% { left: 76%; }
+    40.4% { left: 4%; }
+    100% { left: 4%; }
+}
+
+@keyframes fox-pose {
+    0% { transform: scaleX(1) translateY(0); }
+    1.5% { transform: scaleX(1) translateY(-3px); }
+    3% { transform: scaleX(1) translateY(0); }
+    4.5% { transform: scaleX(1) translateY(-3px); }
+    6% { transform: scaleX(1) translateY(0); }
+    7.5% { transform: scaleX(1) translateY(-3px); }
+    9% { transform: scaleX(1) translateY(0); }
+    10.5% { transform: scaleX(1) translateY(-3px); }
+    12% { transform: scaleX(1) translateY(0); }
+    13.5% { transform: scaleX(1) translateY(-3px); }
+    15.4% { transform: scaleX(1) translateY(0); }
+    /* Чтение: лиса приподнимается к книгам. */
+    17% { transform: scaleX(1) translateY(-2px) scale(1.06); }
+    23% { transform: scaleX(1) translateY(-2px) scale(1.06); }
+    25% { transform: scaleX(1) translateY(0) scale(1); }
+    /* Разворот и бег обратно (зеркально). */
+    26.5% { transform: scaleX(-1) translateY(-3px); }
+    28% { transform: scaleX(-1) translateY(0); }
+    29.5% { transform: scaleX(-1) translateY(-3px); }
+    31% { transform: scaleX(-1) translateY(0); }
+    32.5% { transform: scaleX(-1) translateY(-3px); }
+    34% { transform: scaleX(-1) translateY(0); }
+    35.5% { transform: scaleX(-1) translateY(-3px); }
+    37% { transform: scaleX(-1) translateY(0); }
+    38.5% { transform: scaleX(-1) translateY(-3px); }
+    40.4% { transform: scaleX(-1) translateY(0); }
+    /* Сон: укладывается на бок. */
+    42% { transform: scaleX(-1) rotate(9deg) translateY(3px); }
+    98.5% { transform: scaleX(-1) rotate(9deg) translateY(3px); }
+    100% { transform: scaleX(1) translateY(0); }
+}
+
+@keyframes fox-read {
+    0%, 15.4% { opacity: 0; transform: translateX(-50%) scale(0.6); }
+    17%, 23% { opacity: 1; transform: translateX(-50%) scale(1); }
+    25%, 100% { opacity: 0; transform: translateX(-50%) scale(0.6); }
+}
+
+@keyframes fox-zzz-window {
+    0%, 41% { opacity: 0; }
+    44%, 97% { opacity: 1; }
+    99%, 100% { opacity: 0; }
+}
+
+/* На средних экранах сцена компактнее, на планшете прячем. */
+@media (max-width: 1180px) {
+    .fox-scene {
+        max-width: 420px;
+    }
+}
+
+@media (max-width: 960px) {
+    .fox-scene {
+        height: 42px;
+        min-width: 140px;
+    }
+    .fox-scene-books img {
+        width: 36px;
+        height: 28px;
+    }
+    .fox-runner {
+        width: 44px;
+        height: 31px;
+    }
+}
+
+@media (max-width: 720px) {
+    .fox-scene {
+        display: none;
+    }
+}
+
+/* Уважение к prefers-reduced-motion: статичная лиса у норы. */
+@media (prefers-reduced-motion: reduce) {
+    .fox-runner,
+    .fox-pose,
+    .fox-read,
+    .fox-zzz,
+    .fox-zzz i {
+        animation: none;
+    }
+    .fox-runner {
+        left: 4%;
+    }
+    .fox-read,
+    .fox-zzz {
         display: none;
     }
 }
@@ -927,19 +1325,16 @@
 /* ── Бренд и безопасный режим просмотра ученика ─────────────────────────── */
 .brand-fox {
     display: inline-block;
-    width: 28px;
-    height: 28px;
+    width: 30px;
+    height: 30px;
     object-fit: contain;
-    transform-origin: 60% 80%;
-    animation: fox-run 2.8s var(--ease) infinite;
+    border-radius: 50%;
+    box-shadow: var(--shadow-1);
+    transition: transform var(--dur-2) var(--ease);
 }
 
-@keyframes fox-run {
-    0%, 100% { transform: translate(0, 0) rotate(-3deg); }
-    18% { transform: translate(1px, -2px) rotate(4deg); }
-    36% { transform: translate(2px, 0) rotate(-2deg); }
-    54% { transform: translate(1px, -1px) rotate(3deg); }
-    72% { transform: translate(0, 0) rotate(-3deg); }
+.topbar-brand:hover .brand-fox {
+    transform: rotate(-8deg) scale(1.06);
 }
 
 .impersonation-bar {

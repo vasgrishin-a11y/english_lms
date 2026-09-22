@@ -437,7 +437,8 @@
     var data =
       readJsonScript("assignment-presets") ||
       readJsonScript("block-suggestions") ||
-      readJsonScript("topic-suggestions");
+      readJsonScript("topic-suggestions") ||
+      readJsonScript("deck-presets");
     if (!data || !data.length) return;
     var skillIds = readJsonScript("assignment-skill-ids") || {};
     var hint = document.querySelector("[data-preset-hint]");
@@ -471,6 +472,9 @@
         if (ignored.indexOf(name) > -1) return;
         setFieldValue(form, name, fields[name]);
       });
+      // У формы квизлета есть скрытое поле preset_id: сервер создаст карточки
+      // из шаблона сразу при сохранении. У остальных форм поля нет — no-op.
+      if (item.id) setFieldValue(form, "preset_id", item.id);
       if (item.skills && item.skills.length) {
         var ids = item.skills
           .map(function (slug) {
@@ -643,6 +647,66 @@
     );
   }
 
+  function navToggle() {
+    var button = document.getElementById("nav-toggle");
+    if (!button) return;
+    var root = document.documentElement;
+    function sync() {
+      var collapsed = root.getAttribute("data-nav") === "collapsed";
+      button.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    }
+    sync();
+    button.addEventListener("click", function () {
+      var collapsed = root.getAttribute("data-nav") !== "collapsed";
+      root.setAttribute("data-nav", collapsed ? "collapsed" : "expanded");
+      try {
+        if (collapsed) {
+          window.localStorage.setItem("lms-nav-collapsed", "1");
+        } else {
+          window.localStorage.removeItem("lms-nav-collapsed");
+        }
+      } catch (error) {
+        /* приватный режим: состояние просто не переживёт перезагрузку */
+      }
+      sync();
+    });
+  }
+
+  function deckPresetFill() {
+    var cards = readJsonScript("deck-preset-cards");
+    if (!cards) return;
+    var hint = document.querySelector("[data-deck-cards-hint]");
+    Array.prototype.forEach.call(
+      document.querySelectorAll("[data-deck-cards]"),
+      function (button) {
+        button.addEventListener("click", function () {
+          var text = cards[button.getAttribute("data-deck-cards")];
+          if (!text) return;
+          // Форма массового импорта с префиксом bulk: имя поля bulk-cards_text.
+          var area = document.querySelector(
+            "textarea[name='bulk-cards_text'], textarea[name='cards_text']"
+          );
+          if (!area) return;
+          if (
+            area.value &&
+            area.value.trim() &&
+            !window.confirm("Заменить содержимое поля списком карточек из шаблона?")
+          ) {
+            return;
+          }
+          area.value = text;
+          area.dispatchEvent(new Event("input", { bubbles: true }));
+          area.scrollIntoView({ block: "center", behavior: "smooth" });
+          area.focus();
+          if (hint) {
+            hint.textContent =
+              "Список карточек подставлен из шаблона — нажмите «Добавить карточки».";
+          }
+        });
+      }
+    );
+  }
+
   ready(function () {
     autohideAlerts();
     confirmForms();
@@ -654,5 +718,7 @@
     templatePresets();
     deadlineShortcuts();
     quizTiles();
+    navToggle();
+    deckPresetFill();
   });
 })();
