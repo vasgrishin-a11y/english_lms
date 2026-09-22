@@ -24,6 +24,8 @@ def console_context(request):
         "ui_hotkeys": request.session.get("ui_hotkeys", True),
         "pending_count": None,
         "workspace": None,
+        "is_impersonating": False,
+        "impersonating_teacher_name": "",
     }
     user = getattr(request, "user", None)
     if not user or not user.is_authenticated:
@@ -34,6 +36,10 @@ def console_context(request):
         return context
     context["role"] = role
     context["is_teacher"] = role == Profile.Role.TEACHER
+    context["is_impersonating"] = bool(
+        not context["is_teacher"] and request.session.get("impersonating_teacher_id")
+    )
+    context["impersonating_teacher_name"] = request.session.get("impersonating_teacher_name", "")
     if not context["is_teacher"]:
         return context
     cached = getattr(request, "lms_queue_counts", None)

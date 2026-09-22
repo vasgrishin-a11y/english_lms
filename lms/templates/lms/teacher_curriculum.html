@@ -52,6 +52,7 @@
             <input type="search" value="{{ query }}" placeholder="Class Search" readonly aria-label="Поиск">
         </div>
         <a class="btn btn-secondary btn-sm" href="{% url 'teacher_library' %}">{% icon "database" %}Библиотека</a>
+        <a class="btn btn-ghost btn-sm" href="{% url 'teacher_archive' %}">{% icon "archive" %}Архив</a>
         <a class="btn btn-sm" href="{% url 'teacher_block_new' %}">{% icon "plus" %}Create a Class</a>
     </div>
 </div>
@@ -110,6 +111,14 @@
                 <div class="row row-tight">
                     <span class="tiny muted tnum">{{ block_item.topics|length }} тем · {{ block_item.assignments }} заданий</span>
                     <a class="btn btn-ghost btn-sm" href="{% url 'teacher_block_edit' block.pk %}">{% icon "pencil" %}Изменить</a>
+                    <form method="post" action="{% url 'teacher_archive_item' 'block' block.pk %}" data-confirm="Переместить блок «{{ block.name }}» в архив вместе со всеми темами и заданиями?">
+                        {% csrf_token %}<button class="btn btn-ghost btn-sm" type="submit">{% icon "archive" %}<span class="sr-only">Архивировать блок</span></button>
+                    </form>
+                    {% if not block_item.topics %}
+                        <form method="post" action="{% url 'teacher_block_delete' block.pk %}" data-confirm="Удалить блок «{{ block.name }}» навсегда? Это действие нельзя отменить.">
+                            {% csrf_token %}<button class="btn btn-danger-ghost btn-sm" type="submit" title="Удалить навсегда">{% icon "trash" %}<span class="sr-only">Удалить блок навсегда</span></button>
+                        </form>
+                    {% endif %}
                 </div>
             </div>
 
@@ -123,7 +132,15 @@
                             </div>
                             <div class="row row-tight">
                                 <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_new' %}?topic={{ topic.pk }}">{% icon "plus" %}Задание</a>
-                                <a class="btn btn-ghost btn-sm" href="{% url 'teacher_topic_edit' topic.pk %}">{% icon "pencil" %}</a>
+                                <a class="btn btn-ghost btn-sm" href="{% url 'teacher_topic_edit' topic.pk %}">{% icon "pencil" %}<span class="sr-only">Изменить тему</span></a>
+                                <form method="post" action="{% url 'teacher_archive_item' 'topic' topic.pk %}" data-confirm="Переместить тему «{{ topic.title }}» в архив вместе со всеми заданиями?">
+                                    {% csrf_token %}<button class="btn btn-ghost btn-sm" type="submit">{% icon "archive" %}<span class="sr-only">Архивировать тему</span></button>
+                                </form>
+                                {% if not topic_item.assignments %}
+                                    <form method="post" action="{% url 'teacher_topic_delete' topic.pk %}" data-confirm="Удалить тему «{{ topic.title }}» навсегда? Это действие нельзя отменить.">
+                                        {% csrf_token %}<button class="btn btn-danger-ghost btn-sm" type="submit" title="Удалить навсегда">{% icon "trash" %}<span class="sr-only">Удалить тему навсегда</span></button>
+                                    </form>
+                                {% endif %}
                             </div>
                         </div>
                         {% if topic.description %}<p class="small muted">{{ topic.description }}</p>{% endif %}
@@ -148,6 +165,14 @@
                                                 <span class="row-side">
                                                     <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_preview' assignment.pk %}">{% icon "eye" %}</a>
                                                     <a class="btn btn-secondary btn-sm" href="{% url 'teacher_assignment_form' assignment.pk %}">Изменить</a>
+                                                    <form method="post" action="{% url 'teacher_archive_item' 'assignment' assignment.pk %}" data-confirm="Переместить задание «{{ assignment.title }}» в архив? История сдач сохранится.">
+                                                        {% csrf_token %}<button class="btn btn-ghost btn-sm" type="submit" title="Архивировать">{% icon "archive" %}<span class="sr-only">Архивировать задание</span></button>
+                                                    </form>
+                                                    {% if not stats.students %}
+                                                        <form method="post" action="{% url 'teacher_assignment_delete' assignment.pk %}" data-confirm="Удалить задание «{{ assignment.title }}» навсегда? Это действие нельзя отменить.">
+                                                            {% csrf_token %}<button class="btn btn-danger-ghost btn-sm" type="submit" title="Удалить навсегда">{% icon "trash" %}<span class="sr-only">Удалить задание навсегда</span></button>
+                                                        </form>
+                                                    {% endif %}
                                                 </span>
                                             </div>
                                         </li>

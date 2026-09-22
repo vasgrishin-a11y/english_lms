@@ -1,0 +1,120 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}Архив — English LMS{% endblock %}
+{% block workspace_class %}workspace-wide{% endblock %}
+
+{% block content %}
+<div class="content-head">
+    <div>
+        <nav aria-label="Хлебные крошки">
+            <ol class="crumbs">
+                <li><a href="{% url 'teacher_curriculum' %}">Карта курса</a></li>
+                <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">Архив</span></li>
+            </ol>
+        </nav>
+        <h1>Архив</h1>
+        <p class="page-note">Сюда попадает то, что больше не нужно показывать ученикам. История сдач и оценки сохраняются — при необходимости всё можно восстановить.</p>
+    </div>
+    <a class="btn btn-secondary" href="{% url 'teacher_curriculum' %}">{% icon "layers" %}Вернуться к курсу</a>
+</div>
+
+<div class="stats archive-stats">
+    <div class="stat stat-accent"><div class="stat-value tnum">{{ archive_total }}</div><div class="stat-label">{% icon "archive" "icon icon-sm" %}Всего в архиве</div></div>
+    <div class="stat"><div class="stat-value tnum">{{ archived_blocks|length }}</div><div class="stat-label">{% icon "layers" "icon icon-sm" %}Блоков</div></div>
+    <div class="stat"><div class="stat-value tnum">{{ archived_topics|length }}</div><div class="stat-label">{% icon "book" "icon icon-sm" %}Тем</div></div>
+    <div class="stat"><div class="stat-value tnum">{{ archived_assignments|length }}</div><div class="stat-label">{% icon "file-text" "icon icon-sm" %}Заданий</div></div>
+</div>
+
+<div class="archive-grid">
+    <section class="card archive-section" aria-labelledby="archived-blocks-title">
+        <div class="card-head">
+            <h2 id="archived-blocks-title" class="card-title">{% icon "layers" %}Архивные блоки</h2>
+            <span class="badge badge-outline">{{ archived_blocks|length }}</span>
+        </div>
+        {% for block in archived_blocks %}
+            <article class="archive-item">
+                <div class="archive-item__icon">{% icon "archive" %}</div>
+                <div class="archive-item__body">
+                    <h3>{{ block.name }}</h3>
+                    <p class="tiny muted mb-0">{% if block.cefr_level %}<span class="tag tag-cefr">{{ block.cefr_level }}</span> · {% endif %}{{ block.topic_total }} тем · {{ block.assignment_total }} заданий</p>
+                </div>
+                <div class="archive-item__actions">
+                    <form method="post" action="{% url 'teacher_archive_item' 'block' block.pk %}" data-confirm="Восстановить блок «{{ block.name }}» вместе со всеми темами и заданиями?">
+                        {% csrf_token %}<input type="hidden" name="action" value="restore"><input type="hidden" name="restore_tree" value="1">
+                        <button class="btn btn-secondary btn-sm" type="submit">{% icon "refresh" %}Восстановить</button>
+                    </form>
+                    {% if not block.topic_total %}
+                        <form method="post" action="{% url 'teacher_block_delete' block.pk %}" data-confirm="Удалить блок «{{ block.name }}» навсегда? Это действие нельзя отменить.">
+                            {% csrf_token %}<input type="hidden" name="from_archive" value="1">
+                            <button class="btn btn-danger-ghost btn-sm" type="submit" title="Удалить навсегда">{% icon "trash" %}<span class="sr-only">Удалить навсегда</span></button>
+                        </form>
+                    {% endif %}
+                </div>
+            </article>
+        {% empty %}
+            <div class="empty empty-compact"><div class="empty-icon">{% icon "check-circle" "icon icon-xl" %}</div><p class="mb-0">Архивных блоков нет.</p></div>
+        {% endfor %}
+    </section>
+
+    <section class="card archive-section" aria-labelledby="archived-topics-title">
+        <div class="card-head">
+            <h2 id="archived-topics-title" class="card-title">{% icon "book" %}Архивные темы</h2>
+            <span class="badge badge-outline">{{ archived_topics|length }}</span>
+        </div>
+        {% for topic in archived_topics %}
+            <article class="archive-item">
+                <div class="archive-item__icon">{% icon "book" %}</div>
+                <div class="archive-item__body">
+                    <h3>{{ topic.title }}</h3>
+                    <p class="tiny muted mb-0">{{ topic.block.name }} · {{ topic.assignment_total }} заданий</p>
+                </div>
+                <div class="archive-item__actions">
+                    <form method="post" action="{% url 'teacher_archive_item' 'topic' topic.pk %}" data-confirm="Восстановить тему «{{ topic.title }}» и её задания?">
+                        {% csrf_token %}<input type="hidden" name="action" value="restore"><input type="hidden" name="restore_tree" value="1">
+                        <button class="btn btn-secondary btn-sm" type="submit">{% icon "refresh" %}Восстановить</button>
+                    </form>
+                    {% if not topic.assignment_total %}
+                        <form method="post" action="{% url 'teacher_topic_delete' topic.pk %}" data-confirm="Удалить тему «{{ topic.title }}» навсегда? Это действие нельзя отменить.">
+                            {% csrf_token %}<input type="hidden" name="from_archive" value="1">
+                            <button class="btn btn-danger-ghost btn-sm" type="submit" title="Удалить навсегда">{% icon "trash" %}<span class="sr-only">Удалить навсегда</span></button>
+                        </form>
+                    {% endif %}
+                </div>
+            </article>
+        {% empty %}
+            <div class="empty empty-compact"><div class="empty-icon">{% icon "check-circle" "icon icon-xl" %}</div><p class="mb-0">Архивных тем нет.</p></div>
+        {% endfor %}
+    </section>
+
+    <section class="card archive-section archive-section--wide" aria-labelledby="archived-assignments-title">
+        <div class="card-head">
+            <h2 id="archived-assignments-title" class="card-title">{% icon "file-text" %}Архивные задания</h2>
+            <span class="badge badge-outline">{{ archived_assignments|length }}</span>
+        </div>
+        {% for assignment in archived_assignments %}
+            <article class="archive-item">
+                <div class="archive-item__icon">{% icon assignment.assignment_type|type_icon %}</div>
+                <div class="archive-item__body">
+                    <h3>{{ assignment.title }}</h3>
+                    <p class="tiny muted mb-0">{{ assignment.topic.block.name }} · {{ assignment.topic.title }} · {{ assignment.get_assignment_type_display }}</p>
+                </div>
+                <div class="archive-item__actions">
+                    <form method="post" action="{% url 'teacher_archive_item' 'assignment' assignment.pk %}" data-confirm="Восстановить задание «{{ assignment.title }}»?">
+                        {% csrf_token %}<input type="hidden" name="action" value="restore">
+                        <button class="btn btn-secondary btn-sm" type="submit">{% icon "refresh" %}Восстановить</button>
+                    </form>
+                    {% if not assignment.submission_total %}
+                        <form method="post" action="{% url 'teacher_assignment_delete' assignment.pk %}" data-confirm="Удалить задание «{{ assignment.title }}» навсегда? Это действие нельзя отменить.">
+                            {% csrf_token %}<input type="hidden" name="from_archive" value="1">
+                            <button class="btn btn-danger-ghost btn-sm" type="submit" title="Удалить навсегда">{% icon "trash" %}<span class="sr-only">Удалить навсегда</span></button>
+                        </form>
+                    {% endif %}
+                </div>
+            </article>
+        {% empty %}
+            <div class="empty empty-compact"><div class="empty-icon">{% icon "check-circle" "icon icon-xl" %}</div><p class="mb-0">Архивных заданий нет.</p></div>
+        {% endfor %}
+    </section>
+</div>
+{% endblock %}

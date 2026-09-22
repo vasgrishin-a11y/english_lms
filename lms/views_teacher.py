@@ -14,9 +14,11 @@ import logging
 
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, login, logout
+from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Avg, Count, F, Max, ProtectedError, Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -24,7 +26,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from .curriculum import course_tree, gradebook, queue_counts, teacher_overview
-from .decorators import teacher_required
+from .decorators import get_user_role, teacher_required
 from .forms import (
     AssignmentForm,
     BlockForm,
@@ -404,6 +406,161 @@ def library_import(request, slug):
     return redirect("teacher_curriculum")
 
 
+@teacher_required
+@require_GET
+def archive(request):
+    """Отдельная папка архива контента.
+
+    Архивирование — это мягкое удаление: история сдач и ссылки на материалы
+    сохраняются, а ученики больше не видят элемент. Для блока и темы архив
+    распространяется на вложенное содержимое, чтобы не оставить «висящие»
+    активные задания.
+    """
+    archived_blocks = (
+        Block.objects.filter(is_active=False)
+        .annotate(
+            topic_total=Count("topics", distinct=True),
+            assignment_total=Count("topics__assignments", distinct=True),
+        )
+        .order_by("order", "name", "pk")
+    )
+    archived_topics = (
+        Topic.objects.filter(is_active=False, block__is_active=True)
+        .select_related("block")
+        .annotate(assignment_total=Count("assignments"))
+        .order_by("block__order", "order", "title", "pk")
+    )
+    archived_assignments = (
+        Assignment.objects.filter(
+            is_active=False,
+            topic__is_active=True,
+            topic__block__is_active=True,
+        )
+        .select_related("topic__block", "topic")
+        .annotate(submission_total=Count("submissions"))
+        .order_by("topic__block__order", "topic__order", "order", "title", "pk")
+    )
+    return render(
+        request,
+        "lms/teacher_archive.html",
+        {
+            "archived_blocks": archived_blocks,
+            "archived_topics": archived_topics,
+            "archived_assignments": archived_assignments,
+            "archive_total": (
+                archived_blocks.count() + archived_topics.count() + archived_assignments.count()
+            ),
+            "workspace": "archive",
+        },
+    )
+
+
+def _archive_queryset(kind, pk):
+    models = {"block": Block, "topic": Topic, "assignment": Assignment}
+    model = models.get(kind)
+    if model is None:
+        raise Http404("Неизвестный тип элемента архива")
+    return get_object_or_404(model, pk=pk)
+
+
+def _set_archived(item, archived, restore_tree=False):
+    """Скрыть/восстановить элемент и, при необходимости, его дочерние узлы."""
+    now = timezone.now()
+    active = not archived
+    if isinstance(item, Block):
+        item.is_active = active
+        item.save(update_fields=["is_active", "updated_at"])
+        if archived or restore_tree:
+            Topic.objects.filter(block=item).update(is_active=active, updated_at=now)
+            Assignment.objects.filter(topic__block=item).update(is_active=active, updated_at=now)
+    elif isinstance(item, Topic):
+        item.is_active = active
+        item.save(update_fields=["is_active", "updated_at"])
+        if archived or restore_tree:
+            Assignment.objects.filter(topic=item).update(is_active=active, updated_at=now)
+    else:
+        item.is_active = active
+        item.save(update_fields=["is_active", "updated_at"])
+
+
+@teacher_required
+@require_POST
+@transaction.atomic
+def archive_item(request, kind, pk):
+    """Переместить блок, тему или задание в архив либо восстановить его."""
+    item = _archive_queryset(kind, pk)
+    restore = request.POST.get("action") == "restore"
+    restore_tree = request.POST.get("restore_tree") == "1"
+    _set_archived(item, archived=not restore, restore_tree=restore_tree)
+    label = "Блок" if kind == "block" else "Тема" if kind == "topic" else "Задание"
+    title = str(item)
+    if restore:
+        message = (
+            f"{label} «{title}» восстановлен вместе с содержимым."
+            if restore_tree and kind in {"block", "topic"}
+            else f"{label} «{title}» восстановлен."
+        )
+    else:
+        message = f"{label} «{title}» перемещён в архив. История сдач сохранена."
+    messages.success(request, message)
+    return redirect("teacher_archive" if restore else "teacher_curriculum")
+
+
+@login_required
+@require_POST
+def teacher_impersonate_start(request, pk):
+    """Открыть режим ученика без передачи учителю прав ученика навсегда.
+
+    Реальный пользователь в сессии временно меняется на ученика; исходный
+    преподаватель хранится в подписанной Django-сессии и восстанавливается
+    отдельной кнопкой в заметном баннере.
+    """
+    if request.session.get("impersonating_teacher_id"):
+        return redirect("student_home")
+    if get_user_role(request.user) != Profile.Role.TEACHER:
+        raise PermissionDenied
+    student = get_object_or_404(User, pk=pk, profile__role=Profile.Role.STUDENT, is_active=True)
+    teacher = request.user
+    login(request, student, backend="django.contrib.auth.backends.ModelBackend")
+    # login() flushes a session belonging to another authenticated user, so
+    # the return marker must be written after switching to the student.
+    request.session["impersonating_teacher_id"] = teacher.pk
+    request.session["impersonating_teacher_name"] = teacher.get_full_name() or teacher.username
+    request.session["impersonating_student_id"] = student.pk
+    messages.info(
+        request,
+        f"Вы смотрите приложение глазами ученика «{student.get_full_name() or student.username}».",
+    )
+    return redirect("student_home")
+
+
+@login_required
+@require_POST
+def teacher_impersonate_stop(request):
+    """Завершить просмотр и вернуть исходную учётную запись преподавателя."""
+    teacher_id = request.session.get("impersonating_teacher_id")
+    student_id = request.session.get("impersonating_student_id")
+    if not teacher_id:
+        raise PermissionDenied
+    teacher = User.objects.filter(
+        pk=teacher_id, profile__role=Profile.Role.TEACHER, is_active=True
+    ).first()
+    if teacher is None:
+        logout(request)
+        return redirect("login")
+    login(request, teacher, backend="django.contrib.auth.backends.ModelBackend")
+    for key in (
+        "impersonating_teacher_id",
+        "impersonating_teacher_name",
+        "impersonating_student_id",
+    ):
+        request.session.pop(key, None)
+    messages.success(request, "Вы вернулись в режим преподавателя.")
+    if student_id:
+        return redirect("teacher_student_detail", pk=student_id)
+    return redirect("teacher_home")
+
+
 def _submission_progress(assignment):
     """Кто из ожидаемых учеников уже сдал задание, а кто нет.
 
@@ -464,8 +621,8 @@ def block_delete(request, pk):
     return _delete(
         request,
         block,
-        "teacher_curriculum",
-        "Блок нельзя удалить: в нём есть темы или сдачи работ. Скройте его флагом «Активен».",
+        "teacher_archive" if request.POST.get("from_archive") == "1" else "teacher_curriculum",
+        "Блок нельзя удалить: в нём есть темы или сдачи работ. Сначала удалите пустые дочерние элементы или используйте архив.",
         blocked=block.topics.exists(),
     )
 
@@ -514,8 +671,8 @@ def topic_delete(request, pk):
     return _delete(
         request,
         topic,
-        "teacher_curriculum",
-        "Тему нельзя удалить: в ней есть задания или сдачи работ. Скройте её флагом «Активна».",
+        "teacher_archive" if request.POST.get("from_archive") == "1" else "teacher_curriculum",
+        "Тему нельзя удалить: в ней есть задания или сдачи работ. Сначала удалите пустые дочерние элементы или используйте архив.",
         blocked=topic.assignments.exists(),
     )
 
@@ -670,8 +827,8 @@ def assignment_delete(request, pk):
     return _delete(
         request,
         assignment,
-        "teacher_curriculum",
-        "Задание нельзя удалить: есть сдачи работ. Скройте его флагом «Активно» — история сохранится.",
+        "teacher_archive" if request.POST.get("from_archive") == "1" else "teacher_curriculum",
+        "Задание нельзя удалить: есть сдачи работ. Используйте архив — история сохранится.",
     )
 
 

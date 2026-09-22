@@ -61,6 +61,18 @@
     --btn-border: var(--accent-300);
 }
 
+.btn-light {
+    --btn-bg: #ffffff;
+    --btn-fg: var(--accent-900);
+    --btn-border: var(--accent-200);
+}
+
+.btn-light:hover {
+    --btn-bg: var(--accent-50);
+    --btn-fg: var(--accent-900);
+    --btn-border: var(--accent-300);
+}
+
 .btn-ghost {
     --btn-bg: transparent;
     --btn-fg: var(--text-muted);

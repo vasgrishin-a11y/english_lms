@@ -90,21 +90,35 @@ def _percent(done, total):
     return int(round(100 * done / total)) if total else 0
 
 
-def course_tree(*, student=None, query=None, teacher_view=False, include_skills=False, at=None):
+def course_tree(
+    *,
+    student=None,
+    query=None,
+    teacher_view=False,
+    include_archived=False,
+    include_skills=False,
+    at=None,
+):
     """Единое дерево курса для учителя и ученика.
 
     Ученик: только опубликованное, с состоянием своих работ одним аннотированным запросом.
-    Учитель: всё, включая черновики, со счётчиками работ по каждому заданию.
+    Учитель: активный курс и черновики, со счётчиками работ по каждому заданию.
+    Архив намеренно вынесен в отдельный экран и не смешивается с рабочей картой.
     """
-    blocks = list(ordered_blocks(active_only=not teacher_view))
-    topics = list(ordered_topics(active_only=not teacher_view))
+    show_active_only = not teacher_view or not include_archived
+    blocks = list(ordered_blocks(active_only=show_active_only))
+    topics = list(ordered_topics(active_only=show_active_only))
     assignments_queryset = Assignment.objects.select_related("topic")
     if student is not None:
         assignments_queryset = annotate_student_states(
             Assignment.objects.visible(at).select_related("topic"), student
         )
-    elif not teacher_view:
-        assignments_queryset = assignments_queryset.visible(at)
+    elif not teacher_view or not include_archived:
+        assignments_queryset = assignments_queryset.filter(
+            is_active=True,
+            topic__is_active=True,
+            topic__block__is_active=True,
+        )
     if include_skills:
         assignments_queryset = assignments_queryset.prefetch_related("skills")
     assignments = list(assignments_queryset.order_by("topic__order", "order", "pk"))
