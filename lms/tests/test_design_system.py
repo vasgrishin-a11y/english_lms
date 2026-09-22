@@ -215,11 +215,16 @@ class DesignTokenTests(SimpleTestCase):
                 token_name = re.fullmatch(r"var\((--[a-z0-9-]+)\)", background.group(1).strip())
                 if token_name and tokens.get(token_name.group(1)):
                     surfaces = [token_name.group(1)]
-            worst = min(
-                (contrast(color, tokens[surface]) for surface in surfaces),
-                default=None,
-            )
-            if worst is None or worst >= AA_TEXT:
+            ratios = [
+                ratio
+                for ratio in (contrast(color, tokens[surface]) for surface in surfaces)
+                if ratio is not None
+            ]
+            if not ratios:
+                # Значение не hex (currentColor, rgb(...)) — проверить нечем, пропускаем.
+                continue
+            worst = min(ratios)
+            if worst >= AA_TEXT:
                 continue
             if rule["selector"] not in DECORATIVE_SELECTORS:
                 offenders.append(

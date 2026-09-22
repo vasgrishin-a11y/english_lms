@@ -982,17 +982,17 @@
       var maxMb = parseFloat(input.getAttribute("data-max-mb")) || 0;
       var maxBytes = maxMb * 1024 * 1024;
       var accept = input.getAttribute("accept") || "";
-      var zone = document.createElement("label");
-      zone.className = "dropzone";
-      zone.setAttribute("for", input.id);
       var hint =
         input.getAttribute("data-dropzone-hint") || "Перетащите файл сюда или выберите на диске";
       var limits = [];
       var extensions = acceptLabel(accept);
       if (extensions) limits.push(extensions);
       if (maxMb) limits.push("до " + maxMb + " МБ");
+
+      var zone = document.createElement("div");
+      zone.className = "dropzone";
       zone.innerHTML =
-        '<span class="dropzone-icon">' +
+        '<span class="dropzone-icon" aria-hidden="true">' +
         UPLOAD_ICON +
         "</span>" +
         '<span class="dropzone-body">' +
@@ -1005,14 +1005,17 @@
         '<span class="dropzone-file" data-dropzone-name hidden></span>' +
         '<span class="dropzone-error" data-dropzone-error role="alert" hidden></span>' +
         "</span>" +
-        '<span class="btn btn-secondary btn-sm">Выбрать файл</span>' +
+        '<button type="button" class="btn btn-secondary btn-sm" data-dropzone-pick>Выбрать файл</button>' +
         '<button type="button" class="btn btn-ghost btn-sm" data-dropzone-clear hidden>Убрать файл</button>';
 
       input.parentNode.insertBefore(zone, input);
       input.classList.add("dropzone-native");
+      // Поле переезжает внутрь зоны: тогда фокус с клавиатуры подсвечивает всю зону.
+      zone.appendChild(input);
 
       var name = zone.querySelector("[data-dropzone-name]");
       var error = zone.querySelector("[data-dropzone-error]");
+      var pick = zone.querySelector("[data-dropzone-pick]");
       var clear = zone.querySelector("[data-dropzone-clear]");
 
       function showError(message) {
@@ -1067,7 +1070,7 @@
         return true;
       }
 
-      function accept(files) {
+      function acceptFiles(files) {
         if (!files || !files.length) return;
         if (!check(files[0])) {
           input.value = "";
@@ -1085,6 +1088,17 @@
         input.dispatchEvent(new Event("change", { bubbles: true }));
       }
 
+      if (pick) {
+        pick.addEventListener("click", function (event) {
+          event.preventDefault();
+          input.click();
+        });
+      }
+      zone.addEventListener("click", function (event) {
+        // Клик по скрытому полю пришёл из нашего же вызова — не зацикливаемся.
+        if (event.target.closest("button, input, label")) return;
+        input.click();
+      });
       ["dragenter", "dragover"].forEach(function (name) {
         zone.addEventListener(name, function (event) {
           event.preventDefault();
@@ -1101,7 +1115,7 @@
       });
       zone.addEventListener("drop", function (event) {
         zone.classList.remove("is-dragging");
-        accept(event.dataTransfer ? event.dataTransfer.files : null);
+        acceptFiles(event.dataTransfer ? event.dataTransfer.files : null);
       });
       if (clear) {
         clear.addEventListener("click", function (event) {

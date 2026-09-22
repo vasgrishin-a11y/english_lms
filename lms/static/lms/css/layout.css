@@ -690,12 +690,23 @@
         padding: 0 var(--sp-4);
         gap: var(--sp-3);
     }
+    .topbar-side {
+        gap: var(--sp-2);
+    }
     .topbar-side .name,
     .topbar-side .btn-secondary {
         display: none;
     }
     .hero {
         padding: var(--sp-5);
+    }
+}
+
+@media (max-width: 400px) {
+    /* На узком экране остаётся логотип: название дублируется aria-label ссылки,
+       поэтому доступное имя не теряется. */
+    .topbar-brand > span:not(.brand-logo) {
+        display: none;
     }
 }
 
@@ -712,6 +723,15 @@
     .row-item {
         flex-wrap: wrap;
         align-items: flex-start;
+    }
+    /* Статус и балл в списке заданий переезжают под заголовок: одной строкой
+       они не помещаются на телефоне и растягивали страницу вбок. */
+    .task {
+        flex-wrap: wrap;
+    }
+    .task-side {
+        flex: 1 1 100%;
+        justify-content: flex-end;
     }
     .row-side {
         width: 100%;

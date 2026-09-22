@@ -39,7 +39,7 @@
                 {% elif question.kind == 'spell' %}
                     <div class="tiles" data-tiles="spell" data-target="q_{{ question.pk }}" aria-hidden="true">
                         {% for letter in question.scrambled %}
-                            <button type="button" class="tile" data-letter="{{ letter }}">{{ letter }}</button>
+                            <button type="button" class="tile" tabindex="-1" data-letter="{{ letter }}">{{ letter }}</button>
                         {% endfor %}
                     </div>
                     <label class="sr-only" for="q_{{ question.pk }}">Ваше слово</label>
@@ -50,7 +50,7 @@
                 {% elif question.kind == 'order' %}
                     <div class="tiles" data-tiles="order" data-target="q_{{ question.pk }}" aria-hidden="true">
                         {% for choice in question.choices.all %}
-                            <button type="button" class="tile" data-word="{{ choice.text }}" data-id="{{ choice.pk }}">{{ choice.text }}</button>
+                            <button type="button" class="tile" tabindex="-1" data-word="{{ choice.text }}" data-id="{{ choice.pk }}">{{ choice.text }}</button>
                         {% endfor %}
                     </div>
                     <div class="slot-row" data-slot="q_{{ question.pk }}" aria-hidden="true"></div>

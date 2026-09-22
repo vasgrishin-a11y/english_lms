@@ -220,7 +220,7 @@
             <p class="tiny muted mb-0">{{ assignment.topic.block.name }}{% if assignment.topic.block.cefr_level %} · {{ assignment.topic.block.cefr_level }}{% endif %}</p>
             {% if trainer_cards %}
                 {% for item in trainer_cards %}
-                    <a class="chip" style="margin-top:8px" href="{% url 'trainer_session' item.pk %}">{% icon "cards" "icon icon-sm" %}{{ item.title }}</a>
+                    <a class="chip chip-wrap" style="margin-top:8px" href="{% url 'trainer_session' item.pk %}">{% icon "cards" "icon icon-sm" %}{{ item.title }}</a>
                 {% endfor %}
             {% else %}
                 <p class="tiny muted mb-0" style="margin-top:8px">Заданий с карточками в этой теме пока нет.</p>

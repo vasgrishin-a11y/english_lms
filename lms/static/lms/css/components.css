@@ -474,6 +474,13 @@ select[aria-invalid="true"],
     white-space: nowrap;
 }
 
+/* Длинная подпись (например, режим и модель ИИ) переносится, а не растягивает страницу. */
+.badge-wrap {
+    white-space: normal;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
 .badge .icon {
     width: 13px;
     height: 13px;
@@ -541,6 +548,18 @@ select[aria-invalid="true"],
         color var(--dur-2) var(--ease),
         background var(--dur-2) var(--ease),
         border-color var(--dur-2) var(--ease);
+}
+
+/* Чип с длинным названием: текст переносится, иначе страница уезжает вбок на телефоне. */
+.chip-wrap {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: left;
+}
+
+.chip-wrap .icon {
+    flex: 0 0 auto;
 }
 
 .chip:hover {
@@ -1468,9 +1487,15 @@ a.row-title:hover {
     border-color: var(--warning-border);
 }
 
+/* Балл читается тем же цветом, что и оценка: полупрозрачность роняла контраст. */
 .grade-pill small {
     font-weight: 600;
-    opacity: 0.75;
+    color: inherit;
+}
+
+/* На песочном тинте базовый янтарный тон не добирает 4.5:1 для мелкого текста. */
+.grade-pill.is-mid {
+    color: #6b4e0d;
 }
 
 /* ── Медиа ──────────────────────────────────────────────── */
@@ -2956,6 +2981,22 @@ table .grade-col {
     outline-offset: 2px;
 }
 
+@media (max-width: 720px) {
+    .lang-switch-option {
+        padding: 4px 8px;
+        letter-spacing: 0;
+    }
+}
+
+@media (max-width: 460px) {
+    .lang-switch {
+        padding: 1px;
+    }
+    .lang-switch-option {
+        padding: 3px 6px;
+    }
+}
+
 .lang-switch-compact {
     background: transparent;
     border-color: transparent;
@@ -2973,6 +3014,7 @@ table .grade-col {
 
 /* ── Приём файлов перетаскиванием ───────────────────────── */
 .dropzone {
+    position: relative;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -3019,6 +3061,7 @@ table .grade-col {
 }
 
 .dropzone-title {
+    display: block;
     margin: 0;
     font-size: var(--fs-14);
     font-weight: 650;
@@ -3026,6 +3069,7 @@ table .grade-col {
 }
 
 .dropzone-hint {
+    display: block;
     margin: 2px 0 0;
     font-size: var(--fs-12);
     color: var(--text-muted);
@@ -3048,10 +3092,17 @@ table .grade-col {
 }
 
 .dropzone-error {
+    display: block;
     margin: 6px 0 0;
     font-size: var(--fs-12);
     font-weight: 600;
     color: var(--danger-ink);
+}
+
+/* Поле файла внутри зоны: фокус с клавиатуры подсвечивает всю зону. */
+.dropzone:focus-within {
+    outline: 2px solid var(--accent-600);
+    outline-offset: 2px;
 }
 
 .dropzone.is-filled {

@@ -6,7 +6,7 @@
 
 {% block rail %}
 <aside class="rail" aria-label="Поиск и действия">
-    <form method="get" class="rail-card" role="search">
+    <form method="get" class="rail-card" role="search" aria-label="Поиск по курсу">
         <label for="id_q">Поиск по курсу</label>
         <div class="search-pill">
             {% icon "search" %}
@@ -47,9 +47,9 @@
         <p class="muted small mb-0">Карта курса: блоки, темы и задания — с обложкой, типом, счётчиками и быстрым доступом.</p>
     </div>
     <div class="classes-toolbar">
-        <div class="search-pill" role="search">
+        <div class="search-pill" aria-hidden="true">
             {% icon "search" %}
-            <input type="search" value="{{ query }}" placeholder="Поиск по курсу" readonly aria-label="Поиск">
+            <input type="search" value="{{ query }}" placeholder="Поиск по курсу" readonly tabindex="-1">
         </div>
         <a class="btn btn-secondary btn-sm" href="{% url 'teacher_library' %}">{% icon "database" %}{% t "Библиотека" %}</a>
         <a class="btn btn-ghost btn-sm" href="{% url 'teacher_archive' %}">{% icon "archive" %}{% t "Архив" %}</a>
@@ -193,7 +193,7 @@
                                                     {% if assignment.is_flashcards %}
                                                         <a class="btn btn-secondary btn-sm" href="{% url 'teacher_assignment_cards' assignment.pk %}">{% icon "cards" %}{% t "Карточки" %}</a>
                                                     {% endif %}
-                                                    <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_preview' assignment.pk %}">{% icon "eye" %}</a>
+                                                    <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_preview' assignment.pk %}" aria-label="Предпросмотр «{{ assignment.title }}» глазами ученика">{% icon "eye" %}</a>
                                                     <a class="btn btn-secondary btn-sm" href="{% url 'teacher_assignment_form' assignment.pk %}">{% t "Изменить" %}</a>
                                                     <form method="post" action="{% url 'teacher_archive_item' 'assignment' assignment.pk %}" data-confirm="Переместить задание «{{ assignment.title }}» в архив? История сдач сохранится.">
                                                         {% csrf_token %}<button class="btn btn-ghost btn-sm" type="submit" title="Архивировать">{% icon "archive" %}<span class="sr-only">{% t "Архивировать задание" %}</span></button>

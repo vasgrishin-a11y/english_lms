@@ -73,33 +73,33 @@
                 </fieldset>
 
                 <div class="form-section assignment-body" data-assignment-body>
-                    <h3 class="section-title">{% icon "file-text" %}Основная информация</h3>
+                    <h2 class="section-title">{% icon "file-text" %}Основная информация</h2>
                     <div class="form-grid">
                         <div class="form-field form-field-wide{% if form.topic.errors %} field-error{% endif %}">
                             <label for="{{ form.topic.id_for_label }}">{{ form.topic.label }}</label>
                             {{ form.topic }}
-                            {% if form.topic.help_text %}<div class="help-text">{{ form.topic.help_text }}</div>{% endif %}
+                            {% if form.topic.help_text %}<div class="help-text" id="{{ form.topic.auto_id }}_helptext">{{ form.topic.help_text }}</div>{% endif %}
                             {{ form.topic.errors }}
                         </div>
 
                         <div class="form-field{% if form.group.errors %} field-error{% endif %}">
                             <label for="{{ form.group.id_for_label }}">{{ form.group.label }}</label>
                             {{ form.group }}
-                            {% if form.group.help_text %}<div class="help-text">{{ form.group.help_text }}</div>{% endif %}
+                            {% if form.group.help_text %}<div class="help-text" id="{{ form.group.auto_id }}_helptext">{{ form.group.help_text }}</div>{% endif %}
                             {{ form.group.errors }}
                         </div>
 
                         <div class="form-field form-field-wide{% if form.assigned_students.errors %} field-error{% endif %}">
                             <label>{{ form.assigned_students.label }}</label>
                             {{ form.assigned_students }}
-                            {% if form.assigned_students.help_text %}<div class="help-text">{{ form.assigned_students.help_text }}</div>{% endif %}
+                            {% if form.assigned_students.help_text %}<div class="help-text" id="{{ form.assigned_students.auto_id }}_helptext">{{ form.assigned_students.help_text }}</div>{% endif %}
                             {{ form.assigned_students.errors }}
                         </div>
 
                         <div class="form-field form-field-wide{% if form.title.errors %} field-error{% endif %}">
                             <label for="{{ form.title.id_for_label }}">{{ form.title.label }} <span class="required" aria-hidden="true">*</span></label>
                             {{ form.title }}
-                            {% if form.title.help_text %}<div class="help-text">{{ form.title.help_text }}</div>{% endif %}
+                            {% if form.title.help_text %}<div class="help-text" id="{{ form.title.auto_id }}_helptext">{{ form.title.help_text }}</div>{% endif %}
                             {{ form.title.errors }}
                         </div>
 
@@ -117,26 +117,26 @@
                             </div>
                             {{ form.description }}
                             <p class="editor-note tiny muted" data-editor-note hidden>Большой редактор: страница остаётся видимой, а кнопка «Вернуть прежний размер» складывает его обратно. Esc тоже работает.</p>
-                            {% if form.description.help_text %}<div class="help-text">{{ form.description.help_text }}</div>{% endif %}
+                            {% if form.description.help_text %}<div class="help-text" id="{{ form.description.auto_id }}_helptext">{{ form.description.help_text }}</div>{% endif %}
                             {{ form.description.errors }}
                         </div>
                     </div>
                 </div>
 
                 <div class="form-section">
-                    <h3 class="section-title">{% icon "settings" %}Параметры задания</h3>
+                    <h2 class="section-title">{% icon "settings" %}Параметры задания</h2>
                     <div class="form-grid">
                         <div class="form-field form-field-wide{% if form.skills.errors %} field-error{% endif %}">
                             <label for="{{ form.skills.id_for_label }}">{{ form.skills.label }}</label>
                             {{ form.skills }}
-                            {% if form.skills.help_text %}<div class="help-text">{{ form.skills.help_text }}</div>{% endif %}
+                            {% if form.skills.help_text %}<div class="help-text" id="{{ form.skills.auto_id }}_helptext">{{ form.skills.help_text }}</div>{% endif %}
                             {{ form.skills.errors }}
                         </div>
 
                         <div class="form-field{% if form.max_points.errors %} field-error{% endif %}" data-show-types="text file audio mixed">
                             <label for="{{ form.max_points.id_for_label }}">{{ form.max_points.label }}</label>
                             {{ form.max_points }}
-                            {% if form.max_points.help_text %}<div class="help-text">{{ form.max_points.help_text }}</div>{% endif %}
+                            {% if form.max_points.help_text %}<div class="help-text" id="{{ form.max_points.auto_id }}_helptext">{{ form.max_points.help_text }}</div>{% endif %}
                             {{ form.max_points.errors }}
                         </div>
 
@@ -148,40 +148,51 @@
                                 <button class="btn btn-ghost btn-sm" type="button" data-deadline-shift="7">+1 неделя</button>
                                 <button class="btn btn-ghost btn-sm" type="button" data-deadline-shift="14">+2 недели</button>
                             </div>
-                            {% if form.deadline.help_text %}<div class="help-text">{{ form.deadline.help_text }}</div>{% endif %}
+                            {% if form.deadline.help_text %}<div class="help-text" id="{{ form.deadline.auto_id }}_helptext">{{ form.deadline.help_text }}</div>{% endif %}
                             {{ form.deadline.errors }}
                         </div>
 
                         <div class="form-field{% if form.publish_at.errors %} field-error{% endif %}">
                             <label for="{{ form.publish_at.id_for_label }}">{{ form.publish_at.label }}</label>
                             {{ form.publish_at }}
-                            {% if form.publish_at.help_text %}<div class="help-text">{{ form.publish_at.help_text }}</div>{% endif %}
+                            {% if form.publish_at.help_text %}<div class="help-text" id="{{ form.publish_at.auto_id }}_helptext">{{ form.publish_at.help_text }}</div>{% endif %}
                             {{ form.publish_at.errors }}
                         </div>
                     </div>
                 </div>
 
                 <div class="form-section" data-show-types="file audio mixed">
-                    <h3 class="section-title">{% icon "send" %}Материалы</h3>
+                    <h2 class="section-title">{% icon "send" %}Материалы</h2>
                     <p class="help-text" data-show-types="audio">Для аудио ученик прикрепит запись. Можно дать образец произношения.</p>
                     <div class="form-field{% if form.material_file.errors %} field-error{% endif %}">
                         <label for="{{ form.material_file.id_for_label }}">{{ form.material_file.label }}</label>
                         {{ form.material_file }}
-                        {% if form.material_file.help_text %}<div class="help-text">{{ form.material_file.help_text }}</div>{% endif %}
+                        {% if form.material_file.help_text %}<div class="help-text" id="{{ form.material_file.auto_id }}_helptext">{{ form.material_file.help_text }}</div>{% endif %}
                         {{ form.material_file.errors }}
                     </div>
                 </div>
 
                 <div class="form-section">
-                    <h3 class="section-title">{% icon "send" %}Публикация</h3>
+                    <h2 class="section-title">{% icon "send" %}Публикация</h2>
                     <div class="form-field{% if form.status.errors %} field-error{% endif %}">
                         <label for="{{ form.status.id_for_label }}">{{ form.status.label }}</label>
                         {{ form.status }}
-                        {% if form.status.help_text %}<div class="help-text">{{ form.status.help_text }}</div>{% endif %}
+                        {% if form.status.help_text %}<div class="help-text" id="{{ form.status.auto_id }}_helptext">{{ form.status.help_text }}</div>{% endif %}
                         {{ form.status.errors }}
                     </div>
-                    {{ form.is_active }}
-                    {{ form.order }}
+                    <div class="form-field">
+                        <label for="{{ form.order.id_for_label }}">{{ form.order.label }}</label>
+                        {{ form.order }}
+                        <div class="help-text">Чем меньше число, тем выше задание в списке темы.</div>
+                        {{ form.order.errors }}
+                    </div>
+                    <div class="form-field">
+                        <label for="{{ form.is_active.id_for_label }}">
+                            {{ form.is_active }}
+                            {{ form.is_active.label }}
+                        </label>
+                        {{ form.is_active.errors }}
+                    </div>
                 </div>
 
                 <div class="form-actions">
