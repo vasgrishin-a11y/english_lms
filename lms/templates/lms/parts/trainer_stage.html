@@ -1,4 +1,5 @@
 {% load lms_tags %}
+{# Сцена тренажёра: карточка, оценки повторения и завершение сессии. Вход: cards, card, queue, session_url, title. #}
 <div class="trainer-stage" id="trainer-stage">
     {% if card %}
         <p class="tiny muted center">Карточка {{ queue|length }} в очереди · нажмите на карточку, чтобы перевернуть</p>
@@ -15,8 +16,8 @@
                 </span>
             </span>
         </button>
-        <form class="rating-row" method="post" action="{% url 'trainer_session' deck.pk %}"
-              hx-post="{% url 'trainer_session' deck.pk %}" hx-target="#trainer-stage" hx-swap="outerHTML">
+        <form class="rating-row" method="post" action="{{ session_url }}"
+              hx-post="{{ session_url }}" hx-target="#trainer-stage" hx-swap="outerHTML">
             {% csrf_token %}
             <button class="btn btn-secondary" type="submit" name="rating" value="again">{% icon "refresh" %}Не помню</button>
             <button class="btn btn-secondary" type="submit" name="rating" value="hard">{% icon "alert" %}С трудом</button>
@@ -31,7 +32,7 @@
             <p>Все карточки из очереди повторены. Следующие повторы придут по расписанию интервалов.</p>
             <div class="row">
                 <a class="btn" href="{% url 'student_trainer' %}">К списку наборов</a>
-                <form method="post" action="{% url 'trainer_session' deck.pk %}">
+                <form method="post" action="{{ session_url }}">
                     {% csrf_token %}
                     <input type="hidden" name="reset" value="1">
                     <button class="btn btn-secondary" type="submit">{% icon "refresh" %}Новая сессия</button>

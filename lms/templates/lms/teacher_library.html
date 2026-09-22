@@ -15,7 +15,7 @@
 <div class="classes-head">
     <div>
         <h1 class="classes-title">Библиотека курсов</h1>
-        <p class="muted small mb-0">Готовые наборы как в ProgressMe Catalog: блоки → темы → задания (текст, аудио, тесты с новыми типами order/sort/spell) + карточки. Импорт — черновиками.</p>
+        <p class="muted small mb-0">Готовые наборы: блоки → темы → задания (текст, аудио, тесты, упражнения на порядок, колонки и буквы) + карточки. Импорт — черновиками.</p>
     </div>
     <div class="classes-toolbar">
         <a class="btn btn-secondary btn-sm" href="{% url 'teacher_curriculum' %}">{% icon "layers" %}Карта курса</a>
@@ -23,8 +23,12 @@
     </div>
 </div>
 
+{% for group in pack_groups %}
+<div class="row row-between" style="margin:8px 0 12px">
+    <h2 class="card-title mb-0">{% if group.kind == 'exam' %}Экзамены · {% endif %}{{ group.label }}</h2>
+</div>
 <div class="class-grid" style="margin-bottom:24px">
-    {% for entry in entries %}
+    {% for entry in group.entries %}
         {% with pack=entry.pack counts=entry.counts %}
         <div class="class-card" style="cursor:default">
             {% include "lms/parts/cover.html" with name=pack.name theme=pack.cover badge=pack.level %}
@@ -48,9 +52,10 @@
         {% endwith %}
     {% endfor %}
 </div>
+{% endfor %}
 
 <div class="library-grid">
-    {% for entry in entries %}
+    {% for group in pack_groups %}{% for entry in group.entries %}
         {% with pack=entry.pack counts=entry.counts %}
             <section class="card library-card" aria-labelledby="pack-detail-{{ pack.slug }}">
                 <div class="card-head">
@@ -68,7 +73,7 @@
                                         <li>
                                             <strong>{{ topic.title }}</strong>
                                             {% for item in topic.assignments %}<span class="library-item">{% icon item.type|type_icon "icon icon-sm" %}{{ item.title }} <span class="tnum">· {{ item.max_points }} б.</span></span>{% endfor %}
-                                            {% for deck in topic.decks %}<span class="library-item">{% icon "cards" "icon icon-sm" %}{{ deck.title }} · {{ deck.cards|length }} карточек</span>{% endfor %}
+                                            {% for item in topic.cards %}<span class="library-item">{% icon "cards" "icon icon-sm" %}{{ item.title }} · {{ item.cards|length }} карточек</span>{% endfor %}
                                         </li>
                                     {% endfor %}
                                 </ul>
@@ -78,6 +83,6 @@
                 </details>
             </section>
         {% endwith %}
-    {% endfor %}
+    {% endfor %}{% endfor %}
 </div>
 {% endblock %}

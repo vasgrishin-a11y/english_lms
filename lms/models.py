@@ -247,6 +247,7 @@ class Assignment(models.Model):
         AUDIO = "audio", "Аудио"
         MIXED = "mixed", "Текст + файл/аудио"
         QUIZ = "quiz", "Тест с автопроверкой"
+        FLASHCARDS = "flashcards", "Карточки-тренажёр"
 
     class Publication(models.TextChoices):
         DRAFT = "draft", "Черновик"
@@ -334,6 +335,11 @@ class Assignment(models.Model):
     @property
     def is_quiz(self):
         return self.assignment_type == Assignment.Type.QUIZ
+
+    @property
+    def is_flashcards(self):
+        """Задание-тренажёр: ученик учит слова, сдачи и оценки не требуются."""
+        return self.assignment_type == Assignment.Type.FLASHCARDS
 
     @property
     def is_visible(self):
@@ -758,49 +764,28 @@ class AnswerDraft(models.Model):
         return f"Черновик {self.student_id} → {self.assignment_id}"
 
 
-class FlashcardDeck(models.Model):
-    """Квизлет: набор карточек внутри темы или личный словарь ученика."""
+class Flashcard(models.Model):
+    """Карточка: внутри задания-тренажёра курса либо в личном словаре ученика.
 
-    topic = models.ForeignKey(
-        Topic,
+    Ровно один владелец: ``assignment`` для карточек темы курса и ``owner`` для
+    слов, которые ученик добавил себе сам.
+    """
+
+    assignment = models.ForeignKey(
+        Assignment,
         on_delete=models.CASCADE,
-        related_name="decks",
-        verbose_name="Тема",
+        related_name="cards",
+        verbose_name="Задание",
         null=True,
         blank=True,
     )
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name="own_decks",
+        related_name="dictionary_cards",
         verbose_name="Владелец личного словаря",
         null=True,
         blank=True,
-    )
-    title = models.CharField(max_length=150, verbose_name="Название")
-    description = models.TextField(blank=True, verbose_name="Описание")
-    order = models.PositiveIntegerField(default=0, verbose_name="Порядок")
-    is_active = models.BooleanField(default=True, verbose_name="Активен")
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = "Набор карточек"
-        verbose_name_plural = "Наборы карточек (квизлеты)"
-        ordering = ["topic", "order", "title"]
-
-    @property
-    def is_personal(self):
-        """Личный словарь ученика: без темы курса, с владельцем."""
-        return self.topic_id is None and self.owner_id is not None
-
-    def __str__(self):
-        return self.title
-
-
-class Flashcard(models.Model):
-    deck = models.ForeignKey(
-        FlashcardDeck, on_delete=models.CASCADE, related_name="cards", verbose_name="Набор"
     )
     front = models.CharField(max_length=300, verbose_name="Лицевая сторона")
     back = models.CharField(max_length=300, verbose_name="Оборотная сторона")
@@ -812,6 +797,18 @@ class Flashcard(models.Model):
         verbose_name = "Карточка"
         verbose_name_plural = "Карточки"
         ordering = ["order", "pk"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(assignment__isnull=False, owner__isnull=True)
+                | models.Q(assignment__isnull=True, owner__isnull=False),
+                name="flashcard_single_owner",
+            )
+        ]
+
+    @property
+    def is_personal(self):
+        """Личный словарь ученика: карточка без задания курса."""
+        return self.assignment_id is None and self.owner_id is not None
 
     def __str__(self):
         return self.front[:60]

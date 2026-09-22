@@ -39,7 +39,7 @@
 
 <section class="card">
     <div class="card-head">
-        <h2 class="card-title">{% icon "layers" %}Classes · как в ProgressMe</h2>
+        <h2 class="card-title">{% icon "layers" %}Блоки курса</h2>
         <a class="btn btn-ghost btn-sm" href="{% url 'teacher_curriculum' %}">Карта курса</a>
     </div>
     <div class="class-grid">
@@ -49,14 +49,14 @@
                 {% include "lms/parts/cover.html" with course=block %}
                 <div class="class-body">
                     <h3 class="class-title">{{ block.name }}</h3>
-                    <div class="class-meta"><span>{{ block_item.assignments }} заданий · {{ block_item.topics|length }} тем{% if block_item.decks %} · {{ block_item.decks }} квиз.{% endif %}</span></div>
+                    <div class="class-meta"><span>{{ block_item.assignments }} заданий · {{ block_item.topics|length }} тем{% if block_item.flashcards %} · {{ block_item.flashcards }} с карточками{% endif %}</span></div>
                 </div>
             </a>
             {% endwith %}
         {% empty %}
-            <p class="muted small">Классов пока нет — создайте первый, как в ProgressMe «Create a Class».</p>
+            <p class="muted small">Блоков пока нет — создайте первый: он станет разделом курса.</p>
         {% endfor %}
-        <a class="class-card is-create" href="{% url 'teacher_block_new' %}">{% icon "plus" %}<span class="small strong" style="margin-top:8px">Create a Class</span></a>
+        <a class="class-card is-create" href="{% url 'teacher_block_new' %}">{% icon "plus" %}<span class="small strong" style="margin-top:8px">Новый блок</span></a>
     </div>
 </section>
 
@@ -113,7 +113,7 @@
                 </span>
             </div>
         {% empty %}
-            <p class="muted small mb-0">Черновиков нет. Новое задание можно собрать из файла с помощью AI-помощника или вручную.</p>
+            <p class="muted small mb-0">Черновиков нет. Новое задание можно собрать из файла с помощью ИИ-помощника или вручную.</p>
         {% endfor %}
         <a class="btn btn-secondary btn-sm" href="{% url 'teacher_assignment_new' %}">{% icon "plus" %}Создать задание</a>
     </section>
@@ -124,7 +124,7 @@
     <div class="row">
         <a class="chip" href="{% url 'teacher_block_new' %}">{% icon "plus" "icon icon-sm" %}Новый блок</a>
         <a class="chip" href="{% url 'teacher_topic_new' %}">{% icon "plus" "icon icon-sm" %}Новая тема</a>
-        <a class="chip" href="{% url 'teacher_deck_new' %}">{% icon "cards" "icon icon-sm" %}Новый квизлет</a>
+        <a class="chip" href="{% url 'teacher_assignment_new' %}?type=flashcards">{% icon "cards" "icon icon-sm" %}Карточки-тренажёр</a>
         <a class="chip" href="{% url 'teacher_analytics' %}">{% icon "grid" "icon icon-sm" %}Журнал оценок</a>
         <a class="chip" href="{% url 'teacher_analytics_export' %}">{% icon "download" "icon icon-sm" %}Выгрузить журнал CSV</a>
         <a class="chip" href="{% url 'teacher_settings' %}">{% icon "hash" "icon icon-sm" %}Банк комментариев</a>

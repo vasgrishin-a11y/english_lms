@@ -72,7 +72,7 @@ class LibraryImportTests(LMSCase):
             with self.subTest(question=question.text):
                 self.assertTrue(question.choices.filter(is_correct=True).exists())
         self.assertEqual(quiz.max_points, quiz.total_question_points)
-        self.assertTrue(Flashcard.objects.filter(deck__title__contains="Travel").exists())
+        self.assertTrue(Flashcard.objects.filter(assignment__title__contains="Travel").exists())
         # Счётчик карточек — это карточки, а не наборы.
         self.assertEqual(Flashcard.objects.count(), result["created"]["cards"])
         self.assertEqual(result["created"]["questions"], Question.objects.count())
@@ -179,7 +179,7 @@ class LibraryContentTests(LMSCase):
                     self.assertTrue(block["topics"], f"В блоке {block['name']} нет тем")
                     for topic in block["topics"]:
                         self.assertTrue(
-                            topic.get("assignments") or topic.get("decks"),
+                            topic.get("assignments") or topic.get("cards"),
                             f"В теме {topic['title']} нет ни заданий, ни карточек",
                         )
                         for item in topic.get("assignments", []):
@@ -192,9 +192,9 @@ class LibraryContentTests(LMSCase):
                                     any(choice.get("correct") for choice in question["choices"]),
                                     f"У вопроса «{question['text']}» нет правильного ответа",
                                 )
-                        for deck in topic.get("decks", []):
-                            self.assertGreaterEqual(len(deck["cards"]), 5)
-                            for card in deck["cards"]:
+                        for card_set in topic.get("cards", []):
+                            self.assertGreaterEqual(len(card_set["cards"]), 5)
+                            for card in card_set["cards"]:
                                 self.assertTrue(card["front"].strip())
                                 self.assertTrue(card["back"].strip())
 

@@ -48,7 +48,7 @@
     --sand-600: #a9855a;
     --sand-800: #6f5735;
 
-    /* Третий акцент — бирюза ProgressMe (воздушный UI, чипы, CTA-подсветка).
+    /* Третий акцент — бирюза (воздушный UI, чипы, CTA-подсветка).
        Тёмные чернила держат AA: 7.1:1 на белом, светлые — только как фон. */
     --turquoise-50: #e8f8f7;
     --turquoise-100: #c8ece9;
@@ -62,7 +62,7 @@
     --turquoise-ink: var(--turquoise-700);
     --turquoise-bg: var(--turquoise-50);
 
-    /* Обложки карточек курса — пастельные градиенты, как в ProgressMe Classes */
+    /* Обложки карточек курса — пастельные градиенты для разделов */
     --cover-1: linear-gradient(135deg, #e8f8f7 0%, #d4ede5 45%, #f6efe4 100%);
     --cover-2: linear-gradient(135deg, #eeedfb 0%, #d9d7f3 50%, #e8f8f7 100%);
     --cover-3: linear-gradient(135deg, #f6efe4 0%, #ead9c0 50%, #fbeae7 100%);

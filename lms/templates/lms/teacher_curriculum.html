@@ -23,7 +23,7 @@
             <li class="row row-between"><span class="small">Блоков</span><strong class="tnum">{{ totals.blocks }}</strong></li>
             <li class="row row-between"><span class="small">Тем</span><strong class="tnum">{{ totals.topics }}</strong></li>
             <li class="row row-between"><span class="small">Заданий</span><strong class="tnum">{{ totals.assignments }}</strong></li>
-            <li class="row row-between"><span class="small">Квизлетов</span><strong class="tnum">{{ totals.decks }}</strong></li>
+            <li class="row row-between"><span class="small">Заданий с карточками</span><strong class="tnum">{{ totals.flashcards }}</strong></li>
             <li class="row row-between"><span class="small">Черновиков</span><strong class="tnum">{{ totals.drafts }}</strong></li>
             <li class="row row-between"><span class="small">Ждут проверки</span><strong class="tnum">{{ totals.waiting }}</strong></li>
         </ul>
@@ -34,7 +34,6 @@
             <a class="btn btn-sm btn-block" href="{% url 'teacher_assignment_new' %}">{% icon "plus" %}Задание</a>
             <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_block_new' %}">{% icon "plus" %}Блок</a>
             <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_topic_new' %}">{% icon "plus" %}Тема</a>
-            <a class="btn btn-ghost btn-sm btn-block" href="{% url 'teacher_deck_new' %}">{% icon "cards" %}Квизлет</a>
             <a class="btn btn-ghost btn-sm btn-block" href="{% url 'teacher_library' %}">{% icon "database" %}Из библиотеки</a>
         </div>
     </div>
@@ -44,26 +43,26 @@
 {% block content %}
 <div class="classes-head">
     <div>
-        <h1 class="classes-title">Classes</h1>
-        <p class="muted small mb-0">Карта курса · блоки как классы ProgressMe: обложка, тип, счётчики, быстрый доступ к урокам.</p>
+        <h1 class="classes-title">Курс</h1>
+        <p class="muted small mb-0">Карта курса: блоки, темы и задания — с обложкой, типом, счётчиками и быстрым доступом.</p>
     </div>
     <div class="classes-toolbar">
         <div class="search-pill" role="search">
             {% icon "search" %}
-            <input type="search" value="{{ query }}" placeholder="Class Search" readonly aria-label="Поиск">
+            <input type="search" value="{{ query }}" placeholder="Поиск по курсу" readonly aria-label="Поиск">
         </div>
         <a class="btn btn-secondary btn-sm" href="{% url 'teacher_library' %}">{% icon "database" %}Библиотека</a>
         <a class="btn btn-ghost btn-sm" href="{% url 'teacher_archive' %}">{% icon "archive" %}Архив</a>
-        <a class="btn btn-sm" href="{% url 'teacher_block_new' %}">{% icon "plus" %}Create a Class</a>
+        <a class="btn btn-secondary btn-sm" href="{% url 'teacher_ai' %}">{% icon "sparkles" %}ИИ-помощник</a>
+        <a class="btn btn-sm" href="{% url 'teacher_block_new' %}">{% icon "plus" %}Новый блок</a>
     </div>
 </div>
 
 <div class="filter-pills" style="margin-bottom:16px">
-    <span class="pill is-active turquoise">All</span>
-    <span class="pill">Individual</span>
-    <span class="pill">Group</span>
-    <span class="pill">Marathons</span>
-    <span class="tiny muted" style="margin-left:8px">Number of Classes: {{ totals.blocks }}</span>
+    <span class="pill is-active turquoise">Блоков: {{ totals.blocks }}</span>
+    <span class="pill">Тем: {{ totals.topics }}</span>
+    <span class="pill">Заданий: {{ totals.assignments }}</span>
+    <span class="pill">Черновиков: {{ totals.drafts }}</span>
 </div>
 
 {% if blocks_data %}
@@ -75,7 +74,7 @@
                 <div class="class-body">
                     <h2 class="class-title">{{ block.name }}</h2>
                     <div class="class-meta">
-                        <span>{% if block.cefr_level %}{{ block.cefr_level }} · {% endif %}Group Class</span>
+                        <span>{% if block.cefr_level %}{{ block.cefr_level }} · {% endif %}Блок курса</span>
                     </div>
                     <div class="class-foot">
                         <span>{% icon "layers" "icon icon-sm" %}{{ block_item.assignments }}</span>
@@ -106,7 +105,7 @@
                     {% if block.description %}<p class="muted small mb-0">{{ block.description }}</p>{% endif %}
                 </div>
                 <div class="row row-tight">
-                    <span class="tiny muted tnum">{{ block_item.topics|length }} тем · {{ block_item.assignments }} заданий{% if block_item.decks %} · {{ block_item.decks }} квиз.{% endif %}</span>
+                    <span class="tiny muted tnum">{{ block_item.topics|length }} тем · {{ block_item.assignments }} заданий{% if block_item.flashcards %} · {{ block_item.flashcards }} с карточками{% endif %}</span>
                     <a class="btn btn-ghost btn-sm" href="{% url 'teacher_block_edit' block.pk %}">{% icon "pencil" %}Изменить</a>
                     <form method="post" action="{% url 'teacher_archive_item' 'block' block.pk %}" data-confirm="Переместить блок «{{ block.name }}» в архив вместе со всеми темами и заданиями?">
                         {% csrf_token %}<button class="btn btn-ghost btn-sm" type="submit">{% icon "archive" %}<span class="sr-only">Архивировать блок</span></button>
@@ -125,11 +124,10 @@
                         <div class="topic-head">
                             <div>
                                 <h3>{{ topic.title }}</h3>
-                                <p class="tiny muted mb-0">{{ topic_item.assignments|length }} задани{{ topic_item.assignments|length|pluralize:"е,я,й" }}{% if topic_item.decks %} · {{ topic_item.decks|length }} квизлет{{ topic_item.decks|length|pluralize:"а,ов" }}{% endif %}{% if topic_item.waiting %} · ждут {{ topic_item.waiting }}{% endif %}{% if not topic.is_active %} · скрыта{% endif %}</p>
+                                <p class="tiny muted mb-0">{{ topic_item.assignments|length }} задани{{ topic_item.assignments|length|pluralize:"е,я,й" }}{% if topic_item.flashcards %} · {{ topic_item.flashcards }} с карточками{% endif %}{% if topic_item.waiting %} · ждут {{ topic_item.waiting }}{% endif %}{% if not topic.is_active %} · скрыта{% endif %}</p>
                             </div>
                             <div class="row row-tight">
                                 <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_new' %}?topic={{ topic.pk }}">{% icon "plus" %}Задание</a>
-                                <a class="btn btn-ghost btn-sm" href="{% url 'teacher_deck_new' %}?topic={{ topic.pk }}">{% icon "cards" %}Квизлет</a>
                                 <a class="btn btn-ghost btn-sm" href="{% url 'teacher_topic_edit' topic.pk %}">{% icon "pencil" %}<span class="sr-only">Изменить тему</span></a>
                                 <form method="post" action="{% url 'teacher_archive_item' 'topic' topic.pk %}" data-confirm="Переместить тему «{{ topic.title }}» в архив вместе со всеми заданиями?">
                                     {% csrf_token %}<button class="btn btn-ghost btn-sm" type="submit">{% icon "archive" %}<span class="sr-only">Архивировать тему</span></button>
@@ -142,7 +140,7 @@
                             </div>
                         </div>
                         {% if topic.description %}<p class="small muted">{{ topic.description }}</p>{% endif %}
-                        {% if topic_item.assignments or topic_item.decks %}
+                        {% if topic_item.assignments %}
                             <ul class="task-list">
                                 {% for entry in topic_item.assignments %}
                                     {% with assignment=entry.assignment stats=entry.stats %}
@@ -152,6 +150,7 @@
                                                     <span class="row-title row row-tight">
                                                         <a href="{% url 'teacher_assignment_form' assignment.pk %}">{{ assignment.title }}</a>
                                                         {% if assignment.is_quiz %}<span class="tag">{% icon assignment.kind|kind_icon "icon icon-sm" %}тест · {{ assignment.questions.count }} вопр.</span>{% endif %}
+                                                        {% if assignment.is_flashcards %}<span class="tag">{% icon "cards" "icon icon-sm" %}{{ assignment.card_total|default:0 }} карт.</span>{% endif %}
                                                         {% if assignment.status == 'published' %}<span class="badge badge-checked">опубликовано</span>{% else %}<span class="badge badge-draft">черновик</span>{% endif %}
                                                     </span>
                                                     <span class="row-meta">
@@ -161,6 +160,9 @@
                                                     </span>
                                                 </span>
                                                 <span class="row-side">
+                                                    {% if assignment.is_flashcards %}
+                                                        <a class="btn btn-secondary btn-sm" href="{% url 'teacher_assignment_cards' assignment.pk %}">{% icon "cards" %}Карточки</a>
+                                                    {% endif %}
                                                     <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_preview' assignment.pk %}">{% icon "eye" %}</a>
                                                     <a class="btn btn-secondary btn-sm" href="{% url 'teacher_assignment_form' assignment.pk %}">Изменить</a>
                                                     <form method="post" action="{% url 'teacher_archive_item' 'assignment' assignment.pk %}" data-confirm="Переместить задание «{{ assignment.title }}» в архив? История сдач сохранится.">
@@ -176,30 +178,9 @@
                                         </li>
                                     {% endwith %}
                                 {% endfor %}
-                                {% for deck in topic_item.decks %}
-                                    <li>
-                                        <div class="row-item">
-                                            <span class="row-main">
-                                                <span class="row-title row row-tight">
-                                                    <a href="{% url 'teacher_deck_cards' deck.pk %}">{{ deck.title }}</a>
-                                                    <span class="badge badge-info">{% icon "cards" "icon icon-sm" %}квизлет</span>
-                                                    {% if not deck.is_active %}<span class="badge badge-outline">скрыт</span>{% endif %}
-                                                </span>
-                                                <span class="row-meta">
-                                                    <span class="tnum">{{ deck.card_total }} карт.</span>
-                                                    {% if deck.description %}<span class="tiny muted">{{ deck.description|truncatewords:14 }}</span>{% endif %}
-                                                </span>
-                                            </span>
-                                            <span class="row-side">
-                                                <a class="btn btn-secondary btn-sm" href="{% url 'teacher_deck_edit' deck.pk %}">Изменить</a>
-                                                <a class="btn btn-ghost btn-sm" href="{% url 'teacher_deck_cards' deck.pk %}" title="Карточки набора">{% icon "cards" %}<span class="sr-only">Карточки набора</span></a>
-                                            </span>
-                                        </div>
-                                    </li>
-                                {% endfor %}
                             </ul>
                         {% else %}
-                            <p class="small muted mb-0">В теме нет заданий. <a href="{% url 'teacher_assignment_new' %}?topic={{ topic.pk }}">Добавить задание</a> или <a href="{% url 'teacher_deck_new' %}?topic={{ topic.pk }}">квизлет</a>.</p>
+                            <p class="small muted mb-0">В теме нет заданий. <a href="{% url 'teacher_assignment_new' %}?topic={{ topic.pk }}">Добавить задание</a> или <a href="{% url 'teacher_assignment_new' %}?type=flashcards&amp;topic={{ topic.pk }}">карточки-тренажёр</a>.</p>
                         {% endif %}
                     </div>
                 {% endwith %}
@@ -213,7 +194,8 @@
         <div class="empty">
             <div class="empty-ill">🌍</div>
             <h3>Курс пока пустой</h3>
-            <p>Создайте первый класс — как в ProgressMe. Обложка генерируется автоматически, внутри — секции Warm-up, Vocabulary, Listening…</p>
+            <p>Создайте первый блок: обложка генерируется автоматически, внутри — темы с заданиями и карточками.</p>
+            <p><a class="btn btn-secondary" href="{% url 'teacher_ai' %}">{% icon "sparkles" %}Собрать блок из файла</a></p>
             <div class="row row-tight">
                 <a class="btn" href="{% url 'teacher_block_new' %}">Создать блок</a>
                 <a class="btn btn-secondary" href="{% url 'teacher_library' %}">{% icon "database" %}Взять готовый курс</a>

@@ -1,28 +1,28 @@
 {% extends "lms/base.html" %}
 {% load lms_tags %}
 
-{% block title %}Карточки: {{ deck.title }} — English LMS{% endblock %}
+{% block title %}Карточки: {{ assignment.title }} — English LMS{% endblock %}
 {% block workspace_class %}workspace-wide{% endblock %}
 
 {% block content %}
 <nav aria-label="Хлебные крошки">
     <ol class="crumbs">
         <li><a href="{% url 'teacher_curriculum' %}">Карта курса</a></li>
-        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_deck_edit' deck.pk %}">{{ deck.title }}</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_assignment_form' assignment.pk %}">{{ assignment.title }}</a></li>
         <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">Карточки</span></li>
     </ol>
 </nav>
 
 <div class="content-head">
     <div>
-        <h1>{{ deck.title }}</h1>
-        <p class="page-note">{{ deck.topic.block.name }} · {{ deck.topic.title }} · {{ cards|length }} карточек · тренировали {{ learners }} учеников</p>
+        <h1>{{ assignment.title }}</h1>
+        <p class="page-note">{{ assignment.topic.block.name }} · {{ assignment.topic.title }} · {{ cards|length }} карточек · тренировали {{ learners }} учеников</p>
     </div>
     <div class="row">
-        <a class="btn btn-secondary" href="{% url 'teacher_deck_edit' deck.pk %}">{% icon "pencil" %}Настройки набора</a>
-        <form method="post" action="{% url 'teacher_deck_delete' deck.pk %}" data-confirm="Удалить набор «{{ deck.title }}» вместе с карточками?">
+        <a class="btn btn-secondary" href="{% url 'teacher_assignment_form' assignment.pk %}">{% icon "pencil" %}Настройки задания</a>
+        <form method="post" action="{% url 'teacher_assignment_delete' assignment.pk %}" data-confirm="Удалить задание «{{ assignment.title }}» вместе с карточками?">
             {% csrf_token %}
-            <button class="btn btn-danger-ghost" type="submit">{% icon "trash" %}Удалить набор</button>
+            <button class="btn btn-danger-ghost" type="submit">{% icon "trash" %}Удалить задание</button>
         </form>
     </div>
 </div>
@@ -30,7 +30,7 @@
 <div class="split">
     <div class="split-main">
         <section class="card">
-            <div class="card-head"><h2 class="card-title">{% icon "cards" %}Карточки набора</h2></div>
+            <div class="card-head"><h2 class="card-title">{% icon "cards" %}Карточки задания</h2></div>
             {% if cards %}
                 <ul class="card-grid">
                     {% for card in cards %}
@@ -59,30 +59,29 @@
             {% endif %}
         </section>
 
-        <section class="card" aria-labelledby="deck-presets-title">
+        <section class="card" aria-labelledby="card-presets-title">
             <div class="card-head">
-                <h2 class="card-title" id="deck-presets-title">{% icon "sparkles" %}Библиотека шаблонов</h2>
+                <h2 class="card-title" id="card-presets-title">{% icon "sparkles" %}Библиотека шаблонов</h2>
             </div>
-            <p class="help-text">Готовые наборы по темам и уровням. «Подставить в импорт» — заполнить поле массового импорта для просмотра и правок, «Добавить сразу» — создать карточки немедленно.</p>
+            <p class="help-text">Готовые наборы по уровням — от A1 к C1, экзаменационные отдельно. «В импорт» заполняет поле массового импорта для правок, «Добавить сразу» создаёт карточки немедленно.</p>
             {% include "lms/parts/level_filter.html" with levels=preset_levels %}
-            {% for topic in preset_topics %}
-            <div class="preset-group" data-preset-group>
-                <h3 class="preset-topic">{{ topic.label }}</h3>
-                <ul class="preset-pick-list">
-                    {% for preset in presets %}
-                        {% if preset.topic == topic.id %}
+            {% for group in preset_groups %}
+                <div class="preset-group" data-preset-group>
+                    <h3 class="preset-topic">{% if group.kind == 'exam' %}Экзамены · {{ group.label }}{% else %}{{ group.label }}{% endif %}</h3>
+                    <ul class="preset-pick-list">
+                        {% for preset in group.items %}
                             <li class="preset-pick" data-level="{{ preset.level }}">
                                 <span class="preset-icon">{% icon preset.icon "icon" %}</span>
                                 <span class="preset-text">
                                     <span class="preset-label">{{ preset.label }}</span>
                                     <span class="preset-tagline">{{ preset.tagline }}</span>
                                     <span class="preset-meta">
-                                        <span class="tag">{{ preset.level }}</span>
+                                        <span class="tag">{{ preset.topic_label }}</span>
                                         <span class="tag tnum">{{ preset.cards|length }} карт.</span>
                                     </span>
                                 </span>
                                 <span class="preset-pick-actions">
-                                    <button class="btn btn-secondary btn-sm" type="button" data-deck-cards="{{ preset.id }}">{% icon "upload" %}В импорт</button>
+                                    <button class="btn btn-secondary btn-sm" type="button" data-card-preset="{{ preset.id }}">{% icon "upload" %}В импорт</button>
                                     <form method="post">
                                         {% csrf_token %}
                                         <input type="hidden" name="preset_id" value="{{ preset.id }}">
@@ -90,13 +89,12 @@
                                     </form>
                                 </span>
                             </li>
-                        {% endif %}
-                    {% endfor %}
-                </ul>
-            </div>
+                        {% endfor %}
+                    </ul>
+                </div>
             {% endfor %}
-            <p class="tiny muted mb-0" data-deck-cards-hint aria-live="polite"></p>
-            {{ presets|deck_cards_map|json_script:"deck-preset-cards" }}
+            <p class="tiny muted mb-0" data-card-preset-hint aria-live="polite"></p>
+            {{ preset_payload|card_presets_map|json_script:"card-preset-cards" }}
         </section>
     </div>
 
@@ -118,6 +116,11 @@
                 <button class="btn btn-secondary btn-block" type="submit" name="_bulk" value="1">{% icon "upload" %}Импортировать список</button>
             </form>
             <p class="tiny muted mb-0">Формат: <code>front | back</code> или <code>front | back | example</code>, по одной карточке на строку. Пустые строки пропускаются.</p>
+        </section>
+
+        <section class="card card-pad-sm">
+            <p class="rail-title">Как это работает у ученика</p>
+            <p class="small muted mb-0">Задание с карточками появляется в теме и в тренажёре. Ученик открывает сессию, отмечает уверенность, а интервалы повторения SM-2 подбирают следующую дату показа.</p>
         </section>
     </div>
 </div>

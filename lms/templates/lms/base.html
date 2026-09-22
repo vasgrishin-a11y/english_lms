@@ -41,7 +41,6 @@
             <button type="button" class="app-nav-toggle" id="nav-toggle" aria-expanded="true" aria-controls="app-nav" aria-label="Свернуть меню" title="Свернуть меню">
                 <span class="app-nav-toggle-icon" aria-hidden="true">{% icon "menu" %}</span>
                 <span class="app-nav-toggle-label">Меню</span>
-                <span class="app-nav-toggle-chevron" aria-hidden="true">{% icon "chevron-left" "icon icon-sm" %}</span>
             </button>
         </div>
         <ul class="app-nav-list">
@@ -49,6 +48,7 @@
                 <li><a class="app-nav-link {% if workspace == 'home' %}is-active{% endif %}" href="{% url 'teacher_home' %}"{% if workspace == 'home' %} aria-current="page"{% endif %} title="Консоль преподавателя">{% icon "home" %}<span class="app-nav-label">Консоль</span></a></li>
                 <li><a class="app-nav-link {% if workspace == 'review' %}is-active turquoise{% endif %}" href="{% url 'teacher_review_queue' %}"{% if workspace == 'review' %} aria-current="page"{% endif %} title="Проверка">{% icon "check-circle" %}<span class="app-nav-label">Проверка</span>{% if pending_count %}<span class="app-nav-count tnum">{{ pending_count }}</span>{% endif %}</a></li>
                 <li><a class="app-nav-link {% if workspace == 'curriculum' %}is-active{% endif %}" href="{% url 'teacher_curriculum' %}"{% if workspace == 'curriculum' %} aria-current="page"{% endif %} title="Курс">{% icon "layers" %}<span class="app-nav-label">Курс</span></a></li>
+                <li><a class="app-nav-link {% if workspace == 'ai' %}is-active{% endif %}" href="{% url 'teacher_ai' %}"{% if workspace == 'ai' %} aria-current="page"{% endif %} title="ИИ-помощник">{% icon "sparkles" %}<span class="app-nav-label">ИИ-помощник</span></a></li>
                 <li><a class="app-nav-link {% if workspace == 'archive' %}is-active{% endif %}" href="{% url 'teacher_archive' %}"{% if workspace == 'archive' %} aria-current="page"{% endif %} title="Архив">{% icon "archive" %}<span class="app-nav-label">Архив</span></a></li>
                 <li><a class="app-nav-link {% if workspace == 'students' %}is-active{% endif %}" href="{% url 'teacher_students' %}"{% if workspace == 'students' %} aria-current="page"{% endif %} title="Ученики">{% icon "users" %}<span class="app-nav-label">Ученики</span></a></li>
                 <li><a class="app-nav-link {% if workspace == 'groups' %}is-active{% endif %}" href="{% url 'teacher_groups' %}"{% if workspace == 'groups' %} aria-current="page"{% endif %} title="Группы">{% icon "users" %}<span class="app-nav-label">Группы</span></a></li>
@@ -63,18 +63,14 @@
                 <li><a class="app-nav-link {% if workspace == 'upcoming' %}is-active{% endif %}" href="{% url 'student_upcoming' %}"{% if workspace == 'upcoming' %} aria-current="page"{% endif %} title="Сроки">{% icon "calendar" %}<span class="app-nav-label">Сроки</span></a></li>
             {% endif %}
         </ul>
-        <div class="app-nav-foot">
-            <a class="app-nav-home" href="{% url 'dashboard' %}" title="На главную">{% icon "compass" %}<span class="app-nav-label">На главную</span></a>
-        </div>
     </nav>
     {% endif %}
 
     <div class="app-main">
         <header class="topbar">
             <a class="topbar-brand" href="{% url 'dashboard' %}">
-                <span class="brand-logo">{% icon "compass" %}</span>
+                <span class="brand-logo"><img src="{% static 'lms/img/brand-book.svg' %}" alt="" width="30" height="30" aria-hidden="true"></span>
                 <span>English&nbsp;LMS</span>
-                <img class="brand-fox" src="{% static 'lms/img/fox-logo.svg' %}" alt="" aria-hidden="true">
             </a>
 
             {% include "lms/parts/fox_scene.html" %}
@@ -119,6 +115,7 @@
             <li><a href="{% url 'teacher_home' %}"{% if workspace == 'home' %} aria-current="page"{% endif %}>{% icon "home" %}Консоль</a></li>
             <li><a href="{% url 'teacher_review_queue' %}"{% if workspace == 'review' %} aria-current="page"{% endif %}>{% icon "check-circle" %}Проверка</a></li>
             <li><a href="{% url 'teacher_curriculum' %}"{% if workspace == 'curriculum' %} aria-current="page"{% endif %}>{% icon "layers" %}Курс</a></li>
+            <li><a href="{% url 'teacher_ai' %}"{% if workspace == 'ai' %} aria-current="page"{% endif %}>{% icon "sparkles" %}ИИ</a></li>
             <li><a href="{% url 'teacher_archive' %}"{% if workspace == 'archive' %} aria-current="page"{% endif %}>{% icon "archive" %}Архив</a></li>
             <li><a href="{% url 'teacher_students' %}"{% if workspace == 'students' %} aria-current="page"{% endif %}>{% icon "users" %}Ученики</a></li>
             <li><a href="{% url 'teacher_groups' %}"{% if workspace == 'groups' %} aria-current="page"{% endif %}>{% icon "users" %}Группы</a></li>
@@ -135,6 +132,7 @@
 {% endif %}
 
 <script src="{% static 'lms/vendor/htmx.min.js' %}" defer></script>
+<script src="{% static 'lms/js/fox_scene.js' %}" defer></script>
 <script src="{% static 'lms/js/lms.js' %}" defer></script>
 {% block extra_js %}{% endblock %}
 </body>

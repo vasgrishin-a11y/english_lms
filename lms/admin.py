@@ -15,7 +15,6 @@ from .models import (
     CommentSnippet,
     Feedback,
     Flashcard,
-    FlashcardDeck,
     Profile,
     Question,
     QuizAttempt,
@@ -312,35 +311,13 @@ class FlashcardInline(admin.TabularInline):
     fields = ("front", "back", "example", "order")
 
 
-@admin.register(FlashcardDeck)
-class FlashcardDeckAdmin(admin.ModelAdmin):
-    list_display = ("title", "topic", "owner", "cards_count", "order", "is_active", "console_link")
-    list_filter = ("is_active", "topic__block")
-    search_fields = ("title", "description", "topic__title", "owner__username")
-    list_select_related = ("topic", "owner")
-    inlines = (FlashcardInline,)
-
-    def get_queryset(self, request):
-        return super().get_queryset(request).annotate(_cards=Count("cards"))
-
-    @admin.display(description="Карточек", ordering="_cards")
-    def cards_count(self, obj):
-        return obj._cards
-
-    @admin.display(description="Карточки")
-    def console_link(self, obj):
-        return format_html(
-            '<a href="{}">Открыть в консоли</a>', reverse("teacher_deck_cards", args=[obj.pk])
-        )
-
-
 @admin.register(Flashcard)
 class FlashcardAdmin(admin.ModelAdmin):
-    list_display = ("front", "back", "deck", "order")
-    list_filter = ("deck__topic__block", "deck")
-    search_fields = ("front", "back", "example")
-    list_select_related = ("deck",)
-    autocomplete_fields = ("deck",)
+    list_display = ("front", "back", "assignment", "owner", "order")
+    list_filter = ("assignment__topic__block", "assignment")
+    search_fields = ("front", "back", "example", "owner__username")
+    list_select_related = ("assignment__topic", "owner")
+    autocomplete_fields = ("assignment", "owner")
 
 
 @admin.register(QuizAttempt)
@@ -367,6 +344,6 @@ class AnswerDraftAdmin(ReadOnlyRecordsAdmin):
 @admin.register(CardReview)
 class CardReviewAdmin(ReadOnlyRecordsAdmin):
     list_display = ("student", "card", "interval_days", "ease", "due_at", "lapses")
-    list_filter = ("card__deck",)
-    list_select_related = ("student", "card__deck")
+    list_filter = ("card__assignment",)
+    list_select_related = ("student", "card__assignment")
     search_fields = ("student__username", "card__front", "card__back")

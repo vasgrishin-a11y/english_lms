@@ -8,11 +8,11 @@
 <div class="classes-head">
     <div>
         <h1 class="classes-title">{% icon "language" %} Мой словарь</h1>
-        <p class="muted small mb-0">Личный словарь из урока: выделяйте слово → перевод → добавить. Тренировка по SM-2, как в ProgressMe.</p>
+        <p class="muted small mb-0">Личный словарь ученика: слово → перевод → тренировка по интервалам SM-2.</p>
     </div>
     <div class="classes-toolbar">
         <span class="badge badge-turquoise tnum">{{ words|length }} слов</span>
-        {% if queue.queue %}<a class="btn btn-sm" href="{% url 'trainer_session' deck.pk %}">{% icon "play" %}Тренировать {{ queue.due|default:queue.queue|length }}</a>{% endif %}
+        {% if queue.queue %}<a class="btn btn-sm" href="{% url 'student_dictionary_session' %}">{% icon "play" %}Тренировать {{ queue.due|default:queue.queue|length }}</a>{% endif %}
     </div>
 </div>
 
@@ -45,7 +45,7 @@
                 <div class="empty">
                     <div class="empty-ill">📚</div>
                     <h3>Словарь пока пуст</h3>
-                    <p>Добавляйте слова из заданий или в форме справа. Как в ProgressMe: слово → перевод → 4 режима тренировки.</p>
+                    <p>Добавляйте слова из заданий или в форме справа: слово, перевод и — при желании — пример употребления.</p>
                 </div>
             {% endif %}
         </section>
@@ -59,7 +59,7 @@
                 {% include "lms/form_fields.html" with form=form %}
                 <button class="btn btn-sm btn-block" type="submit" style="margin-top:12px">{% icon "plus" %}В словарь</button>
             </form>
-            <p class="tiny muted" style="margin-top:12px">Совет: выделяйте слова в задании, получайте перевод и сохраняйте в один клик — как в ProgressMe «перевод по выделению».</p>
+            <p class="tiny muted" style="margin-top:12px">Совет: добавляйте слова прямо со страницы задания — они попадут в этот словарь и в очередь повторения.</p>
         </div>
 
         <div class="rail-card">
@@ -70,7 +70,8 @@
                 <li><strong>good</strong> — уверенно</li>
                 <li><strong>easy</strong> — слишком легко</li>
             </ul>
-            <a class="btn btn-secondary btn-sm btn-block" href="{% url 'student_trainer' %}" style="margin-top:12px">{% icon "cards" %}Все наборы</a>
+            <a class="btn btn btn-sm btn-block" href="{% url 'student_dictionary_session' %}" style="margin-top:12px">{% icon "play" %}Тренировать словарь</a>
+            <a class="btn btn-secondary btn-sm btn-block" href="{% url 'student_trainer' %}" style="margin-top:8px">{% icon "cards" %}Все наборы</a>
         </div>
 
         <div class="rail-card">

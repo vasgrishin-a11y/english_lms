@@ -46,6 +46,13 @@ class LMSCase(TestCase):
     def url(self):
         return f"/assignments/{self.assignment.pk}/"
 
+    def card_assignment(self, *, topic=None, title="Карточки", **kwargs):
+        """Задание-тренажёр с карточками: карточки живут внутри задания."""
+        kwargs.setdefault("assignment_type", Assignment.Type.FLASHCARDS)
+        kwargs.setdefault("description", "Тренажёр слов.")
+        kwargs.setdefault("max_points", 0)
+        return Assignment.objects.create(topic=topic or self.topic, title=title, **kwargs)
+
     def submit(self, version=0, **kwargs):
         values = {
             "student": self.student,

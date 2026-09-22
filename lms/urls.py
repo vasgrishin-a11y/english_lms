@@ -1,7 +1,7 @@
 from django.contrib.auth import views as auth_views
 from django.urls import path, reverse_lazy
 
-from . import views, views_student, views_teacher
+from . import views, views_ai, views_student, views_teacher
 
 urlpatterns = [
     # Аутентификация
@@ -39,6 +39,7 @@ urlpatterns = [
     path("upcoming/", views_student.upcoming, name="student_upcoming"),
     path("trainer/", views_student.trainer, name="student_trainer"),
     path("trainer/<int:pk>/", views_student.trainer_session, name="trainer_session"),
+    path("trainer/words/", views_student.dictionary_session, name="student_dictionary_session"),
     path("my/words/", views_student.student_dictionary, name="student_dictionary"),
     path(
         "my/words/<int:pk>/delete/",
@@ -57,7 +58,11 @@ urlpatterns = [
         views_teacher.review_detail,
         name="teacher_submission_review_legacy",
     ),
-    path("teacher/curriculum/", views_teacher.curriculum, name="teacher_curriculum"),
+    path(
+        "teacher/curriculum/", views_teacher.curriculum, name="teacher_curriculum"
+    ),  # ── ИИ-помощник: материал → черновики курса ──────────────────────────
+    path("teacher/ai/", views_ai.ai_assistant, name="teacher_ai"),
+    path("teacher/ai/import/", views_ai.ai_import, name="teacher_ai_import"),
     path("teacher/archive/", views_teacher.archive, name="teacher_archive"),
     path(
         "teacher/archive/<str:kind>/<int:pk>/",
@@ -153,22 +158,27 @@ urlpatterns = [
         views_teacher.question_delete,
         name="teacher_question_delete",
     ),
-    path("teacher/curriculum/decks/new/", views_teacher.deck_form, name="teacher_deck_new"),
-    path("teacher/curriculum/decks/<int:pk>/", views_teacher.deck_form, name="teacher_deck_edit"),
     path(
-        "teacher/curriculum/decks/<int:pk>/cards/",
-        views_teacher.deck_cards,
-        name="teacher_deck_cards",
-    ),
-    path(
-        "teacher/curriculum/decks/<int:pk>/delete/",
-        views_teacher.deck_delete,
-        name="teacher_deck_delete",
+        "teacher/curriculum/assignments/<int:pk>/cards/",
+        views_teacher.assignment_cards,
+        name="teacher_assignment_cards",
     ),
     path(
         "teacher/curriculum/cards/<int:pk>/delete/",
         views_teacher.card_delete,
         name="teacher_card_delete",
+    ),
+    # Прежние адреса наборов карточек: теперь это задания с карточками.
+    path("teacher/curriculum/decks/new/", views_teacher.deck_new_redirect, name="teacher_deck_new"),
+    path(
+        "teacher/curriculum/decks/<int:pk>/",
+        views_teacher.deck_legacy_redirect,
+        name="teacher_deck_edit",
+    ),
+    path(
+        "teacher/curriculum/decks/<int:pk>/cards/",
+        views_teacher.deck_legacy_redirect,
+        name="teacher_deck_cards",
     ),
     path("teacher/students/", views_teacher.students_list, name="teacher_students"),
     path(

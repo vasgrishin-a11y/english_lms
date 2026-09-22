@@ -34,20 +34,30 @@
         <div class="card card-pad-sm">
             <p class="rail-title">Готовые темы по английскому</p>
             <p class="tiny muted">Нажмите тему — название и описание подставятся в форму. Навыки отметьте вручную, если они нужны.</p>
-            <div class="col suggestion-list">
-                {% for suggestion in suggestions %}
-                    <button type="button" class="suggestion" data-preset="{{ forloop.counter0 }}">
-                        <span class="suggestion-label">{{ suggestion.title }}</span>
-                        <span class="suggestion-note">{{ suggestion.description|truncatechars:70 }}</span>
-                    </button>
+            <div class="col">
+                {% for group in suggestion_groups %}
+                    <p class="rail-title" style="margin-top:12px">{% if group.kind == 'exam' %}Экзамены · {{ group.label }}{% else %}{{ group.label }}{% endif %}</p>
+                    <div class="col suggestion-list">
+                        {% for suggestion in group.items %}
+                            <button type="button" class="suggestion" data-preset="{{ suggestion.id }}">
+                                <span class="suggestion-label">{{ suggestion.title }}</span>
+                                <span class="suggestion-note">{{ suggestion.description|truncatechars:70 }}</span>
+                            </button>
+                        {% endfor %}
+                    </div>
                 {% endfor %}
             </div>
             <p class="tiny muted mb-0" data-preset-hint aria-live="polite"></p>
-            {{ suggestions|json_script:"topic-suggestions" }}
+            {{ suggestion_payload|json_script:"topic-suggestions" }}
+        </div>
+        <div class="card card-pad-sm">
+            <p class="rail-title">{% icon "sparkles" %}ИИ-помощник</p>
+            <p class="small muted">Разберите файл в задания и карточки и добавьте их сразу в эту тему.</p>
+            <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_ai' %}?target=assignment{% if form.instance.pk %}&amp;topic={{ form.instance.pk }}{% endif %}">Собрать материал для темы</a>
         </div>
         <div class="card card-pad-sm">
             <p class="rail-title">Подсказка</p>
-            <p class="small muted">Тема — раздел внутри блока. К теме можно привязать квизлеты: ученик увидит карточки рядом с заданиями и в тренажёре.</p>
+            <p class="small muted">Тема — раздел внутри блока. В теме живут задания, включая задания с карточками для тренировки слов.</p>
             <p class="small muted mb-0">Порядок тем внутри блока влияет на дорожную карту.</p>
         </div>
     </div>

@@ -7,6 +7,7 @@ from django.core.paginator import Paginator
 from django.db.models import Count, Q, Sum
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
@@ -18,22 +19,20 @@ from .curriculum import (
 )
 from .decorators import student_required
 from .forms import DictionaryWordForm, SubmissionForm
-from .models import AnswerDraft, Assignment, CardReview, Flashcard, FlashcardDeck, Submission
+from .models import AnswerDraft, Assignment, CardReview, Flashcard, Submission
 from .scoring import normalize_gap
 from .services import (
     RATING_CHOICES,
     ConflictError,
     RateLimitError,
     add_dictionary_word,
-    deck_available,
-    deck_stats,
-    get_or_create_personal_deck,
+    card_set_stats,
+    personal_cards,
     practice_queue,
     review_flashcard,
     save_answer_draft,
     submit_assignment,
     submit_quiz,
-    visible_decks,
 )
 from .views import _add_validation_errors
 
@@ -128,13 +127,14 @@ def student_home(request):
         .select_related("feedback", "assignment__topic__block")
         .order_by("-feedback__updated_at", "-pk")[:5]
     )
-    decks = deck_stats(student)
-    due_total = sum(deck.due_count for deck in decks)
-    deck_block_counts = {}
-    for deck in decks:
-        if deck.topic_id and deck.topic.block_id:
-            block_id = deck.topic.block_id
-            deck_block_counts[block_id] = deck_block_counts.get(block_id, 0) + 1
+    card_sets = card_set_stats(student)
+    due_total = sum(item["due_count"] for item in card_sets)
+    card_set_block_counts = {}
+    for item in card_sets:
+        assignment = item["assignment"]
+        if assignment is not None and assignment.topic.block_id:
+            block_id = assignment.topic.block_id
+            card_set_block_counts[block_id] = card_set_block_counts.get(block_id, 0) + 1
     context = {
         "continue_item": continue_candidates[0] if continue_candidates else None,
         "continue_draft": drafts.get(continue_candidates[0].pk if continue_candidates else None),
@@ -148,9 +148,9 @@ def student_home(request):
             "progress": int(round(100 * done / total)) if total else 0,
         },
         "recent": recent,
-        "decks": decks,
+        "card_sets": card_sets,
         "due_total": due_total,
-        "deck_block_counts": deck_block_counts,
+        "card_set_block_counts": card_set_block_counts,
         "workspace": "home",
     }
     return render(request, "lms/student_home.html", context)
@@ -161,14 +161,14 @@ def student_home(request):
 def student_assignments(request):
     """Карта курса: страница заданий, сгруппированных по блокам и темам в шаблоне.
 
-    Бюджет — семь запросов независимо от размера курса: сессия, пользователь,
-    роль, счётчик страниц, сама страница, одна агрегирующая сводка и квизлеты
-    тем текущей страницы (показываются строками-заданиями в темах).
+    Бюджет — фиксированное число запросов независимо от размера курса: сессия,
+    пользователь, роль, счётчик страниц, сама страница и одна агрегирующая
+    сводка. Задания с карточками приходят в общем списке с числом карточек.
     """
     query = request.GET.get("q", "").strip()[:200]
     assignments = annotate_student_states(
         visible_assignments().select_related("topic__block"), request.user
-    )
+    ).annotate(card_total=Count("cards"))
     if query:
         assignments = assignments.filter(
             Q(title__icontains=query)
@@ -187,17 +187,7 @@ def student_assignments(request):
     page = Paginator(assignments, settings.LMS_PAGE_SIZE).get_page(request.GET.get("page"))
     for assignment in page:
         assignment.state = state_of(assignment)
-    topic_ids = {assignment.topic_id for assignment in page}
-    decks_by_topic = {}
-    if topic_ids:
-        topic_decks = (
-            visible_decks(request.user)
-            .filter(topic_id__in=topic_ids, topic__isnull=False)
-            .annotate(card_total=Count("cards"))
-            .order_by("topic__order", "order", "pk")
-        )
-        for deck in topic_decks:
-            decks_by_topic.setdefault(deck.topic_id, []).append(deck)
+        assignment.cards_count = assignment.card_total or 0
     summary = annotate_student_states(visible_assignments(), request.user).aggregate(
         total=Count("pk"),
         done=Count("pk", filter=Q(latest_status=Submission.Status.CHECKED)),
@@ -219,7 +209,6 @@ def student_assignments(request):
             "page_obj": page,
             "query": query,
             "mode": mode,
-            "decks_by_topic": decks_by_topic,
             "workspace": "curriculum",
         },
     )
@@ -232,6 +221,8 @@ def assignment_detail(request, pk):
     assignment = get_object_or_404(
         Assignment.objects.visible().select_related("topic__block"), pk=pk
     )
+    if assignment.is_flashcards:
+        return _flashcards_detail(request, assignment)
     attempts = (
         Submission.objects.filter(student=request.user, assignment=assignment)
         .select_related("feedback__teacher")
@@ -317,6 +308,7 @@ def assignment_detail(request, pk):
             "draft": draft,
             "page_obj": history,
             "conflict": status == 409,
+            "trainer_cards": _topic_trainer_cards(assignment),
             "workspace": "curriculum",
         },
         status=status,
@@ -324,6 +316,50 @@ def assignment_detail(request, pk):
     if status == 429:
         response["Retry-After"] = "3600"
     return response
+
+
+def _topic_trainer_cards(assignment):
+    """Соседние задания-тренажёры той же темы — для перехода из карточки задания."""
+    return list(
+        Assignment.objects.visible()
+        .filter(
+            topic_id=assignment.topic_id,
+            assignment_type=Assignment.Type.FLASHCARDS,
+            is_active=True,
+        )
+        .exclude(pk=assignment.pk)
+        .order_by("order", "pk")
+    )
+
+
+def _flashcards_detail(request, assignment):
+    """Задание с карточками: условия, слова и переход в тренажёр.
+
+    Сдач и оценок такое задание не предполагает — прогресс ведёт интервальное
+    повторение, поэтому POST перенаправляет прямо в сессию тренажёра.
+    """
+    if request.method == "POST":
+        return redirect("trainer_session", pk=assignment.pk)
+    cards = list(assignment.cards.order_by("order", "pk"))
+    trainer_cards = _topic_trainer_cards(assignment)
+    return render(
+        request,
+        "lms/assignment_detail.html",
+        {
+            "assignment": assignment,
+            "submission": None,
+            "trainer_cards": trainer_cards,
+            "form": None,
+            "questions": [],
+            "quiz_result": None,
+            "draft": None,
+            "page_obj": None,
+            "conflict": False,
+            "cards": cards,
+            "trainer_queue": practice_queue(student=request.user, cards=cards, limit=1),
+            "workspace": "curriculum",
+        },
+    )
 
 
 def _parse_int(value, default=0):
@@ -338,7 +374,7 @@ def _parse_int(value, default=0):
 def save_draft(request, pk):
     """Автосохранение черновика ответа (htmx). Попытки при этом не создаются."""
     assignment = get_object_or_404(Assignment.objects.visible(), pk=pk)
-    if assignment.is_quiz:
+    if assignment.is_quiz or assignment.is_flashcards:
         return render(request, "lms/parts/draft_state.html", {"draft": None, "denied": True})
     try:
         draft = save_answer_draft(
@@ -352,43 +388,52 @@ def save_draft(request, pk):
 @student_required
 @require_GET
 def trainer(request):
-    """Тренажёр карточек: наборы с числом карточек к повтору."""
-    decks = deck_stats(request.user)
+    """Тренажёр карточек: задания-тренажёры курса и личный словарь ученика."""
+    card_sets = card_set_stats(request.user)
     return render(
         request,
         "lms/trainer.html",
         {
-            "decks": decks,
-            "due_total": sum(deck.due_count for deck in decks),
+            "card_sets": card_sets,
+            "due_total": sum(item["due_count"] for item in card_sets),
             "workspace": "trainer",
         },
     )
 
 
-@student_required
-@require_http_methods(["GET", "POST"])
-def trainer_session(request, pk):
-    deck = get_object_or_404(FlashcardDeck.objects.select_related("topic__block"), pk=pk)
-    if not deck_available(deck, request.user):
-        raise Http404
-    key = f"{SESSION_QUEUE_PREFIX}{deck.pk}"
+def _trainer_session(request, *, cards, session_key, back_url, title, subtitle, empty_context=None):
+    """Общая логика сессии тренажёра: очередь в сессии, оценка повторения, htmx-ответ.
+
+    Очередь хранится в сессии по ключу набора, поэтому обновление страницы не
+    сбрасывает прогресс. Карточки берутся только из доступного ученику набора.
+    """
+    key = f"{SESSION_QUEUE_PREFIX}{session_key}"
     if request.method == "POST" and request.POST.get("reset") == "1":
         request.session.pop(key, None)
         messages.success(request, "Новая сессия: очередь карточек собрана заново.")
-        return redirect("trainer_session", pk=deck.pk)
+        return redirect(back_url)
     queue = request.session.get(key)
+    available = {card.pk: card for card in cards}
+    queue = [card_id for card_id in (queue or []) if card_id in available]
     if not queue:
         queue = [
-            card.pk for card in practice_queue(student=request.user, deck=deck, limit=20)["queue"]
+            card.pk for card in practice_queue(student=request.user, cards=cards, limit=20)["queue"]
         ]
         request.session[key] = queue
+    context = {
+        "cards": cards,
+        "title": title,
+        "subtitle": subtitle,
+        "session_url": back_url,
+        "workspace": "trainer",
+    }
     if not queue:
         return render(
             request,
             "lms/trainer_session.html",
-            {"deck": deck, "card": None, "queue": [], "done": True, "workspace": "trainer"},
+            {**context, "card": None, "queue": [], "done": True},
         )
-    card = get_object_or_404(deck.cards, pk=queue[0])
+    card = available[queue[0]]
     if request.method == "POST":
         rating = RATING_CHOICES.get(request.POST.get("rating", ""))
         if rating is None:
@@ -398,29 +443,57 @@ def trainer_session(request, pk):
             queue = queue[1:]
             request.session[key] = queue
             if request.headers.get("HX-Request"):
-                if not queue:
-                    return render(
-                        request,
-                        "lms/parts/trainer_stage.html",
-                        {"deck": deck, "card": None, "queue": []},
-                    )
-                card = get_object_or_404(deck.cards, pk=queue[0])
+                next_card = available.get(queue[0]) if queue else None
                 return render(
                     request,
                     "lms/parts/trainer_stage.html",
-                    {"deck": deck, "card": card, "queue": queue},
+                    {**context, "card": next_card, "queue": queue},
                 )
-            return redirect("trainer_session", pk=deck.pk)
+            return redirect(back_url)
     return render(
         request,
         "lms/trainer_session.html",
-        {
-            "deck": deck,
-            "card": card,
-            "queue": queue,
-            "done": False,
-            "workspace": "trainer",
-        },
+        {**context, "card": card, "queue": queue, "done": False},
+    )
+
+
+@student_required
+@require_http_methods(["GET", "POST"])
+def trainer_session(request, pk):
+    """Сессия тренажёра по заданию с карточками."""
+    assignment = get_object_or_404(
+        Assignment.objects.visible()
+        .filter(assignment_type=Assignment.Type.FLASHCARDS)
+        .select_related("topic__block"),
+        pk=pk,
+    )
+    if not (
+        assignment.is_active and assignment.topic.is_active and assignment.topic.block.is_active
+    ):
+        raise Http404
+    cards = list(assignment.cards.order_by("order", "pk"))
+    return _trainer_session(
+        request,
+        cards=cards,
+        session_key=f"assignment:{assignment.pk}",
+        back_url=reverse("trainer_session", args=[assignment.pk]),
+        title=assignment.title,
+        subtitle=f"{assignment.topic.block.name} · {assignment.topic.title}",
+    )
+
+
+@student_required
+@require_http_methods(["GET", "POST"])
+def dictionary_session(request):
+    """Сессия тренажёра по личному словарю ученика."""
+    cards = list(personal_cards(request.user).order_by("order", "pk"))
+    return _trainer_session(
+        request,
+        cards=cards,
+        session_key="personal",
+        back_url=reverse("student_dictionary_session"),
+        title="Мой словарь",
+        subtitle="Личный словарь ученика",
     )
 
 
@@ -428,7 +501,6 @@ def trainer_session(request, pk):
 @require_http_methods(["GET", "POST"])
 def student_dictionary(request):
     """Личный словарь ученика: слова, статистика повторений и добавление новых слов."""
-    deck = get_or_create_personal_deck(request.user)
     form = DictionaryWordForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         _, created = add_dictionary_word(
@@ -444,21 +516,20 @@ def student_dictionary(request):
             else "Такое слово уже было — перевод обновлён.",
         )
         return redirect("student_dictionary")
-    queue = practice_queue(student=request.user, deck=deck, limit=1)
-    reviews = CardReview.objects.filter(student=request.user, card__deck=deck).aggregate(
-        studied=Count("pk"), lapses=Sum("lapses"), repetitions=Sum("repetitions")
-    )
-    words = list(deck.cards.prefetch_related("reviews").all())
+    words = list(personal_cards(request.user).prefetch_related("reviews").order_by("order", "pk"))
     for card in words:
         card.review = next(
             (review for review in card.reviews.all() if review.student_id == request.user.pk),
             None,
         )
+    queue = practice_queue(student=request.user, cards=words, limit=1)
+    reviews = CardReview.objects.filter(student=request.user, card__in=words).aggregate(
+        studied=Count("pk"), lapses=Sum("lapses"), repetitions=Sum("repetitions")
+    )
     return render(
         request,
         "lms/student_dictionary.html",
         {
-            "deck": deck,
             "words": words,
             "form": form,
             "queue": queue,
@@ -471,7 +542,7 @@ def student_dictionary(request):
 @student_required
 @require_POST
 def dictionary_word_delete(request, pk):
-    card = get_object_or_404(Flashcard, pk=pk, deck__owner=request.user, deck__topic__isnull=True)
+    card = get_object_or_404(Flashcard, pk=pk, owner=request.user, assignment__isnull=True)
     card.delete()
     messages.success(request, "Слово удалено из словаря.")
     return redirect("student_dictionary")

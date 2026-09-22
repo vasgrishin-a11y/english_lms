@@ -14,7 +14,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import UploadedFile
 from django.db import IntegrityError, models, transaction
-from django.db.models import Q
+from django.urls import reverse
 from django.utils import timezone
 
 from .decorators import get_user_role
@@ -24,7 +24,6 @@ from .models import (
     CardReview,
     Feedback,
     Flashcard,
-    FlashcardDeck,
     Profile,
     Question,
     QuizAttempt,
@@ -371,11 +370,10 @@ def review_flashcard(*, student, card_id, rating):
         raise ValidationError({"rating": "Недопустимая оценка повторения."})
     if not student.is_active or get_user_role(student) != Profile.Role.STUDENT:
         raise PermissionDenied
-    card = Flashcard.objects.select_related("deck__topic__block").filter(pk=card_id).first()
+    card = Flashcard.objects.select_related("assignment__topic__block").filter(pk=card_id).first()
     if not card:
         raise PermissionDenied
-    deck = card.deck
-    if not deck_available(deck, student):
+    if not card_available(card, student):
         raise PermissionDenied
     review, created = CardReview.objects.get_or_create(card=card, student=student)
     if not created:
@@ -385,12 +383,13 @@ def review_flashcard(*, student, card_id, rating):
     return review
 
 
-def practice_queue(*, student, deck, limit=20):
+def practice_queue(*, student, cards, limit=20):
     """Карточки к повтору: сначала просроченные, затем новые. Один запрос на состояние."""
-    cards = list(deck.cards.all())
+    cards = list(cards)
+    card_ids = [card.pk for card in cards]
     reviews = {
         review.card_id: review
-        for review in CardReview.objects.filter(student=student, card__deck=deck)
+        for review in CardReview.objects.filter(student=student, card_id__in=card_ids)
     }
     now = timezone.now()
     due = []
@@ -412,31 +411,39 @@ def practice_queue(*, student, deck, limit=20):
     }
 
 
-def deck_available(deck, student=None):
-    """Доступен ли набор ученику: учебный — по активности курса, личный — по владельцу."""
-    if not deck.is_active:
-        return False
-    if deck.is_personal:
-        return student is not None and deck.owner_id == getattr(student, "pk", student)
-    return bool(deck.topic and deck.topic.is_active and deck.topic.block.is_active)
+def card_available(card, student=None):
+    """Доступна ли карточка ученику: курсовая — по активности курса, личная — владельцу."""
+    assignment = card.assignment
+    if assignment is not None:
+        return bool(
+            assignment.is_visible
+            and assignment.is_active
+            and assignment.topic.is_active
+            and assignment.topic.block.is_active
+        )
+    if card.owner_id is not None:
+        return student is not None and card.owner_id == getattr(student, "pk", student)
+    return False
 
 
-def visible_decks(student):
-    """Учебные наборы активного курса плюс личный словарь ученика (первым)."""
-    return FlashcardDeck.objects.filter(
-        Q(is_active=True, topic__is_active=True, topic__block__is_active=True)
-        | Q(is_active=True, owner=student, topic__isnull=True)
-    ).select_related("topic__block")
+def personal_cards(student):
+    """Личный словарь ученика: карточки без задания курса."""
+    return Flashcard.objects.filter(owner=student, assignment__isnull=True)
 
 
-def get_or_create_personal_deck(student):
-    """Личный словарь ученика: один набор без темы курса на владельца."""
-    deck, _ = FlashcardDeck.objects.get_or_create(
-        owner=student,
-        topic=None,
-        defaults={"title": "Мой словарь", "is_active": True},
+def visible_card_sets(student):
+    """Задания-тренажёры активного курса, доступные ученику прямо сейчас."""
+    return (
+        Assignment.objects.visible()
+        .filter(
+            assignment_type=Assignment.Type.FLASHCARDS,
+            is_active=True,
+            topic__is_active=True,
+            topic__block__is_active=True,
+        )
+        .select_related("topic__block")
+        .order_by("topic__block__order", "topic__order", "order", "pk")
     )
-    return deck
 
 
 def add_dictionary_word(*, student, term, translation, example="", source_assignment=None):
@@ -445,8 +452,7 @@ def add_dictionary_word(*, student, term, translation, example="", source_assign
     translation = (translation or "").strip()[:300]
     if not term or not translation:
         raise ValidationError({"term": "Нужны слово и перевод."})
-    deck = get_or_create_personal_deck(student)
-    card = Flashcard.objects.filter(deck=deck, front__iexact=term).first()
+    card = personal_cards(student).filter(front__iexact=term).first()
     if card:
         card.back = translation
         if example:
@@ -454,11 +460,11 @@ def add_dictionary_word(*, student, term, translation, example="", source_assign
         card.save(update_fields=["back", "example"])
         return card, False
     card = Flashcard.objects.create(
-        deck=deck,
+        owner=student,
         front=term,
         back=translation,
         example=(example or "")[:500],
-        order=Flashcard.objects.filter(deck=deck).count(),
+        order=personal_cards(student).count(),
     )
     if source_assignment is not None:
         logger.info(
@@ -470,40 +476,62 @@ def add_dictionary_word(*, student, term, translation, example="", source_assign
     return card, True
 
 
-def deck_stats(student):
-    """Сводка по наборам карточек: учебные активного курса + личный словарь ученика.
+def card_set_stats(student):
+    """Сводка по наборам карточек: задания-тренажёры курса и личный словарь ученика.
 
-    Бюджет: 3 запроса (наборы, число карточек, состояния повторений).
-    Личный словарь — первым, как в ProgressMe «My Words» на виду.
+    Бюджет: фиксированное число запросов независимо от размера курса. Личный
+    словарь — первым: собственные слова ученика всегда на виду.
     """
     now = timezone.now()
-    decks = list(
-        visible_decks(student)
-        .annotate(
-            personal_order=models.Case(
-                models.When(topic__isnull=True, then=1),
-                default=0,
-                output_field=models.IntegerField(),
+    sets = []
+    personal = list(personal_cards(student))
+    sets.append(
+        _card_set(("personal", 0), "Мой словарь", "Личный словарь ученика", personal, student, now)
+    )
+    course = list(
+        visible_card_sets(student).prefetch_related(
+            models.Prefetch("cards", queryset=Flashcard.objects.order_by("order", "pk"))
+        )
+    )
+    for assignment in course:
+        sets.append(
+            _card_set(
+                ("assignment", assignment.pk),
+                assignment.title,
+                f"{assignment.topic.block.name} · {assignment.topic.title}",
+                list(assignment.cards.all()),
+                student,
+                now,
+                assignment=assignment,
             )
         )
-        .order_by("-personal_order", "topic__block__order", "topic__order", "order", "pk")
-    )
-    totals = {deck.pk: 0 for deck in decks}
-    for deck_id in Flashcard.objects.filter(deck__in=decks).values_list("deck_id", flat=True):
-        totals[deck_id] = totals.get(deck_id, 0) + 1
-    reviewed = {deck.pk: 0 for deck in decks}
-    due = {deck.pk: 0 for deck in decks}
-    for row in CardReview.objects.filter(student=student, card__deck__in=decks).values_list(
-        "card__deck_id", "due_at"
+    return sets
+
+
+def _card_set(key, title, subtitle, cards, student, now, assignment=None):
+    """Одна карточка статистики набора: сколько всего, изучено и к повтору."""
+    card_ids = [card.pk for card in cards]
+    reviewed = 0
+    due = 0
+    for due_at in CardReview.objects.filter(student=student, card_id__in=card_ids).values_list(
+        "due_at", flat=True
     ):
-        deck_id, due_at = row
-        reviewed[deck_id] = reviewed.get(deck_id, 0) + 1
+        reviewed += 1
         if due_at <= now:
-            due[deck_id] = due.get(deck_id, 0) + 1
-    for deck in decks:
-        deck.card_total = totals.get(deck.pk, 0)
-        deck.reviewed_count = reviewed.get(deck.pk, 0)
-        deck.due_count = due.get(deck.pk, 0) + max(
-            0, totals.get(deck.pk, 0) - reviewed.get(deck.pk, 0)
-        )
-    return decks
+            due += 1
+    return {
+        "key": f"{key[0]}:{key[1]}",
+        "title": title,
+        "subtitle": subtitle,
+        "cards": cards,
+        "assignment": assignment,
+        "is_personal": assignment is None,
+        "card_total": len(cards),
+        "reviewed_count": reviewed,
+        "due_count": due + max(0, len(cards) - reviewed),
+        "session_url": (
+            reverse("student_dictionary_session")
+            if assignment is None
+            else reverse("trainer_session", args=[assignment.pk])
+        ),
+    }

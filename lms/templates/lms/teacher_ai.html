@@ -1,0 +1,145 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}ИИ-помощник — English LMS{% endblock %}
+{% block workspace_class %}workspace-wide{% endblock %}
+
+{% block content %}
+<nav aria-label="Хлебные крошки">
+    <ol class="crumbs">
+        <li><a href="{% url 'teacher_home' %}">Консоль</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_curriculum' %}">Карта курса</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">ИИ-помощник</span></li>
+    </ol>
+</nav>
+
+<div class="content-head">
+    <div>
+        <h1>{% icon "sparkles" %}ИИ-помощник</h1>
+        <p class="page-note">Загрузите фото страницы, документ Word, таблицу Excel, PDF или видео — помощник соберёт из материала структуру курса: блоки, темы, задания, тесты и карточки. Всё создаётся <strong>черновиками</strong>: публикует только преподаватель.</p>
+    </div>
+    <span class="badge {% if mode == 'online' %}badge-turquoise{% else %}badge-outline{% endif %}">{{ mode_label }}</span>
+</div>
+
+{% if mode == 'off' %}
+    <section class="card">
+        <div class="empty">
+            <div class="empty-icon">{% icon "sparkles" "icon icon-xl" %}</div>
+            <h2>Помощник выключен</h2>
+            <p>Включите его переменной окружения <code>LMS_AI_ENABLED=1</code>. Ключ ИИ (<code>LMS_AI_API_KEY</code>) не обязателен: без него работает офлайн-разбор файлов и текста.</p>
+        </div>
+    </section>
+{% else %}
+    <div class="split">
+        <div class="split-main">
+            <section class="card">
+                <div class="card-head"><h2 class="card-title">{% icon "upload" %}Материал</h2></div>
+                <form method="post" enctype="multipart/form-data" novalidate data-ai-form>
+                    {% csrf_token %}
+                    {% include "lms/form_fields.html" %}
+                    <div class="form-actions">
+                        <button class="btn" type="submit">{% icon "sparkles" %}Собрать материал</button>
+                        {% if material %}
+                            <button class="btn btn-ghost" type="submit" name="reset" value="1">{% icon "refresh" %}Очистить результат</button>
+                        {% endif %}
+                    </div>
+                </form>
+            </section>
+
+            {% if material and summary %}
+                <section class="card" aria-labelledby="ai-preview-title">
+                    <div class="card-head">
+                        <h2 class="card-title" id="ai-preview-title">{% icon "layers" %}Что получилось: {{ material.title }}</h2>
+                        <span class="badge {% if meta.result == 'online' %}badge-turquoise{% else %}badge-outline{% endif %}">
+                            {% if meta.result == 'online' %}разобрал ИИ{% else %}офлайн-разбор{% endif %}
+                        </span>
+                    </div>
+                    <div class="stats" style="margin-bottom:16px">
+                        <div class="stat"><div class="stat-value tnum">{{ summary.blocks }}</div><div class="stat-label">блоков</div></div>
+                        <div class="stat"><div class="stat-value tnum">{{ summary.topics }}</div><div class="stat-label">тем</div></div>
+                        <div class="stat"><div class="stat-value tnum">{{ summary.assignments }}</div><div class="stat-label">заданий</div></div>
+                        <div class="stat"><div class="stat-value tnum">{{ summary.questions }}</div><div class="stat-label">вопросов теста</div></div>
+                        <div class="stat"><div class="stat-value tnum">{{ summary.cards }}</div><div class="stat-label">карточек</div></div>
+                    </div>
+
+                    {% if meta.target_topic_label %}
+                        <p class="small">Новые задания и карточки попадут в тему <strong>{{ meta.target_topic_label }}</strong>.</p>
+                    {% endif %}
+
+                    <div class="library-toc">
+                        {% for block in material.blocks %}
+                            <div class="panel">
+                                <p class="library-block-title">
+                                    {% icon "layers" "icon icon-sm" %}{{ block.name }}
+                                    {% if block.cefr_level %}<span class="badge tag-cefr">{{ block.cefr_level }}</span>{% endif %}
+                                </p>
+                                {% if block.description %}<p class="tiny muted">{{ block.description }}</p>{% endif %}
+                                <ul class="tiny muted">
+                                    {% for topic in block.topics %}
+                                        <li>
+                                            <strong>{{ topic.title }}</strong>
+                                            {% for assignment in topic.assignments %}
+                                                <span class="library-item">
+                                                    {% icon assignment.type|type_icon "icon icon-sm" %}{{ assignment.title }}
+                                                    <span class="tnum">· {{ assignment.max_points }} б.</span>
+                                                    {% if assignment.questions %}<span class="tnum">· {{ assignment.questions|length }} вопр.</span>{% endif %}
+                                                </span>
+                                            {% endfor %}
+                                            {% for card_set in topic.cards %}
+                                                <span class="library-item">{% icon "cards" "icon icon-sm" %}{{ card_set.title }} · {{ card_set.cards|length }} карточек</span>
+                                            {% endfor %}
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        {% endfor %}
+                    </div>
+
+                    <form method="post" action="{% url 'teacher_ai_import' %}">
+                        {% csrf_token %}
+                        <div class="form-actions">
+                            <button class="btn" type="submit">{% icon "plus" %}Импортировать черновиками</button>
+                            <a class="btn btn-secondary" href="{% url 'teacher_curriculum' %}">Посмотреть карту курса</a>
+                        </div>
+                    </form>
+                </section>
+            {% endif %}
+        </div>
+
+        <div class="split-side">
+            <section class="card card-pad-sm">
+                <p class="rail-title">Как это работает</p>
+                <ol class="small muted" style="padding-left:18px">
+                    <li>Материал разбирается в структуру: блок → темы → задания → вопросы → карточки.</li>
+                    <li>С ключом ИИ понимает фото, PDF и видео; без ключа офлайн читает текст, Word, Excel и PDF.</li>
+                    <li>Импорт создаёт только черновики — ученики ничего не видят до публикации.</li>
+                    <li>Черновики дальше правятся вручную: как обычные задания курса.</li>
+                </ol>
+                <p class="tiny muted mb-0">Приватность: файл отправляется провайдеру только в режиме ИИ и не сохраняется в системе. В журнал попадают лишь счётчики.</p>
+            </section>
+
+            <section class="card card-pad-sm">
+                <p class="rail-title">Формат подсказки для текста</p>
+                <pre class="ai-cheatsheet" aria-label="Пример текста материала"># Блок
+## Тема
+### Задание [quiz]
+? Вопрос с одним ответом
+* верный вариант
+- неверный вариант
+### Слова [карточки]
+- слово | перевод | пример</pre>
+                <p class="tiny muted mb-0">Заголовки задают структуру, «?» и «*»/«-» — тест, строки с «|» — карточки. Без заголовков материал станет одной темой.</p>
+            </section>
+
+            <section class="card card-pad-sm">
+                <p class="rail-title">Лимиты</p>
+                <ul class="small muted" style="padding-left:18px">
+                    <li>файл — до {{ max_upload_mb }} МБ, текста — до {{ limits.text_chars }} знаков;</li>
+                    <li>блоков {{ limits.blocks }}, тем {{ limits.topics }}, заданий {{ limits.assignments }};</li>
+                    <li>вопросов на задание {{ limits.questions }}, карточек {{ limits.cards }}.</li>
+                </ul>
+            </section>
+        </div>
+    </div>
+{% endif %}
+{% endblock %}

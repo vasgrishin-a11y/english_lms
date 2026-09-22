@@ -42,16 +42,15 @@
     place-items: center;
     width: 30px;
     height: 30px;
-    color: var(--on-accent);
-    background: linear-gradient(150deg, var(--accent-500), var(--accent-700));
-    border-radius: var(--r-md);
-    box-shadow: var(--shadow-1);
+    flex: 0 0 auto;
 }
 
-.brand-logo .icon {
-    width: 17px;
-    height: 17px;
-    stroke-width: 2;
+.brand-logo img {
+    display: block;
+    width: 30px;
+    height: 30px;
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-1);
 }
 
 /* Верхнее меню убрано: единственная навигация — боковая панель слева.
@@ -441,13 +440,6 @@
     border-color: var(--danger-border);
 }
 
-/* Строка квизлета в списке заданий: перивинкл-точка вместо статусной. */
-.task-deck .task-dot {
-    color: var(--info-ink);
-    background: var(--info-bg);
-    border-color: var(--info-border);
-}
-
 .task-main {
     flex: 1 1 auto;
     min-width: 0;
@@ -828,7 +820,7 @@ html[data-nav="collapsed"] .app {
     align-items: center;
     gap: var(--sp-3);
     width: 100%;
-    padding: var(--sp-2) var(--sp-3);
+    padding: var(--sp-3) var(--sp-3);
     font-family: inherit;
     font-size: var(--fs-13);
     font-weight: 700;
@@ -860,20 +852,24 @@ html[data-nav="collapsed"] .app {
     width: 18px;
     height: 18px;
     flex: 0 0 auto;
-    transition: transform var(--dur-3) var(--ease);
 }
 
+/* Подпись «Меню» видна только в развёрнутой панели; в свёрнутой остаётся значок. */
 .app-nav-toggle-label {
+    flex: 1 1 auto;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+html[data-nav="collapsed"] .app-nav-toggle-label {
     position: absolute;
     width: 1px;
     height: 1px;
     overflow: hidden;
     clip: rect(0 0 0 0);
     white-space: nowrap;
-}
-
-html[data-nav="collapsed"] .app-nav-toggle .app-nav-toggle-chevron {
-    transform: rotate(180deg);
 }
 
 .app-nav-list {
@@ -943,12 +939,6 @@ html[data-nav="collapsed"] .app-nav-toggle .app-nav-toggle-chevron {
     background: var(--accent-600);
 }
 
-.app-nav-foot {
-    margin-top: auto;
-    padding-top: var(--sp-3);
-    border-top: 1px solid var(--border-subtle);
-}
-
 /* Свёрнутое состояние: только иконки по центру, подписи скрыты. */
 html[data-nav="collapsed"] .app-nav {
     padding-left: var(--sp-2);
@@ -964,15 +954,6 @@ html[data-nav="collapsed"] .app-nav-toggle {
     justify-content: center;
     padding-left: var(--sp-2);
     padding-right: var(--sp-2);
-}
-
-html[data-nav="collapsed"] .app-nav-toggle .app-nav-toggle-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
 }
 
 html[data-nav="collapsed"] .app-nav-link {
@@ -1078,20 +1059,6 @@ html[data-nav="collapsed"] .app-nav-link:has(.app-nav-count)::after {
 }
 
 /* ── Бренд и безопасный режим просмотра ученика ─────────────────────────── */
-.brand-fox {
-    display: inline-block;
-    width: 30px;
-    height: 30px;
-    object-fit: contain;
-    border-radius: 50%;
-    box-shadow: var(--shadow-1);
-    transition: transform var(--dur-2) var(--ease);
-}
-
-.topbar-brand:hover .brand-fox {
-    transform: rotate(-8deg) scale(1.06);
-}
-
 .impersonation-bar {
     position: sticky;
     top: 0;
@@ -1201,9 +1168,5 @@ html[data-nav="collapsed"] .app-nav-link:has(.app-nav-count)::after {
     .archive-item__actions {
         width: 100%;
         justify-content: flex-end;
-    }
-    .brand-fox {
-        width: 25px;
-        height: 25px;
     }
 }
