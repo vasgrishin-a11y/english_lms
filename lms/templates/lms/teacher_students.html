@@ -52,6 +52,9 @@
                 {% if student.stats.average != None %}<span class="grade-pill tnum {{ student.stats.average|grade_class }}">{{ student.stats.average|floatformat:0 }}<small>%</small></span>{% endif %}
                 <a class="btn btn-sm btn-ghost" href="{% url 'teacher_student_edit' student.pk %}" title="Редактировать">{% icon "pencil" %}</a>
                 <a class="btn btn-sm btn-secondary" href="{% url 'teacher_student_detail' student.pk %}">Открыть</a>
+                <form method="post" action="{% url 'teacher_impersonate_start' student.pk %}" data-confirm="Открыть English LMS глазами ученика «{{ student.get_full_name|default:student.username }}»? Вы сможете вернуться кнопкой в верхнем баннере.">
+                    {% csrf_token %}<button class="btn btn-sm btn-ghost" type="submit" title="Открыть режим ученика">{% icon "eye" %}<span class="sr-only">Открыть как ученик</span></button>
+                </form>
             </span>
         </div>
     {% empty %}

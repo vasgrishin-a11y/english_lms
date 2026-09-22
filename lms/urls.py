@@ -57,6 +57,12 @@ urlpatterns = [
         name="teacher_submission_review_legacy",
     ),
     path("teacher/curriculum/", views_teacher.curriculum, name="teacher_curriculum"),
+    path("teacher/archive/", views_teacher.archive, name="teacher_archive"),
+    path(
+        "teacher/archive/<str:kind>/<int:pk>/",
+        views_teacher.archive_item,
+        name="teacher_archive_item",
+    ),
     path("teacher/library/", views_teacher.library, name="teacher_library"),
     path(
         "teacher/library/<slug:slug>/import/",
@@ -164,6 +170,16 @@ urlpatterns = [
         name="teacher_card_delete",
     ),
     path("teacher/students/", views_teacher.students_list, name="teacher_students"),
+    path(
+        "teacher/students/<int:pk>/view-as/",
+        views_teacher.teacher_impersonate_start,
+        name="teacher_impersonate_start",
+    ),
+    path(
+        "teacher/return/",
+        views_teacher.teacher_impersonate_stop,
+        name="teacher_impersonate_stop",
+    ),
     path("teacher/students/create/", views_teacher.student_create, name="teacher_student_create"),
     path("teacher/students/<int:pk>/", views_teacher.student_detail, name="teacher_student_detail"),
     path(

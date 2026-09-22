@@ -69,6 +69,50 @@ class ConsoleAccessTests(LMSCase):
         self.assertContains(response, "Draft task")
 
 
+class ArchiveAndStudentViewTests(LMSCase):
+    def test_archive_moves_a_whole_block_without_destroying_history(self):
+        response = self.teacher_client.post(f"/teacher/archive/block/{self.block.pk}/")
+        self.assertRedirects(response, "/teacher/curriculum/", fetch_redirect_response=False)
+        self.block.refresh_from_db()
+        self.topic.refresh_from_db()
+        self.assignment.refresh_from_db()
+        self.assertFalse(self.block.is_active)
+        self.assertFalse(self.topic.is_active)
+        self.assertFalse(self.assignment.is_active)
+        self.assertNotContains(
+            self.teacher_client.get("/teacher/curriculum/"), self.assignment.title
+        )
+        self.assertEqual(self.teacher_client.get("/teacher/archive/").status_code, 200)
+
+        response = self.teacher_client.post(
+            f"/teacher/archive/block/{self.block.pk}/",
+            {"action": "restore", "restore_tree": "1"},
+        )
+        self.assertRedirects(response, "/teacher/archive/", fetch_redirect_response=False)
+        self.block.refresh_from_db()
+        self.topic.refresh_from_db()
+        self.assignment.refresh_from_db()
+        self.assertTrue(self.block.is_active)
+        self.assertTrue(self.topic.is_active)
+        self.assertTrue(self.assignment.is_active)
+
+    def test_teacher_can_view_student_and_return_to_console(self):
+        response = self.teacher_client.post(f"/teacher/students/{self.student.pk}/view-as/")
+        self.assertRedirects(response, "/my/", fetch_redirect_response=False)
+        self.assertEqual(response.wsgi_request.user.pk, self.student.pk)
+        student_view = self.teacher_client.get("/my/")
+        self.assertEqual(student_view.status_code, 200)
+        self.assertTrue(student_view.context["is_impersonating"])
+        response = self.teacher_client.post("/teacher/return/")
+        self.assertRedirects(
+            response,
+            f"/teacher/students/{self.student.pk}/",
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(response.wsgi_request.user.pk, self.teacher.pk)
+        self.assertEqual(self.teacher_client.get("/teacher/").status_code, 200)
+
+
 class QueueFilterTests(LMSCase):
     def setUp(self):
         super().setUp()

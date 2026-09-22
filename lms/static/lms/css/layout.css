@@ -684,9 +684,19 @@
 .mobile-nav ul {
     display: flex;
     justify-content: space-around;
+    min-width: max-content;
     margin: 0;
     padding: 0;
     list-style: none;
+}
+
+.mobile-nav {
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.mobile-nav::-webkit-scrollbar {
+    display: none;
 }
 
 .mobile-nav a {
@@ -912,4 +922,138 @@
   table .sticky-col {
     position: static;
   }
+}
+
+/* ── Бренд и безопасный режим просмотра ученика ─────────────────────────── */
+.brand-fox {
+    display: inline-block;
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+    transform-origin: 60% 80%;
+    animation: fox-run 2.8s var(--ease) infinite;
+}
+
+@keyframes fox-run {
+    0%, 100% { transform: translate(0, 0) rotate(-3deg); }
+    18% { transform: translate(1px, -2px) rotate(4deg); }
+    36% { transform: translate(2px, 0) rotate(-2deg); }
+    54% { transform: translate(1px, -1px) rotate(3deg); }
+    72% { transform: translate(0, 0) rotate(-3deg); }
+}
+
+.impersonation-bar {
+    position: sticky;
+    top: 0;
+    z-index: calc(var(--z-topbar) + 1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-5);
+    min-height: 44px;
+    padding: var(--sp-2) var(--sp-5);
+    color: var(--accent-900);
+    background: var(--accent-100);
+    border-bottom: 1px solid var(--accent-200);
+    box-shadow: var(--shadow-1);
+}
+
+.impersonation-bar__label {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    font-size: var(--fs-13);
+    font-weight: 650;
+}
+
+/* ── Архив курса ─────────────────────────────────────────────────────────── */
+.archive-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-5);
+    align-items: start;
+}
+
+.archive-section--wide {
+    grid-column: 1 / -1;
+}
+
+.archive-stats {
+    margin-bottom: 0;
+}
+
+.archive-item {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    padding: var(--sp-4) 0;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.archive-item:first-of-type {
+    border-top: 0;
+}
+
+.archive-item__icon {
+    display: grid;
+    place-items: center;
+    flex: 0 0 36px;
+    width: 36px;
+    height: 36px;
+    color: var(--accent-800);
+    background: var(--accent-soft);
+    border: 1px solid var(--accent-200);
+    border-radius: var(--r-md);
+}
+
+.archive-item__body {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.archive-item__body h3 {
+    margin: 0 0 var(--sp-1);
+    font-size: var(--fs-14);
+}
+
+.archive-item__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    flex: 0 0 auto;
+}
+
+.archive-item__actions form {
+    flex: 0 0 auto;
+}
+
+.empty-compact {
+    padding: var(--sp-6) var(--sp-4);
+}
+
+@media (max-width: 720px) {
+    .archive-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .archive-section--wide {
+        grid-column: auto;
+    }
+    .impersonation-bar {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: var(--sp-2);
+        padding: var(--sp-3) var(--sp-4);
+    }
+    .archive-item {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+    .archive-item__actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+    .brand-fox {
+        width: 25px;
+        height: 25px;
+    }
 }

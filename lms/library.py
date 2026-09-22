@@ -321,6 +321,124 @@ ASSIGNMENT_PRESETS = [
         },
         "skills": ["speaking", "writing"],
     },
+    {
+        "id": "email",
+        "icon": "send",
+        "label": "Practical Email",
+        "tagline": "B1: письмо с регистром и связками",
+        "fields": {
+            "title": "Practical email: change an appointment",
+            "description": (
+                "Write a polite email of 120–150 words to a language school. "
+                "You need to change your lesson time, explain why, suggest two "
+                "alternative times and ask about the cancellation policy.\n\n"
+                "Use a subject line, an appropriate greeting and closing. Include "
+                "at least three polite phrases: I would be grateful if…, Would it "
+                "be possible…, I apologise for…\n\n"
+                "Marking: task completion 5, organisation 5, vocabulary 5, grammar 5."
+            ),
+            "assignment_type": "text",
+            "max_points": 20,
+        },
+        "skills": ["writing", "vocabulary"],
+    },
+    {
+        "id": "translation",
+        "icon": "language",
+        "label": "Translation in Context",
+        "tagline": "Перевод + объяснение выбора конструкции",
+        "fields": {
+            "title": "Translation: everyday phrases in context",
+            "description": (
+                "Translate the eight sentences into natural English. Do not use "
+                "a word-for-word translation. Then choose two sentences and "
+                "explain why you selected the tense or modal verb.\n\n"
+                "1. Я уже отправил письмо.\n2. Мы встречаемся в шесть?\n"
+                "3. Если будет дождь, мы останемся дома.\n4. Она должна была позвонить.\n\n"
+                "Marking: 1 point for each accurate sentence and 2 points for each explanation."
+            ),
+            "assignment_type": "text",
+            "max_points": 20,
+        },
+        "skills": ["grammar", "writing"],
+    },
+    {
+        "id": "role-play",
+        "icon": "mic",
+        "label": "Role-play Dialogue",
+        "tagline": "Ролевая ситуация: говорение и реакция",
+        "fields": {
+            "title": "Role-play: solve a problem at a hotel",
+            "description": (
+                "Record a 2-minute dialogue or submit a written script. You are "
+                "a guest whose room has two problems. Explain the situation, stay "
+                "polite, ask for a solution and react to the receptionist's offer.\n\n"
+                "Use at least four phrases for polite complaints and two follow-up "
+                "questions. Mark the moments where you would pause or stress a word.\n\n"
+                "Marking: interaction 5, fluency 5, vocabulary 5, accuracy 5."
+            ),
+            "assignment_type": "mixed",
+            "max_points": 20,
+        },
+        "skills": ["speaking", "listening"],
+    },
+    {
+        "id": "collocations",
+        "icon": "cards",
+        "label": "Collocations Sprint",
+        "tagline": "Лексические сочетания + личные примеры",
+        "fields": {
+            "title": "Collocations: make, do, take or get",
+            "description": (
+                "Complete the collocations and use each one in a sentence about "
+                "your week: make a decision, do research, take responsibility, "
+                "get feedback, make an effort, do a favour, take a break, get "
+                "permission. Add a Russian translation for four expressions.\n\n"
+                "Marking: 1 point per collocation, 1 per natural example, 4 for translations."
+            ),
+            "assignment_type": "text",
+            "max_points": 20,
+        },
+        "skills": ["vocabulary"],
+    },
+    {
+        "id": "picture-story",
+        "icon": "image",
+        "label": "Picture Story",
+        "tagline": "A2–B1: последовательный рассказ по картинкам",
+        "fields": {
+            "title": "Picture story: an unexpected morning",
+            "description": (
+                "Look at the four pictures attached and tell the story in 120–160 "
+                "words. Use Past Simple for the main events and Past Continuous "
+                "for the background. Add a title and one sentence describing the "
+                "character's feelings.\n\n"
+                "Marking: sequence 5, tense contrast 5, vocabulary 5, clarity 5."
+            ),
+            "assignment_type": "mixed",
+            "max_points": 20,
+        },
+        "skills": ["writing", "grammar"],
+    },
+    {
+        "id": "reflection",
+        "icon": "quote",
+        "label": "Learning Reflection",
+        "tagline": "Метакогнитивное задание с языковой целью",
+        "fields": {
+            "title": "Learning reflection: my next English goal",
+            "description": (
+                "Write 100–120 words about one English skill you improved this "
+                "month. Give one specific example, name one difficulty and set a "
+                "SMART goal for the next two weeks. Use at least three linking "
+                "words and one sentence with although.\n\n"
+                "Marking: reflection 5, examples 5, language 5, goal quality 5."
+            ),
+            "assignment_type": "text",
+            "max_points": 20,
+        },
+        "skills": ["writing"],
+    },
 ]
 
 # ── Готовые формулировки блоков ────────────────────────────────────────────
@@ -404,6 +522,36 @@ BLOCK_SUGGESTIONS = [
         "name": "Happy Learning · Marathon",
         "cefr_level": "A2",
         "description": "Марафон на 5 дней: ежедневные задания, словарь, геймификация — формат ProgressMe Marathon.",
+    },
+    {
+        "name": "A2 · Everyday Communication",
+        "cefr_level": "A2",
+        "description": "Диалоги и короткие сообщения: знакомство, просьбы, покупки, планы, самочувствие и город.",
+    },
+    {
+        "name": "B1 · Real-world English",
+        "cefr_level": "B1",
+        "description": "Практический английский для жизни: сервис, путешествия, новости, мнение и решение проблем.",
+    },
+    {
+        "name": "B2 · Academic Skills",
+        "cefr_level": "B2",
+        "description": "Академическая лексика, конспектирование, графики, аргументативное эссе и презентация источников.",
+    },
+    {
+        "name": "English for Parents & Children",
+        "cefr_level": "A1",
+        "description": "Игровые мини-уроки: семья, игрушки, еда, движение, песни, команды и простые фразы.",
+    },
+    {
+        "name": "Newsroom · Media Literacy",
+        "cefr_level": "B2",
+        "description": "Заголовки, факты и мнения, проверка источников, краткое резюме и обсуждение новостей.",
+    },
+    {
+        "name": "English for Customer Support",
+        "cefr_level": "B1",
+        "description": "Чат и телефонная поддержка: уточнение проблемы, эмпатия, инструкции, эскалация и follow-up письмо.",
     },
 ]
 
@@ -568,6 +716,41 @@ TOPIC_SUGGESTIONS = [
         "title": "Sorting into Columns",
         "description": "Распределение по колонкам: countable/uncountable, formal/informal, British/American.",
         "skills": ["vocabulary"],
+    },
+    {
+        "title": "Articles: a, an, the or zero article",
+        "description": "Выбор артикля с исчисляемыми и неисчисляемыми существительными, географией и уникальными объектами.",
+        "skills": ["grammar"],
+    },
+    {
+        "title": "Modal verbs: advice, obligation and possibility",
+        "description": "must, have to, should, may, might и could в бытовых и рабочих ситуациях.",
+        "skills": ["grammar", "speaking"],
+    },
+    {
+        "title": "Phrasal verbs for daily life",
+        "description": "get up, find out, look after, put off, run out of: значение, контекст и личные примеры.",
+        "skills": ["vocabulary"],
+    },
+    {
+        "title": "Writing an opinion paragraph",
+        "description": "Тезис, причина, пример и вывод в одном связном абзаце; linking words и hedging.",
+        "skills": ["writing"],
+    },
+    {
+        "title": "A2 Listening: announcements and directions",
+        "description": "Понимание коротких объявлений, чисел, времени, маршрутов и перефразированной информации.",
+        "skills": ["listening"],
+    },
+    {
+        "title": "Customer support: clarify and reassure",
+        "description": "Ролевая лексика поддержки: уточнить проблему, проявить эмпатию, дать инструкцию и завершить диалог.",
+        "skills": ["speaking", "vocabulary"],
+    },
+    {
+        "title": "News headlines and source checking",
+        "description": "Сокращённые заголовки, факт или мнение, надёжность источника и короткое summary.",
+        "skills": ["reading", "vocabulary"],
     },
 ]
 
@@ -2452,6 +2635,333 @@ COURSE_PACKS = [
                                 "type": "text",
                                 "max_points": 10,
                                 "skills": ["writing"],
+                            },
+                        ],
+                    },
+                ],
+            },
+        ],
+    },
+    {
+        "slug": "ielts-academic",
+        "name": "IELTS Academic · B2–C1",
+        "summary": "Структурированный трек IELTS: Writing Task 1–2, Reading, Listening и Speaking с понятными критериями проверки.",
+        "level": "C1",
+        "blocks": [
+            {
+                "name": "IELTS · Writing Lab",
+                "cefr_level": "C1",
+                "description": "Учимся планировать ответ, сравнивать данные и развивать аргумент без заученных шаблонов.",
+                "topics": [
+                    {
+                        "title": "Task 1: graphs and processes",
+                        "description": "Overview, key features, comparisons, trends and accurate data language.",
+                        "assignments": [
+                            {
+                                "title": "Task 1 report: compare two transport charts",
+                                "description": "Write a 160–190-word report. Start with a clear overview, select the most important comparisons and use at least six trend expressions. Do not add reasons that are not shown in the chart.",
+                                "type": "text",
+                                "max_points": 20,
+                                "skills": ["writing"],
+                            },
+                            {
+                                "title": "Task 1 language sprint",
+                                "description": "Complete the sentence transformations with precise verbs and adverbs for change, stability and contrast. Then write three original sentences about a graph.",
+                                "type": "quiz",
+                                "max_points": 10,
+                                "skills": ["writing", "vocabulary"],
+                                "questions": [
+                                    {
+                                        "kind": "mcq",
+                                        "text": "The figure ___ steadily from 2010 to 2015.",
+                                        "points": 2,
+                                        "explanation": "Use rose or increased for an upward trend.",
+                                        "choices": [
+                                            {"text": "rose", "correct": True},
+                                            {"text": "fluctuated"},
+                                            {"text": "levelled off"},
+                                        ],
+                                    },
+                                    {
+                                        "kind": "gap",
+                                        "text": "The percentage remained ___ at around 35%.",
+                                        "points": 2,
+                                        "choices": [
+                                            {"text": "stable", "correct": True},
+                                            {"text": "constant", "correct": True},
+                                        ],
+                                    },
+                                    {
+                                        "kind": "mcq",
+                                        "text": "Choose the best overview phrase.",
+                                        "points": 2,
+                                        "choices": [
+                                            {
+                                                "text": "Overall, online use increased while print declined.",
+                                                "correct": True,
+                                            },
+                                            {"text": "I will describe every number in the chart."},
+                                            {"text": "The chart is very interesting."},
+                                        ],
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                    {
+                        "title": "Task 2: opinion and discussion essays",
+                        "description": "Thesis, developed ideas, examples, concession and a concise conclusion.",
+                        "assignments": [
+                            {
+                                "title": "Task 2 essay: technology and attention",
+                                "description": "Write at least 250 words: Some people think technology makes it harder to concentrate. Discuss both views and give your opinion. Plan four paragraphs, include one specific example and check subject–verb agreement before submitting.",
+                                "type": "text",
+                                "max_points": 30,
+                                "skills": ["writing"],
+                            },
+                        ],
+                    },
+                ],
+            },
+            {
+                "name": "IELTS · Skills Circuit",
+                "cefr_level": "B2",
+                "description": "Timed practice for Reading, Listening and Speaking with feedback loops.",
+                "topics": [
+                    {
+                        "title": "Speaking Part 2 and follow-up",
+                        "description": "One-minute preparation, a two-minute long turn and natural follow-up answers.",
+                        "assignments": [
+                            {
+                                "title": "Speaking mock: a useful change in your city",
+                                "description": "Record a two-minute answer. Cover what changed, why it happened, how people reacted and whether the change was positive. Use a clear story structure and at least three examples of signposting.",
+                                "type": "audio",
+                                "max_points": 20,
+                                "skills": ["speaking"],
+                            },
+                        ],
+                    },
+                    {
+                        "title": "Reading and Listening strategies",
+                        "description": "Skimming, matching headings, distractors, prediction and note completion.",
+                        "assignments": [
+                            {
+                                "title": "Timed reading set: headings and summary completion",
+                                "description": "Complete the attached reading in 20 minutes. Mark the paragraph evidence for each answer and explain one distractor in two sentences.",
+                                "type": "mixed",
+                                "max_points": 20,
+                                "skills": ["reading"],
+                            },
+                            {
+                                "title": "Listening notes: lecture on urban design",
+                                "description": "Listen twice, complete the notes and write five keywords that helped you predict the missing information. Spelling matters in the final answers.",
+                                "type": "text",
+                                "max_points": 20,
+                                "skills": ["listening"],
+                            },
+                        ],
+                    },
+                ],
+            },
+        ],
+    },
+    {
+        "slug": "kids-english",
+        "name": "English for Kids · A1–A2",
+        "summary": "Короткие игровые уроки для детей: песня, движение, картинки, простые диалоги и карточки без перегрузки.",
+        "level": "A2",
+        "blocks": [
+            {
+                "name": "Kids · My World",
+                "cefr_level": "A1",
+                "description": "Первый словарь ребёнка: семья, игрушки, цвета, числа и фразы о себе.",
+                "topics": [
+                    {
+                        "title": "Hello! My name is…",
+                        "description": "Greetings, name, age, country and classroom routines.",
+                        "assignments": [
+                            {
+                                "title": "My mini poster",
+                                "description": "Draw or attach a poster about yourself. Add your name, age, favourite colour, favourite animal and two English sentences. Read the sentences aloud to an adult.",
+                                "type": "mixed",
+                                "max_points": 10,
+                                "skills": ["writing", "speaking"],
+                            },
+                            {
+                                "title": "Colours and numbers game",
+                                "description": "Choose the correct word for each picture and complete the short counting challenge. The quiz gives instant feedback after each answer.",
+                                "type": "quiz",
+                                "max_points": 10,
+                                "skills": ["vocabulary"],
+                                "questions": [
+                                    {
+                                        "kind": "mcq",
+                                        "text": "What colour is the sun in the picture?",
+                                        "points": 2,
+                                        "choices": [
+                                            {"text": "yellow", "correct": True},
+                                            {"text": "purple"},
+                                            {"text": "black"},
+                                        ],
+                                    },
+                                    {
+                                        "kind": "mcq",
+                                        "text": "How many stars can you see?",
+                                        "points": 2,
+                                        "choices": [
+                                            {"text": "three", "correct": True},
+                                            {"text": "ten"},
+                                            {"text": "one"},
+                                        ],
+                                    },
+                                ],
+                            },
+                        ],
+                        "decks": [
+                            {
+                                "title": "Kids · My first words",
+                                "description": "Picture-friendly words for the first month.",
+                                "cards": [
+                                    {
+                                        "front": "family",
+                                        "back": "семья",
+                                        "example": "This is my family.",
+                                    },
+                                    {
+                                        "front": "yellow",
+                                        "back": "жёлтый",
+                                        "example": "The sun is yellow.",
+                                    },
+                                    {
+                                        "front": "friend",
+                                        "back": "друг",
+                                        "example": "This is my friend.",
+                                    },
+                                    {
+                                        "front": "happy",
+                                        "back": "счастливый",
+                                        "example": "I am happy!",
+                                    },
+                                    {
+                                        "front": "toy",
+                                        "back": "игрушка",
+                                        "example": "My toy is blue.",
+                                    },
+                                ],
+                            }
+                        ],
+                    },
+                    {
+                        "title": "At home and at school",
+                        "description": "Rooms, objects, simple instructions and can/can't.",
+                        "assignments": [
+                            {
+                                "title": "Listen and point: classroom objects",
+                                "description": "Listen to the recording and match each word to a picture. Finish by saying five classroom instructions with please.",
+                                "type": "audio",
+                                "max_points": 10,
+                                "skills": ["listening", "speaking"],
+                            },
+                        ],
+                    },
+                ],
+            },
+            {
+                "name": "Kids · Stories and Movement",
+                "cefr_level": "A2",
+                "description": "Stories, actions and simple past-time language through play.",
+                "topics": [
+                    {
+                        "title": "Animals and actions",
+                        "description": "Run, jump, swim, fly and describe what animals can do.",
+                        "assignments": [
+                            {
+                                "title": "Make an animal story",
+                                "description": "Choose three animals and make a six-sentence story. Use can, can't, is and has. Draw one scene or attach a picture.",
+                                "type": "mixed",
+                                "max_points": 10,
+                                "skills": ["writing", "vocabulary"],
+                            },
+                        ],
+                    },
+                ],
+            },
+        ],
+    },
+    {
+        "slug": "teen-english",
+        "name": "English for Teens · B1",
+        "summary": "Курс для подростков: самопрезентация, школа, digital life, медиа, планы и безопасная дискуссия.",
+        "level": "B1",
+        "blocks": [
+            {
+                "name": "Teens · Identity and School",
+                "cefr_level": "B1",
+                "description": "Говорим о себе и учёбе, строим аргумент и учимся поддерживать диалог.",
+                "topics": [
+                    {
+                        "title": "My voice and my interests",
+                        "description": "Hobbies, strengths, preferences and asking follow-up questions.",
+                        "assignments": [
+                            {
+                                "title": "One-minute introduction for a club",
+                                "description": "Record a one-minute introduction for a new school club. Say what you enjoy, what you are good at, what you want to learn and ask two questions to another member.",
+                                "type": "audio",
+                                "max_points": 15,
+                                "skills": ["speaking"],
+                            },
+                            {
+                                "title": "School survey and short report",
+                                "description": "Ask three people one question about homework or school clubs. Present the results in 100–120 words and include one comparison and one conclusion.",
+                                "type": "text",
+                                "max_points": 15,
+                                "skills": ["writing", "reading"],
+                            },
+                        ],
+                    },
+                    {
+                        "title": "Teamwork and problem solving",
+                        "description": "Suggestions, polite disagreement, priorities and compromise.",
+                        "assignments": [
+                            {
+                                "title": "Group challenge: improve our school day",
+                                "description": "Work alone or in a group. Propose three changes, explain the benefits and answer one possible objection. Use should, could, because and however.",
+                                "type": "mixed",
+                                "max_points": 20,
+                                "skills": ["speaking", "writing"],
+                            },
+                        ],
+                    },
+                ],
+            },
+            {
+                "name": "Teens · Digital Life and Future",
+                "cefr_level": "B1",
+                "description": "Digital habits, media literacy, future plans and responsible choices.",
+                "topics": [
+                    {
+                        "title": "Social media and media literacy",
+                        "description": "Facts, opinions, clickbait, privacy and respectful online discussion.",
+                        "assignments": [
+                            {
+                                "title": "Fact, opinion or clickbait?",
+                                "description": "Classify eight short posts, underline the language that signals opinion and rewrite two clickbait headlines in a neutral style. Explain one choice in English.",
+                                "type": "text",
+                                "max_points": 20,
+                                "skills": ["reading", "vocabulary"],
+                            },
+                        ],
+                    },
+                    {
+                        "title": "Plans, goals and future jobs",
+                        "description": "Going to, will, present continuous, skills and realistic next steps.",
+                        "assignments": [
+                            {
+                                "title": "My next-year roadmap",
+                                "description": "Create a one-page roadmap with three goals, a timeline and possible obstacles. Add a 120-word explanation using at least two future forms and one conditional sentence.",
+                                "type": "mixed",
+                                "max_points": 20,
+                                "skills": ["writing", "vocabulary"],
                             },
                         ],
                     },
