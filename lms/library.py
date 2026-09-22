@@ -1762,7 +1762,10 @@ COURSE_PACKS = [
                                         "kind": "gap",
                                         "text": "We had to ___ (to reserve) a table in advance because the restaurant was full.",
                                         "points": 2,
-                                        "choices": [{"text": "book", "correct": True}, {"text": "to book", "correct": True}],
+                                        "choices": [
+                                            {"text": "book", "correct": True},
+                                            {"text": "to book", "correct": True},
+                                        ],
                                     },
                                     {
                                         "kind": "mcq",
@@ -1792,10 +1795,26 @@ COURSE_PACKS = [
                                         "text": "Sort the items: countable / uncountable / both — advice, chair, information, apple",
                                         "points": 3,
                                         "choices": [
-                                            {"text": "advice", "match_text": "Uncountable", "correct": True},
-                                            {"text": "chair", "match_text": "Countable", "correct": True},
-                                            {"text": "information", "match_text": "Uncountable", "correct": True},
-                                            {"text": "apple", "match_text": "Countable", "correct": True},
+                                            {
+                                                "text": "advice",
+                                                "match_text": "Uncountable",
+                                                "correct": True,
+                                            },
+                                            {
+                                                "text": "chair",
+                                                "match_text": "Countable",
+                                                "correct": True,
+                                            },
+                                            {
+                                                "text": "information",
+                                                "match_text": "Uncountable",
+                                                "correct": True,
+                                            },
+                                            {
+                                                "text": "apple",
+                                                "match_text": "Countable",
+                                                "correct": True,
+                                            },
                                         ],
                                     },
                                 ],
@@ -1806,14 +1825,46 @@ COURSE_PACKS = [
                                 "title": "Travel · B1",
                                 "description": "Travel vocabulary from the unit.",
                                 "cards": [
-                                    {"front": "to book", "back": "бронировать", "example": "We booked a hotel near the harbour."},
-                                    {"front": "harbour", "back": "гавань, порт", "example": "The old harbour is full of restaurants."},
-                                    {"front": "itinerary", "back": "маршрут, план поездки", "example": "Send me your itinerary."},
-                                    {"front": "delay", "back": "задержка", "example": "The flight was delayed due to weather."},
-                                    {"front": "lighthouse", "back": "маяк", "example": "The lighthouse was built in 1850."},
-                                    {"front": "breathtaking", "back": "захватывающий", "example": "The view was breathtaking."},
-                                    {"front": "to complain", "back": "жаловаться", "example": "We complained about the cold room."},
-                                    {"front": "weather forecast", "back": "прогноз погоды", "example": "The forecast says it will rain."},
+                                    {
+                                        "front": "to book",
+                                        "back": "бронировать",
+                                        "example": "We booked a hotel near the harbour.",
+                                    },
+                                    {
+                                        "front": "harbour",
+                                        "back": "гавань, порт",
+                                        "example": "The old harbour is full of restaurants.",
+                                    },
+                                    {
+                                        "front": "itinerary",
+                                        "back": "маршрут, план поездки",
+                                        "example": "Send me your itinerary.",
+                                    },
+                                    {
+                                        "front": "delay",
+                                        "back": "задержка",
+                                        "example": "The flight was delayed due to weather.",
+                                    },
+                                    {
+                                        "front": "lighthouse",
+                                        "back": "маяк",
+                                        "example": "The lighthouse was built in 1850.",
+                                    },
+                                    {
+                                        "front": "breathtaking",
+                                        "back": "захватывающий",
+                                        "example": "The view was breathtaking.",
+                                    },
+                                    {
+                                        "front": "to complain",
+                                        "back": "жаловаться",
+                                        "example": "We complained about the cold room.",
+                                    },
+                                    {
+                                        "front": "weather forecast",
+                                        "back": "прогноз погоды",
+                                        "example": "The forecast says it will rain.",
+                                    },
                                 ],
                             }
                         ],
@@ -1835,7 +1886,10 @@ COURSE_PACKS = [
                                         "points": 2,
                                         "choices": [
                                             {"text": "Because of the salary", "correct": True},
-                                            {"text": "Because of the view and responsibility", "correct": True},
+                                            {
+                                                "text": "Because of the view and responsibility",
+                                                "correct": True,
+                                            },
                                             {"text": "Because he travels a lot", "correct": True},
                                         ],
                                     },
@@ -1843,7 +1897,10 @@ COURSE_PACKS = [
                                         "kind": "spell",
                                         "text": "Make a word from letters: a r p o r t i",
                                         "points": 2,
-                                        "choices": [{"text": "airport", "correct": True}, {"text": "air port", "correct": True}],
+                                        "choices": [
+                                            {"text": "airport", "correct": True},
+                                            {"text": "air port", "correct": True},
+                                        ],
                                     },
                                 ],
                             },
@@ -1873,11 +1930,31 @@ COURSE_PACKS = [
                                 "title": "Hotel · Vocabulary",
                                 "description": "Hotel words.",
                                 "cards": [
-                                    {"front": "check-in", "back": "регистрация, заселение", "example": "Check-in is at 2 p.m."},
-                                    {"front": "to complain", "back": "жаловаться", "example": "We complained about the noise."},
-                                    {"front": "facilities", "back": "удобства", "example": "The hotel facilities are excellent."},
-                                    {"front": "to upgrade", "back": "повысить класс номера", "example": "They upgraded us to a suite."},
-                                    {"front": "bill", "back": "счёт", "example": "Could I have the bill, please?"},
+                                    {
+                                        "front": "check-in",
+                                        "back": "регистрация, заселение",
+                                        "example": "Check-in is at 2 p.m.",
+                                    },
+                                    {
+                                        "front": "to complain",
+                                        "back": "жаловаться",
+                                        "example": "We complained about the noise.",
+                                    },
+                                    {
+                                        "front": "facilities",
+                                        "back": "удобства",
+                                        "example": "The hotel facilities are excellent.",
+                                    },
+                                    {
+                                        "front": "to upgrade",
+                                        "back": "повысить класс номера",
+                                        "example": "They upgraded us to a suite.",
+                                    },
+                                    {
+                                        "front": "bill",
+                                        "back": "счёт",
+                                        "example": "Could I have the bill, please?",
+                                    },
                                 ],
                             }
                         ],
@@ -1913,11 +1990,31 @@ COURSE_PACKS = [
                                         "text": "Sort the titles into genres",
                                         "points": 5,
                                         "choices": [
-                                            {"text": "The Big Bang Theory", "match_text": "Comedy", "correct": True},
-                                            {"text": "Interstellar", "match_text": "Sci-Fi", "correct": True},
-                                            {"text": "Titanic", "match_text": "Drama", "correct": True},
-                                            {"text": "Mission: Impossible", "match_text": "Action", "correct": True},
-                                            {"text": "Home Alone", "match_text": "Comedy", "correct": True},
+                                            {
+                                                "text": "The Big Bang Theory",
+                                                "match_text": "Comedy",
+                                                "correct": True,
+                                            },
+                                            {
+                                                "text": "Interstellar",
+                                                "match_text": "Sci-Fi",
+                                                "correct": True,
+                                            },
+                                            {
+                                                "text": "Titanic",
+                                                "match_text": "Drama",
+                                                "correct": True,
+                                            },
+                                            {
+                                                "text": "Mission: Impossible",
+                                                "match_text": "Action",
+                                                "correct": True,
+                                            },
+                                            {
+                                                "text": "Home Alone",
+                                                "match_text": "Comedy",
+                                                "correct": True,
+                                            },
                                         ],
                                     },
                                     {
@@ -1999,14 +2096,46 @@ COURSE_PACKS = [
                                 "title": "Movie Time · Vocabulary",
                                 "description": "Genres and cinema words.",
                                 "cards": [
-                                    {"front": "plot", "back": "сюжет", "example": "The plot was predictable."},
-                                    {"front": "genre", "back": "жанр", "example": "My favourite genre is comedy."},
-                                    {"front": "review", "back": "рецензия, отзыв", "example": "I read a review before watching."},
-                                    {"front": "starring", "back": "в главных ролях", "example": "Starring Tom Hanks."},
-                                    {"front": "soundtrack", "back": "саундтрек", "example": "The soundtrack is amazing."},
-                                    {"front": "to recommend", "back": "рекомендовать", "example": "I recommend this film to everyone."},
-                                    {"front": "boring", "back": "скучный", "example": "The second half was boring."},
-                                    {"front": "gripping", "back": "захватывающий", "example": "A gripping thriller."},
+                                    {
+                                        "front": "plot",
+                                        "back": "сюжет",
+                                        "example": "The plot was predictable.",
+                                    },
+                                    {
+                                        "front": "genre",
+                                        "back": "жанр",
+                                        "example": "My favourite genre is comedy.",
+                                    },
+                                    {
+                                        "front": "review",
+                                        "back": "рецензия, отзыв",
+                                        "example": "I read a review before watching.",
+                                    },
+                                    {
+                                        "front": "starring",
+                                        "back": "в главных ролях",
+                                        "example": "Starring Tom Hanks.",
+                                    },
+                                    {
+                                        "front": "soundtrack",
+                                        "back": "саундтрек",
+                                        "example": "The soundtrack is amazing.",
+                                    },
+                                    {
+                                        "front": "to recommend",
+                                        "back": "рекомендовать",
+                                        "example": "I recommend this film to everyone.",
+                                    },
+                                    {
+                                        "front": "boring",
+                                        "back": "скучный",
+                                        "example": "The second half was boring.",
+                                    },
+                                    {
+                                        "front": "gripping",
+                                        "back": "захватывающий",
+                                        "example": "A gripping thriller.",
+                                    },
                                 ],
                             }
                         ],
@@ -2048,7 +2177,10 @@ COURSE_PACKS = [
                                         "kind": "spell",
                                         "text": "Make a word: b u g f i x",
                                         "points": 2,
-                                        "choices": [{"text": "bugfix", "correct": True}, {"text": "bug fix", "correct": True}],
+                                        "choices": [
+                                            {"text": "bugfix", "correct": True},
+                                            {"text": "bug fix", "correct": True},
+                                        ],
                                     },
                                     {
                                         "kind": "spell",
@@ -2061,10 +2193,26 @@ COURSE_PACKS = [
                                         "text": "Sort into Noun / Verb",
                                         "points": 3,
                                         "choices": [
-                                            {"text": "deployment", "match_text": "Noun", "correct": True},
-                                            {"text": "to deploy", "match_text": "Verb", "correct": True},
-                                            {"text": "requirement", "match_text": "Noun", "correct": True},
-                                            {"text": "to implement", "match_text": "Verb", "correct": True},
+                                            {
+                                                "text": "deployment",
+                                                "match_text": "Noun",
+                                                "correct": True,
+                                            },
+                                            {
+                                                "text": "to deploy",
+                                                "match_text": "Verb",
+                                                "correct": True,
+                                            },
+                                            {
+                                                "text": "requirement",
+                                                "match_text": "Noun",
+                                                "correct": True,
+                                            },
+                                            {
+                                                "text": "to implement",
+                                                "match_text": "Verb",
+                                                "correct": True,
+                                            },
                                         ],
                                     },
                                     {
@@ -2090,14 +2238,46 @@ COURSE_PACKS = [
                                 "title": "IT English · Core",
                                 "description": "Core IT vocabulary.",
                                 "cards": [
-                                    {"front": "to deploy", "back": "деплоить, выкатывать", "example": "We deploy on Fridays."},
-                                    {"front": "bugfix", "back": "исправление бага", "example": "This PR contains a bugfix."},
-                                    {"front": "stand-up", "back": "стендап, ежедневная встреча", "example": "Stand-up is at 10 a.m."},
-                                    {"front": "blocker", "back": "блокер, препятствие", "example": "No blockers at the moment."},
-                                    {"front": "deadline", "back": "дедлайн", "example": "We missed the deadline."},
-                                    {"front": "to review", "back": "ревьюить, проверять", "example": "Could you review my code?"},
-                                    {"front": "pull request", "back": "пулл-реквест", "example": "Create a pull request."},
-                                    {"front": "to merge", "back": "смержить", "example": "We can merge after approval."},
+                                    {
+                                        "front": "to deploy",
+                                        "back": "деплоить, выкатывать",
+                                        "example": "We deploy on Fridays.",
+                                    },
+                                    {
+                                        "front": "bugfix",
+                                        "back": "исправление бага",
+                                        "example": "This PR contains a bugfix.",
+                                    },
+                                    {
+                                        "front": "stand-up",
+                                        "back": "стендап, ежедневная встреча",
+                                        "example": "Stand-up is at 10 a.m.",
+                                    },
+                                    {
+                                        "front": "blocker",
+                                        "back": "блокер, препятствие",
+                                        "example": "No blockers at the moment.",
+                                    },
+                                    {
+                                        "front": "deadline",
+                                        "back": "дедлайн",
+                                        "example": "We missed the deadline.",
+                                    },
+                                    {
+                                        "front": "to review",
+                                        "back": "ревьюить, проверять",
+                                        "example": "Could you review my code?",
+                                    },
+                                    {
+                                        "front": "pull request",
+                                        "back": "пулл-реквест",
+                                        "example": "Create a pull request.",
+                                    },
+                                    {
+                                        "front": "to merge",
+                                        "back": "смержить",
+                                        "example": "We can merge after approval.",
+                                    },
                                 ],
                             }
                         ],
@@ -2139,11 +2319,31 @@ COURSE_PACKS = [
                                 "title": "Agile · Vocabulary",
                                 "description": "Agile terms.",
                                 "cards": [
-                                    {"front": "sprint", "back": "спринт", "example": "We have a two-week sprint."},
-                                    {"front": "backlog", "back": "бэклог", "example": "Check the backlog."},
-                                    {"front": "retrospective", "back": "ретроспектива", "example": "Retro is on Friday."},
-                                    {"front": "to estimate", "back": "оценивать", "example": "We estimate in story points."},
-                                    {"front": "velocity", "back": "скорость команды", "example": "Our velocity increased."},
+                                    {
+                                        "front": "sprint",
+                                        "back": "спринт",
+                                        "example": "We have a two-week sprint.",
+                                    },
+                                    {
+                                        "front": "backlog",
+                                        "back": "бэклог",
+                                        "example": "Check the backlog.",
+                                    },
+                                    {
+                                        "front": "retrospective",
+                                        "back": "ретроспектива",
+                                        "example": "Retro is on Friday.",
+                                    },
+                                    {
+                                        "front": "to estimate",
+                                        "back": "оценивать",
+                                        "example": "We estimate in story points.",
+                                    },
+                                    {
+                                        "front": "velocity",
+                                        "back": "скорость команды",
+                                        "example": "Our velocity increased.",
+                                    },
                                 ],
                             }
                         ],
@@ -2193,11 +2393,31 @@ COURSE_PACKS = [
                                 "title": "Marathon · Day 2",
                                 "description": "Words for describing lessons.",
                                 "cards": [
-                                    {"front": "interactive", "back": "интерактивный", "example": "Interactive exercises are fun."},
-                                    {"front": "engaging", "back": "увлекательный", "example": "An engaging teacher."},
-                                    {"front": "feedback", "back": "обратная связь", "example": "Thanks for your feedback."},
-                                    {"front": "to achieve", "back": "достигать", "example": "To achieve your goals."},
-                                    {"front": "progress", "back": "прогресс", "example": "You can track your progress."},
+                                    {
+                                        "front": "interactive",
+                                        "back": "интерактивный",
+                                        "example": "Interactive exercises are fun.",
+                                    },
+                                    {
+                                        "front": "engaging",
+                                        "back": "увлекательный",
+                                        "example": "An engaging teacher.",
+                                    },
+                                    {
+                                        "front": "feedback",
+                                        "back": "обратная связь",
+                                        "example": "Thanks for your feedback.",
+                                    },
+                                    {
+                                        "front": "to achieve",
+                                        "back": "достигать",
+                                        "example": "To achieve your goals.",
+                                    },
+                                    {
+                                        "front": "progress",
+                                        "back": "прогресс",
+                                        "example": "You can track your progress.",
+                                    },
                                 ],
                             }
                         ],

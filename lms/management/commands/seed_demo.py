@@ -469,10 +469,18 @@ class Command(BaseCommand):
             points=2,
             order=6,
         )
-        Choice.objects.create(question=sort_q, text="advice", match_text="Uncountable", is_correct=True, order=1)
-        Choice.objects.create(question=sort_q, text="chair", match_text="Countable", is_correct=True, order=2)
-        Choice.objects.create(question=sort_q, text="information", match_text="Uncountable", is_correct=True, order=3)
-        Choice.objects.create(question=sort_q, text="apple", match_text="Countable", is_correct=True, order=4)
+        Choice.objects.create(
+            question=sort_q, text="advice", match_text="Uncountable", is_correct=True, order=1
+        )
+        Choice.objects.create(
+            question=sort_q, text="chair", match_text="Countable", is_correct=True, order=2
+        )
+        Choice.objects.create(
+            question=sort_q, text="information", match_text="Uncountable", is_correct=True, order=3
+        )
+        Choice.objects.create(
+            question=sort_q, text="apple", match_text="Countable", is_correct=True, order=4
+        )
 
         spell_q = Question.objects.create(
             assignment=quiz,

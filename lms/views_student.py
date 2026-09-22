@@ -419,7 +419,9 @@ def student_dictionary(request):
         )
         messages.success(
             request,
-            "Слово добавлено в личный словарь." if created else "Такое слово уже было — перевод обновлён.",
+            "Слово добавлено в личный словарь."
+            if created
+            else "Такое слово уже было — перевод обновлён.",
         )
         return redirect("student_dictionary")
     queue = practice_queue(student=request.user, deck=deck, limit=1)

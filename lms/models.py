@@ -675,7 +675,7 @@ class Question(models.Model):
         letters = list(word.replace(" ", "").lower())
         if not letters:
             return []
-        rng = random.Random(self.pk or 0)
+        rng = random.Random(self.pk or 0)  # nosec B311
         for _ in range(8):
             rng.shuffle(letters)
             if "".join(letters) != word.replace(" ", "").lower():

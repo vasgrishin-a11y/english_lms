@@ -2571,3 +2571,44 @@ table .grade-col {
     }
 }
 
+/* ── Login split — responsive, no overflow at 320px ────── */
+.login-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 380px;
+    gap: 32px;
+    align-items: start;
+    max-width: 1080px;
+    margin: 0 auto;
+    min-width: 0;
+}
+
+.login-promo {
+    min-width: 0;
+}
+
+.login-promo-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
+}
+
+@media (max-width: 900px) {
+    .login-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .login-card {
+        max-width: none;
+        margin: 0;
+    }
+}
+
+@media (max-width: 620px) {
+    .login-layout {
+        gap: var(--sp-4);
+    }
+    .login-promo {
+        padding: var(--sp-5) !important;
+    }
+    .login-card {
+        padding: var(--sp-5);
+    }
+}
+

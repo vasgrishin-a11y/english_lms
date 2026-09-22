@@ -16,7 +16,7 @@
 {% include "lms/parts/icons.html" %}
 <a class="skip-link" href="#main-content">Перейти к содержимому</a>
 
-<div class="app">
+<div class="app {% if not user.is_authenticated %}app-no-rail{% endif %}">
     {% if user.is_authenticated %}
     <nav class="app-rail" aria-label="Быстрая навигация">
         <a class="app-rail-logo" href="{% url 'dashboard' %}" aria-label="На главную">{% icon "compass" %}</a>

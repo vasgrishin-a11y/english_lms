@@ -71,8 +71,9 @@ def score_question(question, answer):
         given = [pk for pk in given if pk in _choice_ids(question)]
         if choices:
             hits = sum(
-                1 for position, choice in enumerate(choices) if position < len(given)
-                and given[position] == str(choice.pk)
+                1
+                for position, choice in enumerate(choices)
+                if position < len(given) and given[position] == str(choice.pk)
             )
             ratio = hits / len(choices)
         else:

@@ -481,7 +481,9 @@ def deck_stats(student):
         visible_decks(student)
         .annotate(
             personal_order=models.Case(
-                models.When(topic__isnull=True, then=1), default=0, output_field=models.IntegerField()
+                models.When(topic__isnull=True, then=1),
+                default=0,
+                output_field=models.IntegerField(),
             )
         )
         .order_by("-personal_order", "topic__block__order", "topic__order", "order", "pk")

@@ -836,6 +836,10 @@
     min-height: 100vh;
 }
 
+.app-no-rail {
+    grid-template-columns: minmax(0, 1fr);
+}
+
 .app-rail {
     position: sticky;
     top: 0;

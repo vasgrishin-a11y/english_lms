@@ -164,7 +164,9 @@ class SeedDemoTests(LMSCase):
             ).values_list("status", flat=True)
         )
         self.assertEqual(statuses, {"checked", "needs_revision", "submitted"})
-        attempt = Submission.objects.get(student=anna, assignment__title="Тест: времена и маркеры").quiz_attempt
+        attempt = Submission.objects.get(
+            student=anna, assignment__title="Тест: времена и маркеры"
+        ).quiz_attempt
         # 1 ошибка в mcq → минус баллы первого вопроса (2 б.)
         self.assertEqual(attempt.max_score - attempt.score, 2)
         self.assertGreaterEqual(attempt.score, 8)

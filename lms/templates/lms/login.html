@@ -3,16 +3,16 @@
 {% block title %}Вход — English LMS{% endblock %}
 {% block workspace_class %}workspace-plain{% endblock %}
 {% block content %}
-<div style="display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:32px;align-items:start;max-width:1080px;margin:0 auto">
-    <div class="card" style="background: var(--cover-1);border:0;padding:32px">
-        <div style="display:flex;gap:12px;align-items:center;margin-bottom:24px">
+<div class="login-layout">
+    <div class="card login-promo" style="background: var(--cover-1);border:0;padding:32px">
+        <div style="display:flex;gap:12px;align-items:center;margin-bottom:24px;flex-wrap:wrap">
             <span class="brand-logo" style="width:40px;height:40px">{% icon "compass" %}</span>
             <span class="strong" style="font-size:18px">English LMS</span>
             <span class="badge badge-turquoise" style="margin-left:auto">ProgressMe-inspired</span>
         </div>
         <h1 style="font-size:30px;line-height:1.15;margin-bottom:12px">Современные онлайн-уроки начинаются здесь</h1>
         <p class="muted">Платформа как ProgressMe: конструктор материалов (30+ шаблонов), виртуальный класс, автопроверка, личный словарь ученика с 4 режимами тренировки, расписание и аналитика — в одном пространстве.</p>
-        <div class="class-grid" style="grid-template-columns:1fr 1fr;gap:12px;margin-top:24px">
+        <div class="class-grid login-promo-grid" style="gap:12px;margin-top:24px">
             <div class="class-card" style="pointer-events:none;min-height:0">
                 <div class="class-cover" style="background:var(--cover-2);aspect-ratio:16/9"><span class="class-cover-emoji">🎬</span></div>
                 <div class="class-body" style="padding:12px"><p class="small strong mb-0">Movie Time</p><p class="tiny muted mb-0">Group Class · 8 заданий</p></div>
@@ -22,7 +22,7 @@
                 <div class="class-body" style="padding:12px"><p class="small strong mb-0">Traveling</p><p class="tiny muted mb-0">B1 · 6 заданий</p></div>
             </div>
         </div>
-        <div class="row row-tight" style="margin-top:20px">
+        <div class="row row-tight" style="margin-top:20px;flex-wrap:wrap">
             <span class="pill is-active turquoise">{% icon "check" "icon icon-sm" %}30+ шаблонов</span>
             <span class="pill is-active">{% icon "cards" "icon icon-sm" %}Словарь SM-2</span>
             <span class="pill is-active">{% icon "target" "icon icon-sm" %}Автопроверка</span>
