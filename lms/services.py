@@ -13,7 +13,8 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import UploadedFile
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, models, transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from .decorators import get_user_role
@@ -374,7 +375,7 @@ def review_flashcard(*, student, card_id, rating):
     if not card:
         raise PermissionDenied
     deck = card.deck
-    if not (deck.is_active and deck.topic.is_active and deck.topic.block.is_active):
+    if not deck_available(deck, student):
         raise PermissionDenied
     review, created = CardReview.objects.get_or_create(card=card, student=student)
     if not created:
@@ -411,18 +412,79 @@ def practice_queue(*, student, deck, limit=20):
     }
 
 
+def deck_available(deck, student=None):
+    """Доступен ли набор ученику: учебный — по активности курса, личный — по владельцу."""
+    if not deck.is_active:
+        return False
+    if deck.is_personal:
+        return student is not None and deck.owner_id == getattr(student, "pk", student)
+    return bool(deck.topic and deck.topic.is_active and deck.topic.block.is_active)
+
+
+def visible_decks(student):
+    """Учебные наборы активного курса плюс личный словарь ученика (первым)."""
+    return FlashcardDeck.objects.filter(
+        Q(is_active=True, topic__is_active=True, topic__block__is_active=True)
+        | Q(is_active=True, owner=student, topic__isnull=True)
+    ).select_related("topic__block")
+
+
+def get_or_create_personal_deck(student):
+    """Личный словарь ученика: один набор без темы курса на владельца."""
+    deck, _ = FlashcardDeck.objects.get_or_create(
+        owner=student,
+        topic=None,
+        defaults={"title": "Мой словарь", "is_active": True},
+    )
+    return deck
+
+
+def add_dictionary_word(*, student, term, translation, example="", source_assignment=None):
+    """Слово в личный словарь. Дубликат слова внутри словаря обновляется, а не плодится."""
+    term = (term or "").strip()[:300]
+    translation = (translation or "").strip()[:300]
+    if not term or not translation:
+        raise ValidationError({"term": "Нужны слово и перевод."})
+    deck = get_or_create_personal_deck(student)
+    card = Flashcard.objects.filter(deck=deck, front__iexact=term).first()
+    if card:
+        card.back = translation
+        if example:
+            card.example = example[:500]
+        card.save(update_fields=["back", "example"])
+        return card, False
+    card = Flashcard.objects.create(
+        deck=deck,
+        front=term,
+        back=translation,
+        example=(example or "")[:500],
+        order=Flashcard.objects.filter(deck=deck).count(),
+    )
+    if source_assignment is not None:
+        logger.info(
+            "dictionary.add student=%s assignment=%s term=%r",
+            student.pk,
+            source_assignment,
+            term,
+        )
+    return card, True
+
+
 def deck_stats(student):
-    """Сводка по всем активным наборам карточек для домашней страницы ученика.
+    """Сводка по наборам карточек: учебные активного курса + личный словарь ученика.
 
     Бюджет: 3 запроса (наборы, число карточек, состояния повторений).
+    Личный словарь — первым, как в ProgressMe «My Words» на виду.
     """
     now = timezone.now()
     decks = list(
-        FlashcardDeck.objects.filter(
-            is_active=True, topic__is_active=True, topic__block__is_active=True
+        visible_decks(student)
+        .annotate(
+            personal_order=models.Case(
+                models.When(topic__isnull=True, then=1), default=0, output_field=models.IntegerField()
+            )
         )
-        .select_related("topic__block")
-        .order_by("topic__block__order", "topic__order", "order", "pk")
+        .order_by("-personal_order", "topic__block__order", "topic__order", "order", "pk")
     )
     totals = {deck.pk: 0 for deck in decks}
     for deck_id in Flashcard.objects.filter(deck__in=decks).values_list("deck_id", flat=True):

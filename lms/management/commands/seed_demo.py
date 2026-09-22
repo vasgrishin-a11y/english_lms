@@ -451,6 +451,40 @@ class Command(BaseCommand):
             question=match, text="set off", match_text="отправиться", is_correct=True, order=2
         )
 
+        order_q = Question.objects.create(
+            assignment=quiz,
+            kind=Question.Kind.ORDER,
+            text="Put the words in the correct order: never / I / have / been / to / London",
+            explanation="Правильный порядок: I have never been to London.",
+            points=2,
+            order=5,
+        )
+        for idx, word in enumerate(["I", "have", "never", "been", "to", "London"], start=1):
+            Choice.objects.create(question=order_q, text=word, is_correct=True, order=idx)
+
+        sort_q = Question.objects.create(
+            assignment=quiz,
+            kind=Question.Kind.SORT,
+            text="Sort the words: countable / uncountable — advice, chair, information, apple",
+            points=2,
+            order=6,
+        )
+        Choice.objects.create(question=sort_q, text="advice", match_text="Uncountable", is_correct=True, order=1)
+        Choice.objects.create(question=sort_q, text="chair", match_text="Countable", is_correct=True, order=2)
+        Choice.objects.create(question=sort_q, text="information", match_text="Uncountable", is_correct=True, order=3)
+        Choice.objects.create(question=sort_q, text="apple", match_text="Countable", is_correct=True, order=4)
+
+        spell_q = Question.objects.create(
+            assignment=quiz,
+            kind=Question.Kind.SPELL,
+            text="Make a word from letters: b o o k (анаграмма)",
+            explanation="Перетащите плитки с буквами или впишите слово.",
+            points=2,
+            order=7,
+        )
+        Choice.objects.create(question=spell_q, text="book", is_correct=True, order=1)
+        Choice.objects.create(question=spell_q, text="books", is_correct=True, order=2)
+
         quiz.max_points = sum(question.points for question in quiz.questions.all())
         quiz.save(update_fields=["max_points", "updated_at"])
 
@@ -574,6 +608,22 @@ class Command(BaseCommand):
             for card, rating in list(zip(deck.cards.all()[:3], ["good", "easy", "again"])):
                 review_flashcard(student=anna, card_id=card.pk, rating=RATING_CHOICES[rating])
 
+        # Личный словарь Анны — как в ProgressMe «My Words» с тренировкой.
+        from lms.services import add_dictionary_word, get_or_create_personal_deck
+
+        personal = get_or_create_personal_deck(anna)
+        for term, translation, example in [
+            ("to book", "бронировать", "We booked a table near the harbour."),
+            ("breathtaking", "захватывающий", "The view from the lighthouse was breathtaking."),
+            ("itinerary", "маршрут", "Send me your itinerary before the trip."),
+            ("harbour", "гавань", "The old harbour is full of cafés."),
+            ("delay", "задержка", "The flight was delayed."),
+        ]:
+            add_dictionary_word(student=anna, term=term, translation=translation, example=example)
+        # Пару слов уже изучено
+        for card in personal.cards.all()[:2]:
+            review_flashcard(student=anna, card_id=card.pk, rating=RATING_CHOICES["good"])
+
     def _submitted(self, student, assignment, text, file_answer=None):
         """Отправить работу через сервис, чтобы сохранить инварианты и историю."""
         existing = (
@@ -606,9 +656,14 @@ class Command(BaseCommand):
                 continue
             if question.kind == Question.Kind.MULTI:
                 value = [str(choice.pk) for choice in correct]
-            elif question.kind == Question.Kind.MATCH:
-                value = {str(choice.pk): str(choice.pk) for choice in correct}
-            elif question.kind == Question.Kind.GAP:
+            elif question.kind in (Question.Kind.MATCH, Question.Kind.SORT):
+                if question.kind == Question.Kind.SORT:
+                    value = {str(choice.pk): choice.match_text for choice in choices}
+                else:
+                    value = {str(choice.pk): str(choice.pk) for choice in correct}
+            elif question.kind == Question.Kind.ORDER:
+                value = [str(choice.pk) for choice in choices]
+            elif question.kind in (Question.Kind.GAP, Question.Kind.SPELL):
                 value = correct[0].text
             else:
                 wrong = [choice for choice in choices if not choice.is_correct]

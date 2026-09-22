@@ -314,10 +314,10 @@ class FlashcardInline(admin.TabularInline):
 
 @admin.register(FlashcardDeck)
 class FlashcardDeckAdmin(admin.ModelAdmin):
-    list_display = ("title", "topic", "cards_count", "order", "is_active", "console_link")
+    list_display = ("title", "topic", "owner", "cards_count", "order", "is_active", "console_link")
     list_filter = ("is_active", "topic__block")
-    search_fields = ("title", "description", "topic__title")
-    list_select_related = ("topic",)
+    search_fields = ("title", "description", "topic__title", "owner__username")
+    list_select_related = ("topic", "owner")
     inlines = (FlashcardInline,)
 
     def get_queryset(self, request):

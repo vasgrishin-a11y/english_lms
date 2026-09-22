@@ -829,6 +829,81 @@
   font-size: var(--fs-16);
 }
 
+/* ── ProgressMe-гибрид: узкий icon-rail слева (desktop) ─── */
+.app {
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr);
+    min-height: 100vh;
+}
+
+.app-rail {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-4) var(--sp-2);
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    z-index: var(--z-rail);
+}
+
+.app-rail-logo {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    background: linear-gradient(135deg, var(--turquoise-500), var(--accent-600));
+    border-radius: var(--r-md);
+    color: #fff;
+    margin-bottom: var(--sp-4);
+    box-shadow: var(--shadow-1);
+}
+
+.app-rail-link {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--r-md);
+    color: var(--text-subtle);
+    text-decoration: none;
+    transition: all var(--dur-2) var(--ease);
+}
+
+.app-rail-link:hover {
+    background: var(--canvas-alt);
+    color: var(--text);
+}
+
+.app-rail-link.is-active {
+    background: var(--accent-tint);
+    color: var(--accent-800);
+}
+
+.app-rail-link.is-active.turquoise {
+    background: var(--turquoise-bg);
+    color: var(--turquoise-ink);
+}
+
+.app-main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* На узких экранах icon-rail прячем — остаётся mobile-nav */
+@media (max-width: 960px) {
+    .app {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .app-rail {
+        display: none;
+    }
+}
+
 @media (max-width: 720px) {
   table .sticky-col {
     position: static;

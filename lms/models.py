@@ -1,4 +1,5 @@
 import os
+import random
 import uuid
 
 from django.conf import settings
@@ -603,6 +604,9 @@ class Question(models.Model):
         MULTI = "multi", "Несколько правильных ответов"
         GAP = "gap", "Вписать ответ"
         MATCH = "match", "Установить соответствие"
+        ORDER = "order", "Предложение из слов"
+        SORT = "sort", "Сортировка по колонкам"
+        SPELL = "spell", "Слово из букв"
 
     assignment = models.ForeignKey(
         Assignment,
@@ -649,6 +653,34 @@ class Question(models.Model):
     def gaps(self):
         """Принимаемые ответы для пропуска."""
         return [choice.text for choice in self.choices.all() if choice.is_correct]
+
+    @property
+    def sequence(self):
+        """Эталонный порядок слов для «предложение из слов»."""
+        return [choice.text for choice in self.choices.all()]
+
+    @property
+    def columns(self):
+        """Колонки сортировки: уникальные значения второй половины пар."""
+        seen = []
+        for choice in self.choices.all():
+            if choice.match_text and choice.match_text not in seen:
+                seen.append(choice.match_text)
+        return seen
+
+    @property
+    def scrambled(self):
+        """Перемешанные буквы для анаграммы: детерминированно и не равно ответу."""
+        word = next((choice.text for choice in self.choices.all() if choice.is_correct), "")
+        letters = list(word.replace(" ", "").lower())
+        if not letters:
+            return []
+        rng = random.Random(self.pk or 0)
+        for _ in range(8):
+            rng.shuffle(letters)
+            if "".join(letters) != word.replace(" ", "").lower():
+                break
+        return letters
 
 
 class Choice(models.Model):
@@ -727,10 +759,23 @@ class AnswerDraft(models.Model):
 
 
 class FlashcardDeck(models.Model):
-    """Квизлет: набор карточек внутри темы."""
+    """Квизлет: набор карточек внутри темы или личный словарь ученика."""
 
     topic = models.ForeignKey(
-        Topic, on_delete=models.CASCADE, related_name="decks", verbose_name="Тема"
+        Topic,
+        on_delete=models.CASCADE,
+        related_name="decks",
+        verbose_name="Тема",
+        null=True,
+        blank=True,
+    )
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="own_decks",
+        verbose_name="Владелец личного словаря",
+        null=True,
+        blank=True,
     )
     title = models.CharField(max_length=150, verbose_name="Название")
     description = models.TextField(blank=True, verbose_name="Описание")
@@ -743,6 +788,11 @@ class FlashcardDeck(models.Model):
         verbose_name = "Набор карточек"
         verbose_name_plural = "Наборы карточек (квизлеты)"
         ordering = ["topic", "order", "title"]
+
+    @property
+    def is_personal(self):
+        """Личный словарь ученика: без темы курса, с владельцем."""
+        return self.topic_id is None and self.owner_id is not None
 
     def __str__(self):
         return self.title

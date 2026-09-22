@@ -16,82 +16,110 @@
 {% include "lms/parts/icons.html" %}
 <a class="skip-link" href="#main-content">Перейти к содержимому</a>
 
-<header class="topbar">
-    <a class="topbar-brand" href="{% url 'dashboard' %}">
-        <span class="brand-logo">{% icon "compass" %}</span>
-        <span>English&nbsp;LMS</span>
-    </a>
-
-    <nav class="topbar-nav" aria-label="Основная навигация">
-        {% if user.is_authenticated %}
-            {% if is_teacher %}
-                <a class="nav-link" href="{% url 'teacher_review_queue' %}"{% if workspace == 'review' %} aria-current="page"{% endif %}>
-                    {% icon "check-circle" %}<span class="label">Проверка</span>
-                    {% if pending_count %}<span class="nav-count tnum">{{ pending_count }}</span>{% endif %}
-                </a>
-                <a class="nav-link" href="{% url 'teacher_curriculum' %}"{% if workspace == 'curriculum' %} aria-current="page"{% endif %}>
-                    {% icon "layers" %}<span class="label">Курс</span>
-                </a>
-                <a class="nav-link" href="{% url 'teacher_students' %}"{% if workspace == 'students' %} aria-current="page"{% endif %}>
-                    {% icon "users" %}<span class="label">Ученики</span>
-                </a>
-                <a class="nav-link" href="{% url 'teacher_groups' %}"{% if workspace == 'groups' %} aria-current="page"{% endif %}>
-                    {% icon "users" %}<span class="label">Группы</span>
-                </a>
-                <a class="nav-link" href="{% url 'teacher_analytics' %}"{% if workspace == 'analytics' %} aria-current="page"{% endif %}>
-                    {% icon "chart" %}<span class="label">Аналитика</span>
-                </a>
-                <a class="nav-link" href="{% url 'teacher_settings' %}"{% if workspace == 'settings' %} aria-current="page"{% endif %}>
-                    {% icon "sliders" %}<span class="label">Настройки</span>
-                </a>
-            {% else %}
-                <a class="nav-link" href="{% url 'student_home' %}"{% if workspace == 'home' %} aria-current="page"{% endif %}>
-                    {% icon "home" %}<span class="label">Главная</span>
-                </a>
-                <a class="nav-link" href="{% url 'student_assignments' %}"{% if workspace == 'curriculum' %} aria-current="page"{% endif %}>
-                    {% icon "layers" %}<span class="label">Курс</span>
-                </a>
-                <a class="nav-link" href="{% url 'student_trainer' %}"{% if workspace == 'trainer' %} aria-current="page"{% endif %}>
-                    {% icon "cards" %}<span class="label">Тренажёр</span>
-                </a>
-                <a class="nav-link" href="{% url 'student_grades' %}"{% if workspace == 'grades' %} aria-current="page"{% endif %}>
-                    {% icon "award" %}<span class="label">Оценки</span>
-                </a>
-                <a class="nav-link" href="{% url 'student_upcoming' %}"{% if workspace == 'upcoming' %} aria-current="page"{% endif %}>
-                    {% icon "calendar" %}<span class="label">Сроки</span>
-                </a>
-            {% endif %}
+<div class="app">
+    {% if user.is_authenticated %}
+    <nav class="app-rail" aria-label="Быстрая навигация">
+        <a class="app-rail-logo" href="{% url 'dashboard' %}" aria-label="На главную">{% icon "compass" %}</a>
+        {% if is_teacher %}
+            <a class="app-rail-link {% if workspace == 'review' %}is-active turquoise{% endif %}" href="{% url 'teacher_review_queue' %}" title="Проверка">{% icon "check-circle" %}</a>
+            <a class="app-rail-link {% if workspace == 'curriculum' %}is-active{% endif %}" href="{% url 'teacher_curriculum' %}" title="Курс">{% icon "layers" %}</a>
+            <a class="app-rail-link {% if workspace == 'students' %}is-active{% endif %}" href="{% url 'teacher_students' %}" title="Ученики">{% icon "users" %}</a>
+            <a class="app-rail-link {% if workspace == 'groups' %}is-active{% endif %}" href="{% url 'teacher_groups' %}" title="Группы">{% icon "users" %}</a>
+            <a class="app-rail-link {% if workspace == 'analytics' %}is-active{% endif %}" href="{% url 'teacher_analytics' %}" title="Аналитика">{% icon "chart" %}</a>
+            <a class="app-rail-link {% if workspace == 'settings' %}is-active{% endif %}" href="{% url 'teacher_settings' %}" title="Настройки">{% icon "sliders" %}</a>
         {% else %}
-            <a class="nav-link" href="{% url 'login' %}">{% icon "logout" %}<span class="label">Войти</span></a>
+            <a class="app-rail-link {% if workspace == 'home' %}is-active turquoise{% endif %}" href="{% url 'student_home' %}" title="Главная">{% icon "home" %}</a>
+            <a class="app-rail-link {% if workspace == 'curriculum' %}is-active{% endif %}" href="{% url 'student_assignments' %}" title="Курс">{% icon "layers" %}</a>
+            <a class="app-rail-link {% if workspace == 'trainer' %}is-active{% endif %}" href="{% url 'student_trainer' %}" title="Тренажёр">{% icon "cards" %}</a>
+            <a class="app-rail-link {% if workspace == 'dictionary' %}is-active{% endif %}" href="{% url 'student_dictionary' %}" title="Мой словарь">{% icon "language" %}</a>
+            <a class="app-rail-link {% if workspace == 'grades' %}is-active{% endif %}" href="{% url 'student_grades' %}" title="Оценки">{% icon "award" %}</a>
+            <a class="app-rail-link {% if workspace == 'upcoming' %}is-active{% endif %}" href="{% url 'student_upcoming' %}" title="Сроки">{% icon "calendar" %}</a>
         {% endif %}
     </nav>
+    {% endif %}
 
-    <div class="topbar-side">
-        {% if user.is_authenticated %}
-            {% if user.is_staff %}
-                <a class="icon-btn" href="{% url 'admin:index' %}" title="Системное администрирование" aria-label="Системное администрирование">{% icon "shield" %}</a>
-            {% endif %}
-            <a class="user-chip" href="{% if is_teacher %}{% url 'teacher_settings' %}{% else %}{% url 'password_change' %}{% endif %}">
-                <span class="avatar">{{ user|initials }}</span>
-                <span class="name">{{ user.get_full_name|default:user.username }}</span>
+    <div class="app-main">
+        <header class="topbar">
+            <a class="topbar-brand" href="{% url 'dashboard' %}">
+                <span class="brand-logo">{% icon "compass" %}</span>
+                <span>English&nbsp;LMS</span>
             </a>
-            <form method="post" action="{% url 'logout' %}" class="inline-form">
-                {% csrf_token %}
-                <button class="icon-btn" type="submit" title="Выйти" aria-label="Выйти">{% icon "logout" %}</button>
-            </form>
-        {% endif %}
-    </div>
-</header>
 
-<div class="shell">
-    <div class="workspace {% block workspace_class %}{% endblock %}">
-        {% block rail %}{% endblock %}
-        <main class="content" id="main-content" tabindex="-1">
-            {% block crumbs %}{% endblock %}
-            {% include "lms/parts/messages.html" %}
-            {% block content %}{% endblock %}
-        </main>
-        {% block aside %}{% endblock %}
+            <nav class="topbar-nav" aria-label="Основная навигация">
+                {% if user.is_authenticated %}
+                    {% if is_teacher %}
+                        <a class="nav-link" href="{% url 'teacher_review_queue' %}"{% if workspace == 'review' %} aria-current="page"{% endif %}>
+                            {% icon "check-circle" %}<span class="label">Проверка</span>
+                            {% if pending_count %}<span class="nav-count tnum">{{ pending_count }}</span>{% endif %}
+                        </a>
+                        <a class="nav-link" href="{% url 'teacher_curriculum' %}"{% if workspace == 'curriculum' %} aria-current="page"{% endif %}>
+                            {% icon "layers" %}<span class="label">Курс</span>
+                        </a>
+                        <a class="nav-link" href="{% url 'teacher_students' %}"{% if workspace == 'students' %} aria-current="page"{% endif %}>
+                            {% icon "users" %}<span class="label">Ученики</span>
+                        </a>
+                        <a class="nav-link" href="{% url 'teacher_groups' %}"{% if workspace == 'groups' %} aria-current="page"{% endif %}>
+                            {% icon "users" %}<span class="label">Группы</span>
+                        </a>
+                        <a class="nav-link" href="{% url 'teacher_analytics' %}"{% if workspace == 'analytics' %} aria-current="page"{% endif %}>
+                            {% icon "chart" %}<span class="label">Аналитика</span>
+                        </a>
+                        <a class="nav-link" href="{% url 'teacher_settings' %}"{% if workspace == 'settings' %} aria-current="page"{% endif %}>
+                            {% icon "sliders" %}<span class="label">Настройки</span>
+                        </a>
+                    {% else %}
+                        <a class="nav-link" href="{% url 'student_home' %}"{% if workspace == 'home' %} aria-current="page"{% endif %}>
+                            {% icon "home" %}<span class="label">Главная</span>
+                        </a>
+                        <a class="nav-link" href="{% url 'student_assignments' %}"{% if workspace == 'curriculum' %} aria-current="page"{% endif %}>
+                            {% icon "layers" %}<span class="label">Курс</span>
+                        </a>
+                        <a class="nav-link" href="{% url 'student_trainer' %}"{% if workspace == 'trainer' %} aria-current="page"{% endif %}>
+                            {% icon "cards" %}<span class="label">Тренажёр</span>
+                        </a>
+                        <a class="nav-link" href="{% url 'student_dictionary' %}"{% if workspace == 'dictionary' %} aria-current="page"{% endif %}>
+                            {% icon "language" %}<span class="label">Словарь</span>
+                        </a>
+                        <a class="nav-link" href="{% url 'student_grades' %}"{% if workspace == 'grades' %} aria-current="page"{% endif %}>
+                            {% icon "award" %}<span class="label">Оценки</span>
+                        </a>
+                        <a class="nav-link" href="{% url 'student_upcoming' %}"{% if workspace == 'upcoming' %} aria-current="page"{% endif %}>
+                            {% icon "calendar" %}<span class="label">Сроки</span>
+                        </a>
+                    {% endif %}
+                {% else %}
+                    <a class="nav-link" href="{% url 'login' %}">{% icon "logout" %}<span class="label">Войти</span></a>
+                {% endif %}
+            </nav>
+
+            <div class="topbar-side">
+                {% if user.is_authenticated %}
+                    {% if user.is_staff %}
+                        <a class="icon-btn" href="{% url 'admin:index' %}" title="Системное администрирование" aria-label="Системное администрирование">{% icon "shield" %}</a>
+                    {% endif %}
+                    <a class="user-chip" href="{% if is_teacher %}{% url 'teacher_settings' %}{% else %}{% url 'password_change' %}{% endif %}">
+                        <span class="avatar">{{ user|initials }}</span>
+                        <span class="name">{{ user.get_full_name|default:user.username }}</span>
+                    </a>
+                    <form method="post" action="{% url 'logout' %}" class="inline-form">
+                        {% csrf_token %}
+                        <button class="icon-btn" type="submit" title="Выйти" aria-label="Выйти">{% icon "logout" %}</button>
+                    </form>
+                {% endif %}
+            </div>
+        </header>
+
+        <div class="shell">
+            <div class="workspace {% block workspace_class %}{% endblock %}">
+                {% block rail %}{% endblock %}
+                <main class="content" id="main-content" tabindex="-1">
+                    {% block crumbs %}{% endblock %}
+                    {% include "lms/parts/messages.html" %}
+                    {% block content %}{% endblock %}
+                </main>
+                {% block aside %}{% endblock %}
+            </div>
+        </div>
     </div>
 </div>
 
@@ -108,6 +136,7 @@
             <li><a href="{% url 'student_home' %}"{% if workspace == 'home' %} aria-current="page"{% endif %}>{% icon "home" %}Главная</a></li>
             <li><a href="{% url 'student_assignments' %}"{% if workspace == 'curriculum' %} aria-current="page"{% endif %}>{% icon "layers" %}Курс</a></li>
             <li><a href="{% url 'student_trainer' %}"{% if workspace == 'trainer' %} aria-current="page"{% endif %}>{% icon "cards" %}Тренажёр</a></li>
+            <li><a href="{% url 'student_dictionary' %}"{% if workspace == 'dictionary' %} aria-current="page"{% endif %}>{% icon "language" %}Словарь</a></li>
             <li><a href="{% url 'student_grades' %}"{% if workspace == 'grades' %} aria-current="page"{% endif %}>{% icon "award" %}Оценки</a></li>
         {% endif %}
     </ul>

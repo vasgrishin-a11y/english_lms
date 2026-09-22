@@ -37,19 +37,7 @@
                                 <span class="tag">{{ question.get_kind_display }}</span>
                                 <span class="tiny muted tnum">{{ question.points }} б.</span>
                             </div>
-                            {% if question.kind == 'mcq' or question.kind == 'multi' %}
-                                <ul class="col" style="padding-left:18px;margin:8px 0 0">
-                                    {% for choice in question.choices.all %}
-                                        <li{% if choice.is_correct %} class="is-correct"{% endif %}>{{ choice.text }}{% if choice.is_correct %} — верный{% endif %}</li>
-                                    {% endfor %}
-                                </ul>
-                            {% elif question.kind == 'match' %}
-                                <ul class="col" style="padding-left:18px;margin:8px 0 0">
-                                    {% for pair in question.pairs %}<li>{{ pair.term }} → {{ pair.definition }}</li>{% endfor %}
-                                </ul>
-                            {% elif question.kind == 'gap' %}
-                                <p class="small mb-0" style="margin-top:8px">Пропуски: <strong>{{ question.gaps|join:", " }}</strong></p>
-                            {% endif %}
+                            {% include "lms/parts/question_choices.html" with reveal=True %}
                             {% if question.explanation %}<p class="tiny muted mb-0" style="margin-top:6px">{% icon "lightbulb" "icon icon-sm" %} {{ question.explanation }}</p>{% endif %}
                             <div class="row" style="margin-top:8px">
                                 <a class="btn btn-secondary btn-sm" href="{% url 'teacher_question_edit' question.pk %}">{% icon "pencil" %}Изменить</a>

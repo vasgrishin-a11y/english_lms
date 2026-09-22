@@ -5,10 +5,10 @@
 {% block workspace_class %}has-rail{% endblock %}
 
 {% block rail %}
-<aside class="rail" aria-label="Поиск и сводка по курсу">
+<aside class="rail" aria-label="Поиск и фильтры курса">
     <form method="get" class="rail-card" role="search">
         <label for="id_q">Поиск по курсу</label>
-        <div class="search">
+        <div class="search-pill">
             {% icon "search" %}
             <input id="id_q" type="search" name="q" maxlength="200" value="{{ query }}" placeholder="Задание, тема, блок…">
         </div>
@@ -30,15 +30,16 @@
                 <p class="tiny muted mb-0">{% if totals.waiting %}{{ totals.waiting }} ждут проверки · {% endif %}{{ totals.blocks }} блока · {{ totals.topics }} тем</p>
             </div>
         </div>
+        <div class="progress" style="margin-top:12px" aria-hidden="true"><span style="width:{{ totals.progress }}%"></span></div>
     </div>
 
     <div class="rail-card">
         <p class="rail-title">Вид</p>
-        <div class="tabs" role="group" aria-label="Вид каталога">
-            <a class="tab{% if mode == 'map' %} is-active{% endif %}"{% if mode == 'map' %} aria-current="page"{% endif %} href="{% querystring mode='map' %}">{% icon "compass" "icon icon-sm" %}Карта</a>
-            <a class="tab{% if mode == 'list' %} is-active{% endif %}"{% if mode == 'list' %} aria-current="page"{% endif %} href="{% querystring mode='list' %}">{% icon "list" "icon icon-sm" %}Список</a>
+        <div class="filter-pills" role="group" aria-label="Вид каталога">
+            <a class="pill {% if mode == 'map' %}is-active turquoise{% endif %}" {% if mode == 'map' %}aria-current="page"{% endif %} href="{% querystring mode='map' %}">{% icon "grid" "icon icon-sm" %}Карточки</a>
+            <a class="pill {% if mode == 'list' %}is-active{% endif %}" {% if mode == 'list' %}aria-current="page"{% endif %} href="{% querystring mode='list' %}">{% icon "list" "icon icon-sm" %}Список</a>
         </div>
-        <p class="tiny muted" style="margin-top:12px">Карта группирует задания по блокам и темам — видно, где вы находитесь в курсе.</p>
+        <p class="tiny muted" style="margin-top:12px">Как в ProgressMe: классы — карточками с обложками, внутри — секции урока (Warm-up, Vocabulary, Listening…).</p>
     </div>
 
     <div class="rail-card">
@@ -54,32 +55,71 @@
 {% endblock %}
 
 {% block content %}
-<div class="content-head">
+<div class="classes-head">
     <div>
-        <h1>Карта курса</h1>
-        <p class="page-note">Блоки → темы → задания. Статус и оценка — по последней попытке; предыдущие попытки хранятся в истории задания.</p>
+        <h1 class="classes-title">Карта курса</h1>
+        <p class="page-note mb-0">Блоки → темы → задания. Как в ProgressMe Classes: поиск, фильтр, обложки и быстрый переход в урок.</p>
     </div>
-    {% if query %}<span class="badge badge-info">Найдено: {{ page_obj.paginator.count }}</span>{% endif %}
+    <div class="classes-toolbar">
+        {% if query %}<span class="badge badge-info">Найдено: {{ page_obj.paginator.count }}</span>{% endif %}
+        <span class="badge badge-turquoise tnum">{{ totals.total }} заданий</span>
+    </div>
 </div>
 
 {% if page_obj.object_list %}
     {% if mode == 'map' %}
-        {% regroup page_obj by topic.block.name as block_groups %}
+        {% regroup page_obj by topic.block as block_groups %}
+        <div class="class-grid" style="margin-bottom:24px">
+            {% for block_group in block_groups %}
+                {% with block=block_group.list.0.topic.block %}
+                <a class="class-card" href="#block-{{ block.pk }}" style="text-decoration:none">
+                    <div class="class-cover" style="background: var(--cover-{{ forloop.counter|add:0|divisibleby:8|yesno:'8,1' }}); background: var(--cover-{{ forloop.counter0|add:1 }});">
+                        {% with cover=block_group.list.0.topic.block.name|lower %}
+                            {% if "travel" in cover %} <span class="class-cover-emoji">🧳</span>
+                            {% elif "movie" in cover %} <span class="class-cover-emoji">🎬</span>
+                            {% elif "business" in cover %} <span class="class-cover-emoji">💼</span>
+                            {% elif "exam" in cover or "огэ" in cover or "егэ" in cover %} <span class="class-cover-emoji">📝</span>
+                            {% elif "grammar" in cover %} <span class="class-cover-emoji">📚</span>
+                            {% else %} <span class="class-cover-emoji">🌍</span>
+                            {% endif %}
+                        {% endwith %}
+                        {% if block.cefr_level %}<span class="badge tag-cefr">{{ block.cefr_level }}</span>{% endif %}
+                    </div>
+                    <div class="class-body">
+                        <h2 class="class-title">{{ block.name }}</h2>
+                        <div class="class-meta">
+                            <span>{{ block_group.list|length }} задани{{ block_group.list|length|pluralize:"е,я,й" }}</span>
+                            <span aria-hidden="true">·</span>
+                            <span>{{ block_group.list|length }} уроков</span>
+                        </div>
+                        {% if block.description %}<p class="tiny muted mb-0" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">{{ block.description|truncatechars:90 }}</p>{% endif %}
+                        <div class="class-foot">
+                            <span>{% icon "layers" "icon icon-sm" %}{{ block_group.list|length }}</span>
+                            <span class="progress-dots" aria-hidden="true">
+                                {% for _ in block_group.list|slice:":5" %}<span class="progress-dot {% if forloop.counter <= 2 %}is-done{% endif %}"></span>{% endfor %}
+                            </span>
+                        </div>
+                    </div>
+                </a>
+                {% endwith %}
+            {% endfor %}
+        </div>
+
         {% for block_group in block_groups %}
             {% with block=block_group.list.0.topic.block %}
-                <section class="card" aria-labelledby="block-{{ block.pk }}">
+                <section class="card" id="block-{{ block.pk }}" aria-labelledby="block-title-{{ block.pk }}">
                     <div class="card-head">
                         <div>
                             <div class="row row-tight">
                                 {% if block.cefr_level %}<span class="tag tag-cefr">{{ block.cefr_level }}</span>{% endif %}
-                                <h2 id="block-{{ block.pk }}" class="mb-0">{{ block.name }}</h2>
+                                <h2 id="block-title-{{ block.pk }}" class="mb-0">{{ block.name }}</h2>
                             </div>
                             {% if block.description %}<p class="muted small mb-0">{{ block.description }}</p>{% endif %}
                         </div>
-                        <span class="tiny muted tnum">{{ block_group.list|length }} задани{{ block_group.list|length|pluralize:"е,я,й" }} на странице</span>
+                        <span class="badge badge-turquoise tnum">{{ block_group.list|length }} заданий</span>
                     </div>
 
-                    {% regroup block_group.list by topic.title as topic_groups %}
+                    {% regroup block_group.list by topic as topic_groups %}
                     {% for topic_group in topic_groups %}
                         {% with topic=topic_group.list.0.topic %}
                             <div class="panel" style="margin-bottom:12px">
@@ -128,7 +168,7 @@
 {% else %}
     <div class="card">
         <div class="empty">
-            <div class="empty-icon">{% icon "search" "icon icon-xl" %}</div>
+            <div class="empty-ill">🔍</div>
             <h3>{% if query %}Ничего не нашлось{% else %}Пока нет опубликованных заданий{% endif %}</h3>
             <p>{% if query %}Попробуйте другой запрос — например, название темы или блока.{% else %}Как только преподаватель опубликует задания, они появятся на этой странице.{% endif %}</p>
             {% if query %}<a class="btn btn-secondary" href="{% url 'student_assignments' %}">Показать все задания</a>{% endif %}

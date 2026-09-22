@@ -141,9 +141,13 @@ class SeedDemoTests(LMSCase):
             {"text", "file", "audio", "mixed", "quiz"},
         )
         quiz = Assignment.objects.get(title="Тест: времена и маркеры")
-        self.assertEqual(quiz.questions.count(), 4)
+        self.assertGreaterEqual(quiz.questions.count(), 7)
         self.assertEqual(quiz.max_points, sum(q.points for q in quiz.questions.all()))
         self.assertTrue(quiz.questions.get(kind="mcq").choices.filter(is_correct=True).exists())
+        # Новые типы из ProgressMe-бенчмарка
+        self.assertTrue(quiz.questions.filter(kind="order").exists())
+        self.assertTrue(quiz.questions.filter(kind="sort").exists())
+        self.assertTrue(quiz.questions.filter(kind="spell").exists())
 
         # Учебная активность: автопроверка, доработка, проверенная работа, очередь, черновик.
         anna = get_user_model().objects.get(username="anna")
@@ -160,12 +164,10 @@ class SeedDemoTests(LMSCase):
             ).values_list("status", flat=True)
         )
         self.assertEqual(statuses, {"checked", "needs_revision", "submitted"})
-        self.assertEqual(
-            Submission.objects.get(
-                student=anna, assignment__title="Тест: времена и маркеры"
-            ).quiz_attempt.score,
-            8,
-        )
+        attempt = Submission.objects.get(student=anna, assignment__title="Тест: времена и маркеры").quiz_attempt
+        # 1 ошибка в mcq → минус баллы первого вопроса (2 б.)
+        self.assertEqual(attempt.max_score - attempt.score, 2)
+        self.assertGreaterEqual(attempt.score, 8)
         self.assertTrue(anna.answer_drafts.filter(assignment__title="Раскройте скобки").exists())
         # Черновик задания преподавателя не виден ученику.
         draft_task = Assignment.objects.get(title="IELTS Task 2: opinion essay")

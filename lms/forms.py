@@ -298,8 +298,10 @@ class QuestionForm(forms.ModelForm):
         widget=forms.Textarea(attrs={"rows": 6}),
         help_text=(
             "По одному варианту на строку. Правильный ответ отметьте звёздочкой в начале строки: "
-            "*London. Для типа «соответствие» пишите пары через вертикальную черту: "
-            "to book | бронировать."
+            "*London. Для «соответствия» и «сортировки» пишите пары через вертикальную черту: "
+            "to book | бронировать (для сортировки справа — название колонки). "
+            "Для «предложения из слов» перечислите слова в правильном порядке, по одному на строку. "
+            "Для «слова из букв» впишите принимаемые варианты написания."
         ),
     )
 
@@ -323,9 +325,9 @@ class QuestionForm(forms.ModelForm):
     def serialize_choices(question):
         lines = []
         for choice in question.choices.all():
-            if question.kind == Question.Kind.MATCH:
+            if question.kind in (Question.Kind.MATCH, Question.Kind.SORT):
                 lines.append(f"{choice.text} | {choice.match_text}")
-            elif question.kind == Question.Kind.GAP:
+            elif question.kind in (Question.Kind.GAP, Question.Kind.SPELL):
                 lines.append(choice.text)
             else:
                 lines.append(("*" if choice.is_correct else "") + choice.text)
@@ -336,15 +338,16 @@ class QuestionForm(forms.ModelForm):
         kind = self.data.get("kind") or self.instance.kind
         lines = [line.strip() for line in raw.splitlines() if line.strip()]
         parsed = []
-        if kind == Question.Kind.MATCH:
+        if kind in (Question.Kind.MATCH, Question.Kind.SORT):
+            label = "соответствия" if kind == Question.Kind.MATCH else "сортировки"
             for line in lines:
                 if "|" not in line:
                     raise forms.ValidationError(
-                        "Для соответствия каждая строка должна содержать «термин | определение»."
+                        f"Для {label} каждая строка должна содержать «элемент | колонка»."
                     )
                 term, _, definition = line.partition("|")
                 if not term.strip() or not definition.strip():
-                    raise forms.ValidationError("Пустая половина пары в соответствии.")
+                    raise forms.ValidationError(f"Пустая половина пары в {label}.")
                 parsed.append(
                     {
                         "text": term.strip()[:500],
@@ -352,7 +355,18 @@ class QuestionForm(forms.ModelForm):
                         "correct": True,
                     }
                 )
-        elif kind == Question.Kind.GAP:
+            if kind == Question.Kind.SORT and len({item["match_text"] for item in parsed}) < 2:
+                raise forms.ValidationError("Для сортировки нужно минимум две колонки.")
+        elif kind == Question.Kind.ORDER:
+            for line in lines:
+                parsed.append(
+                    {"text": line.lstrip("*").strip()[:500], "match_text": "", "correct": False}
+                )
+            if len(parsed) < 2:
+                raise forms.ValidationError(
+                    "Для «предложения из слов» нужно минимум два слова — по одному на строку."
+                )
+        elif kind in (Question.Kind.GAP, Question.Kind.SPELL):
             for line in lines:
                 parsed.append(
                     {"text": line.lstrip("*").strip()[:500], "match_text": "", "correct": True}
@@ -404,6 +418,27 @@ class CommentSnippetForm(forms.ModelForm):
         return code[:24]
 
 
+class DictionaryWordForm(forms.Form):
+    """Слово в личный словарь ученика (ProgressMe-подобный «словарь с тренировки»)."""
+
+    term = forms.CharField(
+        label="Слово или фраза",
+        max_length=300,
+        widget=forms.TextInput(attrs={"placeholder": "например, to book"}),
+    )
+    translation = forms.CharField(
+        label="Перевод",
+        max_length=300,
+        widget=forms.TextInput(attrs={"placeholder": "например, бронировать"}),
+    )
+    example = forms.CharField(
+        label="Пример употребления (необязательно)",
+        required=False,
+        max_length=500,
+        widget=forms.TextInput(attrs={"placeholder": "I'd like to book a table for two."}),
+    )
+
+
 class FlashcardDeckForm(forms.ModelForm):
     class Meta:
         model = FlashcardDeck
@@ -412,6 +447,11 @@ class FlashcardDeckForm(forms.ModelForm):
             "title": forms.TextInput(attrs={"placeholder": "Например: Travel vocabulary"}),
             "description": forms.Textarea(attrs={"rows": 2}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Тема обязательна для учебных наборов; личные словари создаёт сервис.
+        self.fields["topic"].required = True
 
 
 class FlashcardForm(forms.ModelForm):

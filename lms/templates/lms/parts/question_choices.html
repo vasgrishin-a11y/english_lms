@@ -1,0 +1,22 @@
+{% load lms_tags %}
+{% if question.kind == 'mcq' or question.kind == 'multi' %}
+    <ul class="col" style="padding-left:18px;margin:8px 0 0">
+        {% for choice in question.choices.all %}
+            <li class="{% if reveal and choice.is_correct %}is-correct{% endif %}">{{ choice.text }}{% if reveal and choice.is_correct %} — верный{% endif %}</li>
+        {% endfor %}
+    </ul>
+{% elif question.kind == 'match' %}
+    <ul class="col" style="padding-left:18px;margin:8px 0 0">
+        {% for pair in question.pairs %}<li>{{ pair.term }} → {{ pair.definition }}</li>{% endfor %}
+    </ul>
+{% elif question.kind == 'sort' %}
+    <ul class="col" style="padding-left:18px;margin:8px 0 0">
+        {% for pair in question.pairs %}<li>{{ pair.term }} → {{ pair.definition }}</li>{% endfor %}
+    </ul>
+{% elif question.kind == 'order' %}
+    <p class="small mb-0" style="margin-top:8px">Порядок: <strong>{{ question.sequence|join:" " }}</strong></p>
+{% elif question.kind == 'gap' %}
+    <p class="small mb-0" style="margin-top:8px">{% if reveal %}Пропуски: <strong>{{ question.gaps|join:", " }}</strong>{% else %}Пропусков: {{ question.gaps|length }}{% endif %}</p>
+{% elif question.kind == 'spell' %}
+    <p class="small mb-0" style="margin-top:8px">{% if reveal %}Ответ: <strong>{{ question.gaps|join:" / " }}</strong>{% else %}Букв: {{ question.scrambled|length }}{% endif %}</p>
+{% endif %}

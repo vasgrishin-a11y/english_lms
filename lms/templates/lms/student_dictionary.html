@@ -1,0 +1,86 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}Мой словарь — English LMS{% endblock %}
+{% block workspace_class %}workspace-plain{% endblock %}
+
+{% block content %}
+<div class="classes-head">
+    <div>
+        <h1 class="classes-title">{% icon "language" %} Мой словарь</h1>
+        <p class="muted small mb-0">Личный словарь из урока: выделяйте слово → перевод → добавить. Тренировка по SM-2, как в ProgressMe.</p>
+    </div>
+    <div class="classes-toolbar">
+        <span class="badge badge-turquoise tnum">{{ words|length }} слов</span>
+        {% if queue.queue %}<a class="btn btn-sm" href="{% url 'trainer_session' deck.pk %}">{% icon "play" %}Тренировать {{ queue.due|default:queue.queue|length }}</a>{% endif %}
+    </div>
+</div>
+
+<div class="dict-grid">
+    <div>
+        <section class="card">
+            <div class="card-head">
+                <h2 class="card-title">{% icon "cards" %}Слова</h2>
+                <span class="tiny muted">Изучено {{ reviews.studied|default:0 }} · повторений {{ reviews.repetitions|default:0 }}</span>
+            </div>
+            {% if words %}
+                <div class="dict-words">
+                    {% for card in words %}
+                        <div class="word-row">
+                            <div class="word-main">
+                                <div class="word-term">{{ card.front }}</div>
+                                <div class="word-translation">{{ card.back }}</div>
+                                {% if card.example %}<div class="word-example">“{{ card.example }}”</div>{% endif %}
+                                {% if card.review %}<p class="tiny muted mb-0" style="margin-top:6px">Повтор: {{ card.review.due_at|human_due }} · интервал {{ card.review.interval_days }} дн. · лёгкость {{ card.review.ease|compact_number }}</p>{% endif %}
+                            </div>
+                            <div class="word-side">
+                                <form method="post" action="{% url 'student_dictionary_delete' card.pk %}" data-confirm="Удалить «{{ card.front }}» из словаря?">
+                                    {% csrf_token %}<button class="icon-btn" type="submit" aria-label="Удалить">{% icon "trash" %}</button>
+                                </form>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="empty">
+                    <div class="empty-ill">📚</div>
+                    <h3>Словарь пока пуст</h3>
+                    <p>Добавляйте слова из заданий или в форме справа. Как в ProgressMe: слово → перевод → 4 режима тренировки.</p>
+                </div>
+            {% endif %}
+        </section>
+    </div>
+
+    <aside class="rail" style="position:sticky;top:calc(var(--topbar-h) + 16px)">
+        <div class="rail-card">
+            <p class="rail-title">Добавить слово</p>
+            <form method="post" novalidate>
+                {% csrf_token %}
+                {% include "lms/form_fields.html" with form=form %}
+                <button class="btn btn-sm btn-block" type="submit" style="margin-top:12px">{% icon "plus" %}В словарь</button>
+            </form>
+            <p class="tiny muted" style="margin-top:12px">Совет: выделяйте слова в задании, получайте перевод и сохраняйте в один клик — как в ProgressMe «перевод по выделению».</p>
+        </div>
+
+        <div class="rail-card">
+            <p class="rail-title">Как тренировать</p>
+            <ul class="small muted" style="margin:0;padding-left:18px">
+                <li><strong>again</strong> — забыли, показать скоро</li>
+                <li><strong>hard</strong> — вспомнили с трудом</li>
+                <li><strong>good</strong> — уверенно</li>
+                <li><strong>easy</strong> — слишком легко</li>
+            </ul>
+            <a class="btn btn-secondary btn-sm btn-block" href="{% url 'student_trainer' %}" style="margin-top:12px">{% icon "cards" %}Все наборы</a>
+        </div>
+
+        <div class="rail-card">
+            <p class="rail-title">Статистика</p>
+            <div class="stats">
+                <div class="stat"><span class="stat-value tnum">{{ words|length }}</span><span class="stat-label">слов</span></div>
+                <div class="stat"><span class="stat-value tnum">{{ reviews.studied|default:0 }}</span><span class="stat-label">изучено</span></div>
+                <div class="stat"><span class="stat-value tnum">{{ reviews.lapses|default:0 }}</span><span class="stat-label">забываний</span></div>
+            </div>
+        </div>
+    </aside>
+</div>
+{% endblock %}
