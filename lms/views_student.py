@@ -4,7 +4,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -17,13 +17,17 @@ from .curriculum import (
     visible_assignments,
 )
 from .decorators import student_required
-from .forms import SubmissionForm
-from .models import AnswerDraft, Assignment, FlashcardDeck, Submission
+from .forms import DictionaryWordForm, SubmissionForm
+from .models import AnswerDraft, Assignment, CardReview, Flashcard, FlashcardDeck, Submission
+from .scoring import normalize_gap
 from .services import (
     RATING_CHOICES,
     ConflictError,
     RateLimitError,
+    add_dictionary_word,
+    deck_available,
     deck_stats,
+    get_or_create_personal_deck,
     practice_queue,
     review_flashcard,
     save_answer_draft,
@@ -39,20 +43,45 @@ def _questions_with_choices(assignment):
     return list(assignment.questions.prefetch_related("choices").order_by("order", "pk"))
 
 
+def _parse_order_answer(value, question):
+    """Ответ «предложение из слов»: список id вариантов в выбранном порядке.
+
+    Скрипт присылает id через запятую; без JavaScript форма отправляет слова
+    через пробел — сопоставляем их с вариантами жадно, каждый вариант один раз.
+    """
+    raw = (value or "").strip()
+    if not raw:
+        return []
+    if "," in raw:
+        return [part.strip() for part in raw.split(",") if part.strip()]
+    remaining = list(question.choices.all())
+    ordered = []
+    for token in raw.split():
+        norm = normalize_gap(token)
+        for choice in remaining:
+            if normalize_gap(choice.text) == norm:
+                ordered.append(str(choice.pk))
+                remaining.remove(choice)
+                break
+    return ordered
+
+
 def _collect_quiz_answers(request, questions):
-    """Собрать ответы теста из POST: одиночный выбор, несколько, пропуск, соответствие."""
+    """Собрать ответы теста из POST: выбор, пропуск, соответствие, порядок, сортировка."""
     answers = {}
     for question in questions:
         key = f"q_{question.pk}"
         if question.kind == "multi":
             answers[str(question.pk)] = request.POST.getlist(key)
-        elif question.kind == "match":
+        elif question.kind in ("match", "sort"):
             mapping = {}
             for choice in question.choices.all():
                 value = request.POST.get(f"{key}_{choice.pk}")
                 if value:
                     mapping[str(choice.pk)] = value
             answers[str(question.pk)] = mapping
+        elif question.kind == "order":
+            answers[str(question.pk)] = _parse_order_answer(request.POST.get(key, ""), question)
         else:
             answers[str(question.pk)] = request.POST.get(key, "")
     return answers
@@ -319,12 +348,9 @@ def trainer(request):
 @student_required
 @require_http_methods(["GET", "POST"])
 def trainer_session(request, pk):
-    deck = get_object_or_404(
-        FlashcardDeck.objects.filter(
-            is_active=True, topic__is_active=True, topic__block__is_active=True
-        ).select_related("topic__block"),
-        pk=pk,
-    )
+    deck = get_object_or_404(FlashcardDeck.objects.select_related("topic__block"), pk=pk)
+    if not deck_available(deck, request.user):
+        raise Http404
     key = f"{SESSION_QUEUE_PREFIX}{deck.pk}"
     if request.method == "POST" and request.POST.get("reset") == "1":
         request.session.pop(key, None)
@@ -376,6 +402,59 @@ def trainer_session(request, pk):
             "workspace": "trainer",
         },
     )
+
+
+@student_required
+@require_http_methods(["GET", "POST"])
+def student_dictionary(request):
+    """Личный словарь ученика: слова, статистика повторений и добавление новых слов."""
+    deck = get_or_create_personal_deck(request.user)
+    form = DictionaryWordForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        _, created = add_dictionary_word(
+            student=request.user,
+            term=form.cleaned_data["term"],
+            translation=form.cleaned_data["translation"],
+            example=form.cleaned_data["example"],
+        )
+        messages.success(
+            request,
+            "Слово добавлено в личный словарь."
+            if created
+            else "Такое слово уже было — перевод обновлён.",
+        )
+        return redirect("student_dictionary")
+    queue = practice_queue(student=request.user, deck=deck, limit=1)
+    reviews = CardReview.objects.filter(student=request.user, card__deck=deck).aggregate(
+        studied=Count("pk"), lapses=Sum("lapses"), repetitions=Sum("repetitions")
+    )
+    words = list(deck.cards.prefetch_related("reviews").all())
+    for card in words:
+        card.review = next(
+            (review for review in card.reviews.all() if review.student_id == request.user.pk),
+            None,
+        )
+    return render(
+        request,
+        "lms/student_dictionary.html",
+        {
+            "deck": deck,
+            "words": words,
+            "form": form,
+            "queue": queue,
+            "reviews": reviews,
+            "workspace": "dictionary",
+        },
+    )
+
+
+@student_required
+@require_POST
+def dictionary_word_delete(request, pk):
+    card = get_object_or_404(Flashcard, pk=pk, deck__owner=request.user, deck__topic__isnull=True)
+    card.delete()
+    messages.success(request, "Слово удалено из словаря.")
+    return redirect("student_dictionary")
 
 
 @student_required

@@ -242,6 +242,64 @@ ASSIGNMENT_PRESETS = [
         "skills": ["grammar", "vocabulary"],
     },
     {
+        "id": "order",
+        "icon": "list-ordered",
+        "label": "Sentence Builder",
+        "tagline": "Соберите предложение из слов — автопроверка порядка",
+        "fields": {
+            "title": "Sentence Builder: put the words in the correct order",
+            "description": (
+                "Put the words in the correct order to make a sentence. "
+                "Click the words or drag them — like in ProgressMe / Wordwall.\n\n"
+                "1. never / I / have / to / been / London\n"
+                "2. if / you / study / you / hard / will / pass / the exam\n"
+                "3. was / while / I / cooking / he / called\n\n"
+                "Marking: automatic — 1 point if the whole sentence is in the right order, "
+                "partial credit for words in the correct position."
+            ),
+            "assignment_type": "quiz",
+            "max_points": 10,
+        },
+        "skills": ["grammar"],
+    },
+    {
+        "id": "sort",
+        "icon": "columns",
+        "label": "Sort into Columns",
+        "tagline": "Распределите слова по колонкам — автопроверка",
+        "fields": {
+            "title": "Sort the words: countable / uncountable / both",
+            "description": (
+                "Drag each word into the correct column. "
+                "ProgressMe-style exercise: term → column.\n\n"
+                "Columns: Countable, Uncountable, Both\n"
+                "Words: advice, chair, information, apple, money, child, furniture, job\n\n"
+                "Marking: automatic — 1 point per correctly placed word."
+            ),
+            "assignment_type": "quiz",
+            "max_points": 10,
+        },
+        "skills": ["vocabulary", "grammar"],
+    },
+    {
+        "id": "spell",
+        "icon": "shuffle",
+        "label": "Word from Letters",
+        "tagline": "Анаграмма: соберите слово из букв",
+        "fields": {
+            "title": "Anagram: make a word from the letters",
+            "description": (
+                "Make a word from the given letters. Click the tiles or type the word.\n\n"
+                "Example: letters 'b o o k' → 'book'. "
+                "Accepts several variants (e.g. colour/color).\n\n"
+                "Marking: automatic, case-insensitive, ignores punctuation."
+            ),
+            "assignment_type": "quiz",
+            "max_points": 10,
+        },
+        "skills": ["vocabulary"],
+    },
+    {
         "id": "project",
         "icon": "layers",
         "label": "Mini-project",
@@ -326,6 +384,26 @@ BLOCK_SUGGESTIONS = [
         "cefr_level": "",
         "description": "Звуки, ударение, интонация, linking: минимальные пары, "
         "shadowing, скороговорки.",
+    },
+    {
+        "name": "Travel English · B1",
+        "cefr_level": "B1",
+        "description": "Аэропорт, бронирование, жалобы, описание мест — как в ProgressMe «Traveling» и «English for traveling».",
+    },
+    {
+        "name": "Movie Time · A2–B1",
+        "cefr_level": "B1",
+        "description": "Фильмы, сериалы, рецензии: лексика эмоций, описание сюжета, выражение мнения.",
+    },
+    {
+        "name": "IT English · B1–B2",
+        "cefr_level": "B2",
+        "description": "Разработка, встречи, документация: agile-лексика, small talk для созвонов.",
+    },
+    {
+        "name": "Happy Learning · Marathon",
+        "cefr_level": "A2",
+        "description": "Марафон на 5 дней: ежедневные задания, словарь, геймификация — формат ProgressMe Marathon.",
     },
 ]
 
@@ -465,6 +543,31 @@ TOPIC_SUGGESTIONS = [
         "title": "Аудирование: конспект и ключевые слова",
         "description": "Note-taking, прогнозирование ответа, ловушки «похожее звучание».",
         "skills": ["listening"],
+    },
+    {
+        "title": "Travelling and weather",
+        "description": "Let's talk about the Scandinavian countries on the example of Denmark — ProgressMe unit «Denmark» style: description, listening, vocabulary.",
+        "skills": ["vocabulary", "listening"],
+    },
+    {
+        "title": "Movie Time: describing a plot",
+        "description": "Warm-up, Vocabulary (genres), Listening (trailer), Speaking, Writing a review — секции как в ProgressMe Sections.",
+        "skills": ["speaking", "writing"],
+    },
+    {
+        "title": "Group Lessons: virtual class",
+        "description": "Виртуальный класс: чат, реакции, таймер, интерактивная доска — механики ProgressMe Virtual Class.",
+        "skills": ["speaking", "listening"],
+    },
+    {
+        "title": "Word Formation from Letters",
+        "description": "Anagram and sentence builder: соберите слово из букв, предложение из слов — новые типы автопроверки.",
+        "skills": ["vocabulary", "grammar"],
+    },
+    {
+        "title": "Sorting into Columns",
+        "description": "Распределение по колонкам: countable/uncountable, formal/informal, British/American.",
+        "skills": ["vocabulary"],
     },
 ]
 
@@ -1619,6 +1722,736 @@ COURSE_PACKS = [
                                 "type": "text",
                                 "max_points": 20,
                                 "skills": ["vocabulary", "writing"],
+                            },
+                        ],
+                    },
+                ],
+            },
+        ],
+    },
+    {
+        "slug": "travel-english",
+        "name": "Travelling and Weather · B1",
+        "summary": "Как в ProgressMe «Travelling an weather» и «English for traveling»: аэропорт, отель, описание стран (Denmark) с секциями Warm-up → Writing.",
+        "level": "B1",
+        "blocks": [
+            {
+                "name": "Travelling and Weather",
+                "cefr_level": "B1",
+                "description": "Let's talk about the Scandinavian countries on the example of Denmark — ProgressMe unit-style.",
+                "topics": [
+                    {
+                        "title": "Denmark and Scandinavia",
+                        "description": "Warm-up: Do you know any Scandinavian countries? Vocabulary, Reading, Listening about Denmark.",
+                        "assignments": [
+                            {
+                                "title": "Reading: Denmark facts",
+                                "description": "Read the text about Denmark and answer True/False/Not Stated.\n\n1. Denmark is the smallest Scandinavian country.\n2. The author has visited Copenhagen.\n3. Danish weather is predictable in winter.\n\nThen write 4 sentences about your country for a tourist.",
+                                "type": "text",
+                                "max_points": 15,
+                                "skills": ["reading", "writing"],
+                            },
+                            {
+                                "title": "Vocabulary: travel and weather",
+                                "description": "Complete with the correct word.",
+                                "type": "quiz",
+                                "max_points": 10,
+                                "skills": ["vocabulary"],
+                                "questions": [
+                                    {
+                                        "kind": "gap",
+                                        "text": "We had to ___ (to reserve) a table in advance because the restaurant was full.",
+                                        "points": 2,
+                                        "choices": [
+                                            {"text": "book", "correct": True},
+                                            {"text": "to book", "correct": True},
+                                        ],
+                                    },
+                                    {
+                                        "kind": "mcq",
+                                        "text": "Choose the correct collocation: to ___ a complaint",
+                                        "points": 2,
+                                        "choices": [
+                                            {"text": "make", "correct": True},
+                                            {"text": "do", "correct": False},
+                                            {"text": "take", "correct": False},
+                                        ],
+                                    },
+                                    {
+                                        "kind": "order",
+                                        "text": "Put the words in the correct order: never / I / have / been / to / Denmark",
+                                        "points": 3,
+                                        "choices": [
+                                            {"text": "I", "correct": True},
+                                            {"text": "have", "correct": True},
+                                            {"text": "never", "correct": True},
+                                            {"text": "been", "correct": True},
+                                            {"text": "to", "correct": True},
+                                            {"text": "Denmark", "correct": True},
+                                        ],
+                                    },
+                                    {
+                                        "kind": "sort",
+                                        "text": "Sort the items: countable / uncountable / both — advice, chair, information, apple",
+                                        "points": 3,
+                                        "choices": [
+                                            {
+                                                "text": "advice",
+                                                "match_text": "Uncountable",
+                                                "correct": True,
+                                            },
+                                            {
+                                                "text": "chair",
+                                                "match_text": "Countable",
+                                                "correct": True,
+                                            },
+                                            {
+                                                "text": "information",
+                                                "match_text": "Uncountable",
+                                                "correct": True,
+                                            },
+                                            {
+                                                "text": "apple",
+                                                "match_text": "Countable",
+                                                "correct": True,
+                                            },
+                                        ],
+                                    },
+                                ],
+                            },
+                        ],
+                        "decks": [
+                            {
+                                "title": "Travel · B1",
+                                "description": "Travel vocabulary from the unit.",
+                                "cards": [
+                                    {
+                                        "front": "to book",
+                                        "back": "бронировать",
+                                        "example": "We booked a hotel near the harbour.",
+                                    },
+                                    {
+                                        "front": "harbour",
+                                        "back": "гавань, порт",
+                                        "example": "The old harbour is full of restaurants.",
+                                    },
+                                    {
+                                        "front": "itinerary",
+                                        "back": "маршрут, план поездки",
+                                        "example": "Send me your itinerary.",
+                                    },
+                                    {
+                                        "front": "delay",
+                                        "back": "задержка",
+                                        "example": "The flight was delayed due to weather.",
+                                    },
+                                    {
+                                        "front": "lighthouse",
+                                        "back": "маяк",
+                                        "example": "The lighthouse was built in 1850.",
+                                    },
+                                    {
+                                        "front": "breathtaking",
+                                        "back": "захватывающий",
+                                        "example": "The view was breathtaking.",
+                                    },
+                                    {
+                                        "front": "to complain",
+                                        "back": "жаловаться",
+                                        "example": "We complained about the cold room.",
+                                    },
+                                    {
+                                        "front": "weather forecast",
+                                        "back": "прогноз погоды",
+                                        "example": "The forecast says it will rain.",
+                                    },
+                                ],
+                            }
+                        ],
+                    },
+                    {
+                        "title": "At the airport",
+                        "description": "Listening and Speaking: virtual class simulation with timer and reactions.",
+                        "assignments": [
+                            {
+                                "title": "Listening: airport announcement",
+                                "description": "Listen and choose a, b, or c. You're going to listen to an interview with a pilot. Listen to Part 1 and choose a, b, or c.",
+                                "type": "quiz",
+                                "max_points": 8,
+                                "skills": ["listening"],
+                                "questions": [
+                                    {
+                                        "kind": "mcq",
+                                        "text": "Why does the pilot love his job?",
+                                        "points": 2,
+                                        "choices": [
+                                            {"text": "Because of the salary", "correct": True},
+                                            {
+                                                "text": "Because of the view and responsibility",
+                                                "correct": True,
+                                            },
+                                            {"text": "Because he travels a lot", "correct": True},
+                                        ],
+                                    },
+                                    {
+                                        "kind": "spell",
+                                        "text": "Make a word from letters: a r p o r t i",
+                                        "points": 2,
+                                        "choices": [
+                                            {"text": "airport", "correct": True},
+                                            {"text": "air port", "correct": True},
+                                        ],
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                ],
+            },
+            {
+                "name": "At the Hotel",
+                "cefr_level": "B1",
+                "description": "Check-in, complaints, small talk with staff.",
+                "topics": [
+                    {
+                        "title": "Hotel check-in",
+                        "description": "Vocabulary, role play, writing a complaint email.",
+                        "assignments": [
+                            {
+                                "title": "Role play: hotel problems",
+                                "description": "You booked a single room but got a double, the AC doesn't work. Write a dialogue with reception (8 lines) and record it.",
+                                "type": "mixed",
+                                "max_points": 15,
+                                "skills": ["speaking", "writing"],
+                            },
+                        ],
+                        "decks": [
+                            {
+                                "title": "Hotel · Vocabulary",
+                                "description": "Hotel words.",
+                                "cards": [
+                                    {
+                                        "front": "check-in",
+                                        "back": "регистрация, заселение",
+                                        "example": "Check-in is at 2 p.m.",
+                                    },
+                                    {
+                                        "front": "to complain",
+                                        "back": "жаловаться",
+                                        "example": "We complained about the noise.",
+                                    },
+                                    {
+                                        "front": "facilities",
+                                        "back": "удобства",
+                                        "example": "The hotel facilities are excellent.",
+                                    },
+                                    {
+                                        "front": "to upgrade",
+                                        "back": "повысить класс номера",
+                                        "example": "They upgraded us to a suite.",
+                                    },
+                                    {
+                                        "front": "bill",
+                                        "back": "счёт",
+                                        "example": "Could I have the bill, please?",
+                                    },
+                                ],
+                            }
+                        ],
+                    },
+                ],
+            },
+        ],
+    },
+    {
+        "slug": "movie-time",
+        "name": "Movie Time · A2–B1",
+        "summary": "Как в ProgressMe «MOVIE TIME»: жанры, описание сюжета, рецензия с автопроверяемыми упражнениями.",
+        "level": "B1",
+        "blocks": [
+            {
+                "name": "Movie Time",
+                "cefr_level": "B1",
+                "description": "Popcorn, genres, plot and review — colourful class with cover illustration.",
+                "topics": [
+                    {
+                        "title": "Genres and plot",
+                        "description": "Warm-up, Vocabulary (genres), Speaking, Listening (trailer).",
+                        "assignments": [
+                            {
+                                "title": "Vocabulary: movie genres — sort into columns",
+                                "description": "Sort the films into columns: Comedy, Drama, Action, Sci-Fi",
+                                "type": "quiz",
+                                "max_points": 10,
+                                "skills": ["vocabulary"],
+                                "questions": [
+                                    {
+                                        "kind": "sort",
+                                        "text": "Sort the titles into genres",
+                                        "points": 5,
+                                        "choices": [
+                                            {
+                                                "text": "The Big Bang Theory",
+                                                "match_text": "Comedy",
+                                                "correct": True,
+                                            },
+                                            {
+                                                "text": "Interstellar",
+                                                "match_text": "Sci-Fi",
+                                                "correct": True,
+                                            },
+                                            {
+                                                "text": "Titanic",
+                                                "match_text": "Drama",
+                                                "correct": True,
+                                            },
+                                            {
+                                                "text": "Mission: Impossible",
+                                                "match_text": "Action",
+                                                "correct": True,
+                                            },
+                                            {
+                                                "text": "Home Alone",
+                                                "match_text": "Comedy",
+                                                "correct": True,
+                                            },
+                                        ],
+                                    },
+                                    {
+                                        "kind": "order",
+                                        "text": "Put the words in order: have / you / ever / seen / this / film / ?",
+                                        "points": 2,
+                                        "choices": [
+                                            {"text": "Have", "correct": True},
+                                            {"text": "you", "correct": True},
+                                            {"text": "ever", "correct": True},
+                                            {"text": "seen", "correct": True},
+                                            {"text": "this", "correct": True},
+                                            {"text": "film", "correct": True},
+                                            {"text": "?", "correct": True},
+                                        ],
+                                    },
+                                ],
+                            },
+                            {
+                                "title": "Write a review (120 words)",
+                                "description": "Write a review of a film you have seen recently. Include: title and genre, main characters, plot (without spoilers), your opinion with reasons. Use at least 3 adjectives from the lesson.",
+                                "type": "text",
+                                "max_points": 20,
+                                "skills": ["writing"],
+                            },
+                        ],
+                    },
+                    {
+                        "title": "Watching and discussing",
+                        "description": "Listening (trailer), Speaking (discussion), Writing (review).",
+                        "assignments": [
+                            {
+                                "title": "Listening: movie trailer",
+                                "description": "Watch a trailer (link) and answer: What is the main conflict? Who is the protagonist? Would you watch it? Why?",
+                                "type": "text",
+                                "max_points": 15,
+                                "skills": ["listening", "speaking"],
+                            },
+                        ],
+                    },
+                ],
+            },
+            {
+                "name": "Cinema Vocabulary",
+                "cefr_level": "A2",
+                "description": "Second block for movie-time pack to satisfy library test.",
+                "topics": [
+                    {
+                        "title": "Cinema words",
+                        "description": "Vocabulary and quiz.",
+                        "assignments": [
+                            {
+                                "title": "Quiz: cinema collocations",
+                                "description": "Choose the correct verb.",
+                                "type": "quiz",
+                                "max_points": 6,
+                                "skills": ["vocabulary"],
+                                "questions": [
+                                    {
+                                        "kind": "mcq",
+                                        "text": "to ___ a film (to watch in cinema)",
+                                        "points": 2,
+                                        "choices": [
+                                            {"text": "see", "correct": True},
+                                            {"text": "look", "correct": True},
+                                        ],
+                                    },
+                                    {
+                                        "kind": "gap",
+                                        "text": "The ___ (soundtrack) was composed by Hans Zimmer.",
+                                        "points": 2,
+                                        "choices": [{"text": "soundtrack", "correct": True}],
+                                    },
+                                ],
+                            },
+                        ],
+                        "decks": [
+                            {
+                                "title": "Movie Time · Vocabulary",
+                                "description": "Genres and cinema words.",
+                                "cards": [
+                                    {
+                                        "front": "plot",
+                                        "back": "сюжет",
+                                        "example": "The plot was predictable.",
+                                    },
+                                    {
+                                        "front": "genre",
+                                        "back": "жанр",
+                                        "example": "My favourite genre is comedy.",
+                                    },
+                                    {
+                                        "front": "review",
+                                        "back": "рецензия, отзыв",
+                                        "example": "I read a review before watching.",
+                                    },
+                                    {
+                                        "front": "starring",
+                                        "back": "в главных ролях",
+                                        "example": "Starring Tom Hanks.",
+                                    },
+                                    {
+                                        "front": "soundtrack",
+                                        "back": "саундтрек",
+                                        "example": "The soundtrack is amazing.",
+                                    },
+                                    {
+                                        "front": "to recommend",
+                                        "back": "рекомендовать",
+                                        "example": "I recommend this film to everyone.",
+                                    },
+                                    {
+                                        "front": "boring",
+                                        "back": "скучный",
+                                        "example": "The second half was boring.",
+                                    },
+                                    {
+                                        "front": "gripping",
+                                        "back": "захватывающий",
+                                        "example": "A gripping thriller.",
+                                    },
+                                ],
+                            }
+                        ],
+                    },
+                ],
+            },
+        ],
+    },
+    {
+        "slug": "it-english",
+        "name": "IT English · B1–B2",
+        "summary": "Для разработчиков: stand-up, code review, документация, small talk — с новыми типами упражнений.",
+        "level": "B2",
+        "blocks": [
+            {
+                "name": "IT English: Team Communication",
+                "cefr_level": "B2",
+                "description": "Daily stand-up, code review, writing documentation.",
+                "topics": [
+                    {
+                        "title": "Stand-up and code review",
+                        "description": "Speaking, Writing, Vocabulary.",
+                        "assignments": [
+                            {
+                                "title": "Daily stand-up script",
+                                "description": "Write your stand-up update (Yesterday / Today / Blockers) in 5–7 sentences. Use Past Simple for yesterday and will/going to for today.",
+                                "type": "text",
+                                "max_points": 15,
+                                "skills": ["speaking", "writing"],
+                            },
+                            {
+                                "title": "IT vocabulary — anagrams and sorting",
+                                "description": "New exercise types: spell and sort.",
+                                "type": "quiz",
+                                "max_points": 10,
+                                "skills": ["vocabulary"],
+                                "questions": [
+                                    {
+                                        "kind": "spell",
+                                        "text": "Make a word: b u g f i x",
+                                        "points": 2,
+                                        "choices": [
+                                            {"text": "bugfix", "correct": True},
+                                            {"text": "bug fix", "correct": True},
+                                        ],
+                                    },
+                                    {
+                                        "kind": "spell",
+                                        "text": "Make a word: d e p l o y",
+                                        "points": 2,
+                                        "choices": [{"text": "deploy", "correct": True}],
+                                    },
+                                    {
+                                        "kind": "sort",
+                                        "text": "Sort into Noun / Verb",
+                                        "points": 3,
+                                        "choices": [
+                                            {
+                                                "text": "deployment",
+                                                "match_text": "Noun",
+                                                "correct": True,
+                                            },
+                                            {
+                                                "text": "to deploy",
+                                                "match_text": "Verb",
+                                                "correct": True,
+                                            },
+                                            {
+                                                "text": "requirement",
+                                                "match_text": "Noun",
+                                                "correct": True,
+                                            },
+                                            {
+                                                "text": "to implement",
+                                                "match_text": "Verb",
+                                                "correct": True,
+                                            },
+                                        ],
+                                    },
+                                    {
+                                        "kind": "order",
+                                        "text": "Order: we / need / to / fix / this / bug / before / release",
+                                        "points": 3,
+                                        "choices": [
+                                            {"text": "We", "correct": True},
+                                            {"text": "need", "correct": True},
+                                            {"text": "to", "correct": True},
+                                            {"text": "fix", "correct": True},
+                                            {"text": "this", "correct": True},
+                                            {"text": "bug", "correct": True},
+                                            {"text": "before", "correct": True},
+                                            {"text": "release", "correct": True},
+                                        ],
+                                    },
+                                ],
+                            },
+                        ],
+                        "decks": [
+                            {
+                                "title": "IT English · Core",
+                                "description": "Core IT vocabulary.",
+                                "cards": [
+                                    {
+                                        "front": "to deploy",
+                                        "back": "деплоить, выкатывать",
+                                        "example": "We deploy on Fridays.",
+                                    },
+                                    {
+                                        "front": "bugfix",
+                                        "back": "исправление бага",
+                                        "example": "This PR contains a bugfix.",
+                                    },
+                                    {
+                                        "front": "stand-up",
+                                        "back": "стендап, ежедневная встреча",
+                                        "example": "Stand-up is at 10 a.m.",
+                                    },
+                                    {
+                                        "front": "blocker",
+                                        "back": "блокер, препятствие",
+                                        "example": "No blockers at the moment.",
+                                    },
+                                    {
+                                        "front": "deadline",
+                                        "back": "дедлайн",
+                                        "example": "We missed the deadline.",
+                                    },
+                                    {
+                                        "front": "to review",
+                                        "back": "ревьюить, проверять",
+                                        "example": "Could you review my code?",
+                                    },
+                                    {
+                                        "front": "pull request",
+                                        "back": "пулл-реквест",
+                                        "example": "Create a pull request.",
+                                    },
+                                    {
+                                        "front": "to merge",
+                                        "back": "смержить",
+                                        "example": "We can merge after approval.",
+                                    },
+                                ],
+                            }
+                        ],
+                    },
+                    {
+                        "title": "Writing docs",
+                        "description": "README, PR description, comments.",
+                        "assignments": [
+                            {
+                                "title": "Write a README section",
+                                "description": "Write Installation and Usage sections for a small library (80–100 words each). Use imperative for instructions.",
+                                "type": "text",
+                                "max_points": 15,
+                                "skills": ["writing"],
+                            },
+                        ],
+                    },
+                ],
+            },
+            {
+                "name": "IT Vocabulary Deep Dive",
+                "cefr_level": "B1",
+                "description": "Second block for IT pack.",
+                "topics": [
+                    {
+                        "title": "Agile and Scrum",
+                        "description": "Sprint, retrospective, backlog.",
+                        "assignments": [
+                            {
+                                "title": "Retrospective notes",
+                                "description": "Write 5 bullet points: what went well, what to improve, action items. Use Past Simple and should.",
+                                "type": "text",
+                                "max_points": 10,
+                                "skills": ["writing"],
+                            },
+                        ],
+                        "decks": [
+                            {
+                                "title": "Agile · Vocabulary",
+                                "description": "Agile terms.",
+                                "cards": [
+                                    {
+                                        "front": "sprint",
+                                        "back": "спринт",
+                                        "example": "We have a two-week sprint.",
+                                    },
+                                    {
+                                        "front": "backlog",
+                                        "back": "бэклог",
+                                        "example": "Check the backlog.",
+                                    },
+                                    {
+                                        "front": "retrospective",
+                                        "back": "ретроспектива",
+                                        "example": "Retro is on Friday.",
+                                    },
+                                    {
+                                        "front": "to estimate",
+                                        "back": "оценивать",
+                                        "example": "We estimate in story points.",
+                                    },
+                                    {
+                                        "front": "velocity",
+                                        "back": "скорость команды",
+                                        "example": "Our velocity increased.",
+                                    },
+                                ],
+                            }
+                        ],
+                    },
+                ],
+            },
+        ],
+    },
+    {
+        "slug": "happy-learning",
+        "name": "Happy Learning · Marathon A2",
+        "summary": "Марафон 5 дней как в ProgressMe Marathon: VR, group class, словарь и геймификация без давления.",
+        "level": "A2",
+        "blocks": [
+            {
+                "name": "Happy Learning",
+                "cefr_level": "A2",
+                "description": "5-day marathon with daily tasks, vocabulary trainer and personal dictionary.",
+                "topics": [
+                    {
+                        "title": "Day 1: Hello, World!",
+                        "description": "Warm-up, Vocabulary, Listening.",
+                        "assignments": [
+                            {
+                                "title": "Introduce yourself — 60 seconds",
+                                "description": "Record a 60-second audio: name, where you are from, what you do, one hobby. Use Present Simple.",
+                                "type": "audio",
+                                "max_points": 10,
+                                "skills": ["speaking"],
+                            },
+                        ],
+                    },
+                    {
+                        "title": "Day 2: Group Lessons",
+                        "description": "Virtual class simulation: chat, reactions, timer.",
+                        "assignments": [
+                            {
+                                "title": "Group discussion: What makes a good online lesson?",
+                                "description": "Write 80–100 words. Mention: visual, interaction, feedback, video. Use because, for example, also.",
+                                "type": "text",
+                                "max_points": 10,
+                                "skills": ["writing"],
+                            },
+                        ],
+                        "decks": [
+                            {
+                                "title": "Marathon · Day 2",
+                                "description": "Words for describing lessons.",
+                                "cards": [
+                                    {
+                                        "front": "interactive",
+                                        "back": "интерактивный",
+                                        "example": "Interactive exercises are fun.",
+                                    },
+                                    {
+                                        "front": "engaging",
+                                        "back": "увлекательный",
+                                        "example": "An engaging teacher.",
+                                    },
+                                    {
+                                        "front": "feedback",
+                                        "back": "обратная связь",
+                                        "example": "Thanks for your feedback.",
+                                    },
+                                    {
+                                        "front": "to achieve",
+                                        "back": "достигать",
+                                        "example": "To achieve your goals.",
+                                    },
+                                    {
+                                        "front": "progress",
+                                        "back": "прогресс",
+                                        "example": "You can track your progress.",
+                                    },
+                                ],
+                            }
+                        ],
+                    },
+                    {
+                        "title": "Day 3: VR Learning",
+                        "description": "Immersive learning with VR — Happy Learning cover with VR goggles.",
+                        "assignments": [
+                            {
+                                "title": "Describe VR lesson",
+                                "description": "Have you ever tried VR? Write 60 words about how VR could help language learning.",
+                                "type": "text",
+                                "max_points": 10,
+                                "skills": ["writing", "vocabulary"],
+                            },
+                        ],
+                    },
+                ],
+            },
+            {
+                "name": "Marathon Results",
+                "cefr_level": "A2",
+                "description": "Final day and reflection.",
+                "topics": [
+                    {
+                        "title": "Day 5: My progress",
+                        "description": "Reflection and feedback.",
+                        "assignments": [
+                            {
+                                "title": "Reflection: what I learned",
+                                "description": "Write 80 words about your progress during the marathon. What was easy? What was difficult? What will you do next?",
+                                "type": "text",
+                                "max_points": 10,
+                                "skills": ["writing"],
                             },
                         ],
                     },

@@ -17,6 +17,7 @@
             <a class="btn" href="{% url 'student_assignments' %}">{% icon "layers" %}Карта курса</a>
             <a class="btn btn-secondary" href="{% url 'student_trainer' %}">{% icon "cards" %}Тренажёр слов
                 {% if due_total %}<span class="chip count">{{ due_total }}</span>{% endif %}</a>
+            <a class="btn btn-ghost" href="{% url 'student_dictionary' %}">{% icon "language" %}Мой словарь</a>
             <a class="btn btn-ghost" href="{% url 'student_upcoming' %}">{% icon "calendar" %}Сроки</a>
         </div>
     </div>
@@ -36,6 +37,7 @@
     <section class="card">
         <div class="card-head">
             <h2 class="card-title">{% icon "play" %}Продолжить</h2>
+            {% if continue_item %}<span class="badge badge-turquoise">Сейчас</span>{% endif %}
         </div>
         {% if continue_item %}
             <p class="strong mb-0">{{ continue_item.title }}</p>
@@ -50,7 +52,7 @@
             </a>
         {% else %}
             <div class="empty">
-                <div class="empty-icon">{% icon "check-circle" "icon icon-xl" %}</div>
+                <div class="empty-ill">✅</div>
                 <h3>Всё сдано</h3>
                 <p>Незавершённых заданий нет. Повторите слова в тренажёре или загляните в оценки.</p>
             </div>
@@ -76,43 +78,84 @@
 
 <section class="card">
     <div class="card-head">
-        <h2 class="card-title">{% icon "layers" %}Мой курс</h2>
+        <h2 class="card-title">{% icon "layers" %}Мои классы</h2>
         <a class="btn btn-ghost btn-sm" href="{% url 'student_assignments' %}">Открыть карту</a>
     </div>
     {% regroup assignments by topic.block as block_groups %}
-    <ol class="roadmap">
-        {% for block_group in block_groups %}
-            {% with block=block_group.grouper %}
-            <li class="roadmap-block">
-                <div class="roadmap-head">
-                    {% if block.cefr_level %}<span class="tag tag-cefr">{{ block.cefr_level }}</span>{% endif %}
-                    <h3 class="mb-0">{{ block.name }}</h3>
-                </div>
-                {% regroup block_group.list by topic as topic_groups %}
-                <ol class="roadmap-topics">
-                    {% for topic_group in topic_groups %}
-                        <li>
-                            <p class="strong mb-0">{{ topic_group.grouper.title }}</p>
-                            <ul class="task-list">
-                                {% for assignment in topic_group.list %}
-                                    {% include "lms/parts/task_item.html" with assignment=assignment state=assignment.state %}
-                                {% endfor %}
-                            </ul>
-                        </li>
+    {% if block_groups %}
+        <div class="class-grid">
+            {% for block_group in block_groups|slice:":6" %}
+                {% with block=block_group.grouper %}
+                <a class="class-card" href="{% url 'student_assignments' %}#block-{{ block.pk }}">
+                    <div class="class-cover" style="background: var(--cover-{{ forloop.counter }});">
+                        {% with name=block.name|lower %}
+                            {% if "travel" in name %}🧳{% elif "movie" in name %}🎬{% elif "business" in name %}💼{% elif "exam" in name or "огэ" in name or "егэ" in name %}📝{% elif "grammar" in name %}📚{% else %}🌍{% endif %}
+                        {% endwith %}
+                    </div>
+                    <div class="class-body">
+                        <h3 class="class-title">{{ block.name }}</h3>
+                        <div class="class-meta">
+                            <span>{{ block_group.list|length }} заданий</span>
+                            {% if block.cefr_level %}<span class="tag tag-cefr">{{ block.cefr_level }}</span>{% endif %}
+                        </div>
+                        <div class="class-foot">
+                            <span class="progress-dots">{% for _ in block_group.list|slice:":4" %}<span class="progress-dot {% if forloop.counter <= 2 %}is-done{% endif %}"></span>{% endfor %}</span>
+                            <span class="tiny muted">{{ block_group.list|length }} уроков</span>
+                        </div>
+                    </div>
+                </a>
+                {% endwith %}
+            {% endfor %}
+            <a class="class-card is-create" href="{% url 'student_assignments' %}">
+                {% icon "plus" %}<span class="small strong" style="margin-top:8px">Все классы</span>
+            </a>
+        </div>
+    {% else %}
+        <div class="empty">
+            <div class="empty-ill">📚</div>
+            <h3>Заданий пока нет</h3>
+            <p>Как только преподаватель опубликует задания, они появятся здесь карточками с обложками, как в ProgressMe.</p>
+        </div>
+    {% endif %}
+</section>
+
+<section class="card">
+    <div class="card-head">
+        <h2 class="card-title">{% icon "cards" %}Словарь и тренажёр</h2>
+        <a class="btn btn-ghost btn-sm" href="{% url 'student_dictionary' %}">Мой словарь</a>
+    </div>
+    <div class="home-grid">
+        <div>
+            <p class="small muted">Личный словарь · тренировка 4 режимами, как в ProgressMe: перевод по выделению, добавление в словарь, игровые режимы.</p>
+            {% if decks %}
+                <div class="rows">
+                    {% for deck in decks|slice:":4" %}
+                        <div class="row-item">
+                            <span class="row-main">
+                                <span class="row-title">{% if deck.is_personal %}📚 {% endif %}{{ deck.title }}</span>
+                                <span class="row-meta">{{ deck.topic.block.name|default:"Мой словарь" }} · {{ deck.topic.title|default:"" }} · {{ deck.card_total }} слов</span>
+                            </span>
+                            <span class="row-side">
+                                {% if deck.due_count %}<span class="badge badge-submitted tnum">{{ deck.due_count }} к повтору</span>{% endif %}
+                                <a class="btn btn-secondary btn-sm" href="{% url 'trainer_session' deck.pk %}">Тренировать</a>
+                            </span>
+                        </div>
                     {% endfor %}
-                </ol>
-            </li>
-            {% endwith %}
-        {% empty %}
-            <li>
-                <div class="empty">
-                    <div class="empty-icon">{% icon "layers" "icon icon-xl" %}</div>
-                    <h3>Заданий пока нет</h3>
-                    <p>Как только преподаватель опубликует задания, они появятся здесь.</p>
                 </div>
-            </li>
-        {% endfor %}
-    </ol>
+            {% else %}
+                <p class="muted small">Наборов пока нет.</p>
+            {% endif %}
+        </div>
+        <div class="card card-pad-sm" style="background:var(--turquoise-bg);border-color:var(--turquoise-100)">
+            <p class="rail-title" style="color:var(--turquoise-ink)">{% icon "language" %} Как работает словарь</p>
+            <ul class="small" style="margin:0;padding-left:18px;color:var(--turquoise-ink)">
+                <li>Выделяете слово в задании → перевод</li>
+                <li>Добавляете в «Мой словарь»</li>
+                <li>Тренируете 4 режимами: выбор, ввод, аудирование</li>
+                <li>SM-2 планирует повторения</li>
+            </ul>
+        </div>
+    </div>
 </section>
 
 <section class="card">

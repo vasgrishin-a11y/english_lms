@@ -37,6 +37,29 @@
     <div class="stat"><div class="stat-value tnum">{{ overview.average|default_if_none:"—" }}</div><div class="stat-label">{% icon "percent" "icon icon-sm" %}Средний балл</div></div>
 </div>
 
+<section class="card">
+    <div class="card-head">
+        <h2 class="card-title">{% icon "layers" %}Classes · как в ProgressMe</h2>
+        <a class="btn btn-ghost btn-sm" href="{% url 'teacher_curriculum' %}">Карта курса</a>
+    </div>
+    <div class="class-grid">
+        {% for block_item in blocks_data|slice:":5" %}
+            {% with block=block_item.block %}
+            <a class="class-card" href="{% url 'teacher_curriculum' %}#block-{{ block.pk }}">
+                <div class="class-cover" style="background: var(--cover-{{ forloop.counter }});"><span class="class-cover-emoji">🌍</span></div>
+                <div class="class-body">
+                    <h3 class="class-title">{{ block.name }}</h3>
+                    <div class="class-meta"><span>{{ block_item.assignments }} заданий · {{ block_item.topics|length }} тем</span></div>
+                </div>
+            </a>
+            {% endwith %}
+        {% empty %}
+            <p class="muted small">Классов пока нет — создайте первый, как в ProgressMe «Create a Class».</p>
+        {% endfor %}
+        <a class="class-card is-create" href="{% url 'teacher_block_new' %}">{% icon "plus" %}<span class="small strong" style="margin-top:8px">Create a Class</span></a>
+    </div>
+</section>
+
 <div class="home-grid" style="margin-top:20px">
     <section class="card">
         <div class="card-head">

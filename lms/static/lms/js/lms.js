@@ -1,7 +1,7 @@
 /* English LMS — прогрессивное улучшение интерфейса.
  * Работает без сборки, не требует htmx и не ломает сценарии без JavaScript:
  * автосохранение черновика, горячие клавиши проверки, карточки тренажёра,
- * запись аудио в браузере, вставка шаблонов комментариев.
+ * запись аудио в браузере, вставка шаблонов комментариев, плитки упражнений.
  */
 (function () {
   "use strict";
@@ -20,9 +20,7 @@
       try {
         var headers = JSON.parse(body.getAttribute("hx-headers"));
         if (headers["X-CSRFToken"]) return headers["X-CSRFToken"];
-      } catch (error) {
-        /* заголовок не задан — берём из cookie */
-      }
+      } catch (error) {}
     }
     var match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
     return match ? decodeURIComponent(match[1]) : "";
@@ -39,7 +37,6 @@
     );
   }
 
-  /* ── Сообщения: мягкое скрытие без потери для скринридеров ─────────────── */
   function autohideAlerts() {
     var alerts = document.querySelectorAll("[data-autohide]");
     Array.prototype.forEach.call(alerts, function (alert) {
@@ -53,7 +50,6 @@
     });
   }
 
-  /* ── Подтверждение разрушающих действий ─────────────────────────────────── */
   function confirmForms() {
     document.addEventListener("submit", function (event) {
       var form = event.target.closest ? event.target.closest("[data-confirm]") : null;
@@ -67,7 +63,6 @@
     });
   }
 
-  /* ── Автосохранение черновика ответа ────────────────────────────────────── */
   function draftAutosave() {
     var form = document.querySelector("form[data-draft-url]");
     if (!form) return;
@@ -135,7 +130,6 @@
     });
   }
 
-  /* ── Карточки тренажёра: переворот и оценки с клавиатуры ────────────────── */
   function flashcards() {
     var card = document.querySelector("[data-flashcard]");
     if (!card) return;
@@ -169,7 +163,6 @@
     });
   }
 
-  /* ── Запись аудио в браузере ────────────────────────────────────────────── */
   function audioRecorder() {
     var panel = document.querySelector("[data-recorder]");
     if (!panel) return;
@@ -310,7 +303,6 @@
     }
   }
 
-  /* ── Страница проверки: пресеты баллов, шаблоны, горячие клавиши ────────── */
   function reviewPage() {
     var page = document.querySelector("[data-review]");
     if (!page) return;
@@ -399,7 +391,6 @@
     }
   }
 
-  /* ── Очередь: справка по клавишам ───────────────────────────────────────── */
   function queueHelp() {
     var panel = document.getElementById("hotkeys-help");
     if (!panel) return;
@@ -413,10 +404,6 @@
     });
   }
 
-  /* ── Библиотека заготовок: шаблоны заданий, блоков и тем ───────────────── */
-  /* Данные приходят из {{ ...|json_script }} — без инлайн-JSON в атрибутах и
-   * без риска поломать разметку кавычками в условиях заданий.
-   * Без JavaScript кнопки просто ничего не делают: форма остаётся рабочей. */
   function readJsonScript(id) {
     var node = document.getElementById(id);
     if (!node) return null;
@@ -431,7 +418,6 @@
     var field = form.elements[name];
     if (!field || value === undefined || value === null) return false;
     if (typeof field.length === "number" && field.type === undefined) {
-      /* Группа чекбоксов (например, навыки): отмечаем только нужные. */
       var wanted = Array.prototype.map.call(value, String);
       Array.prototype.forEach.call(field, function (input) {
         input.checked = wanted.indexOf(String(input.value)) > -1;
@@ -521,7 +507,105 @@
     });
   }
 
-  /* ── Быстрые дедлайны в форме задания ──────────────────────────────────── */
+  function quizTiles() {
+    var containers = document.querySelectorAll("[data-tiles]");
+    if (!containers.length) return;
+
+    Array.prototype.forEach.call(containers, function (container) {
+      var targetId = container.getAttribute("data-target");
+      var input = document.getElementById(targetId);
+      if (!input) return;
+      var type = container.getAttribute("data-tiles");
+      var slotRow = document.querySelector('[data-slot="' + targetId + '"]');
+
+      function syncOrder() {
+        if (!slotRow) return;
+        var ids = [];
+        Array.prototype.forEach.call(slotRow.querySelectorAll("[data-chip-id]"), function (chip) {
+          ids.push(chip.getAttribute("data-chip-id"));
+        });
+        input.value = ids.join(",");
+      }
+
+      function syncSpell() {
+        var word = "";
+        Array.prototype.forEach.call(container.querySelectorAll(".tile.is-used"), function (tile) {
+          word += tile.getAttribute("data-letter") || "";
+        });
+        if (word) input.value = word;
+      }
+
+      function createChip(id, text) {
+        var chip = document.createElement("span");
+        chip.className = "slot-chip";
+        chip.setAttribute("data-chip-id", id);
+        chip.textContent = text + " ";
+        var remove = document.createElement("button");
+        remove.type = "button";
+        remove.textContent = "×";
+        remove.setAttribute("aria-label", "Убрать " + text);
+        remove.addEventListener("click", function () {
+          var usedTiles = container.querySelectorAll(".tile.is-used");
+          for (var i = 0; i < usedTiles.length; i++) {
+            if ((usedTiles[i].getAttribute("data-word") || "") === text && (usedTiles[i].getAttribute("data-id") || "") === id) {
+              usedTiles[i].classList.remove("is-used");
+              break;
+            }
+          }
+          // fallback: match by text only
+          if (!container.querySelector('.tile.is-used[data-word="' + text + '"]')) {
+            var byText = container.querySelectorAll(".tile.is-used");
+            for (var j = 0; j < byText.length; j++) {
+              if ((byText[j].getAttribute("data-word") || "") === text) {
+                byText[j].classList.remove("is-used");
+                break;
+              }
+            }
+          }
+          chip.parentNode.removeChild(chip);
+          syncOrder();
+        });
+        chip.appendChild(remove);
+        return chip;
+      }
+
+      if (type === "order" && slotRow) {
+        Array.prototype.forEach.call(container.querySelectorAll(".tile"), function (tile) {
+          tile.addEventListener("click", function () {
+            if (tile.classList.contains("is-used")) return;
+            tile.classList.add("is-used");
+            var word = tile.getAttribute("data-word") || tile.textContent.trim();
+            var chipId = tile.getAttribute("data-id") || word;
+            slotRow.appendChild(createChip(chipId, word));
+            syncOrder();
+          });
+        });
+      }
+
+      if (type === "spell") {
+        Array.prototype.forEach.call(container.querySelectorAll(".tile"), function (tile) {
+          tile.classList.add("is-letter");
+          tile.addEventListener("click", function () {
+            if (tile.classList.contains("is-used")) {
+              tile.classList.remove("is-used");
+            } else {
+              tile.classList.add("is-used");
+            }
+            syncSpell();
+          });
+        });
+
+        input.addEventListener("input", function () {
+          if (!input.value) {
+            Array.prototype.forEach.call(container.querySelectorAll(".tile.is-used"), function (t) {
+              t.classList.remove("is-used");
+            });
+          }
+        });
+      }
+    });
+  }
+
   function pad(value) {
     return value < 10 ? "0" + value : String(value);
   }
@@ -569,5 +653,6 @@
     queueHelp();
     templatePresets();
     deadlineShortcuts();
+    quizTiles();
   });
 })();

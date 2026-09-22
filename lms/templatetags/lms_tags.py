@@ -29,6 +29,24 @@ SKILL_ICONS = {
     "writing": "pencil",
     "reading": "eye",
 }
+KIND_ICONS = {
+    "mcq": "target",
+    "multi": "grid",
+    "gap": "pencil",
+    "match": "sort",
+    "order": "list-ordered",
+    "sort": "columns",
+    "spell": "shuffle",
+}
+KIND_HINTS = {
+    "mcq": "один правильный ответ",
+    "multi": "несколько правильных ответов",
+    "gap": "впишите ответ",
+    "match": "установите соответствие",
+    "order": "соберите предложение из слов",
+    "sort": "распределите по колонкам",
+    "spell": "соберите слово из букв",
+}
 
 
 @register.filter
@@ -51,6 +69,16 @@ def type_icon(value):
 @register.filter
 def skill_icon(kind):
     return SKILL_ICONS.get(kind, "tag")
+
+
+@register.filter
+def kind_icon(kind):
+    return KIND_ICONS.get(kind, "target")
+
+
+@register.filter
+def kind_hint(kind):
+    return KIND_HINTS.get(kind, "")
 
 
 @register.simple_tag

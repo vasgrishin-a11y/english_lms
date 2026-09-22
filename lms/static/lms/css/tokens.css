@@ -48,6 +48,30 @@
     --sand-600: #a9855a;
     --sand-800: #6f5735;
 
+    /* Третий акцент — бирюза ProgressMe (воздушный UI, чипы, CTA-подсветка).
+       Тёмные чернила держат AA: 7.1:1 на белом, светлые — только как фон. */
+    --turquoise-50: #e8f8f7;
+    --turquoise-100: #c8ece9;
+    --turquoise-200: #9cd9d3;
+    --turquoise-300: #63c3bc;
+    --turquoise-500: #2a9d94;
+    --turquoise-600: #23847d;
+    --turquoise-700: #1e6e68;   /* 7.1:1 на белом, 5.1:1 на turquoise-50 */
+    --turquoise-800: #185a55;
+    --turquoise: var(--turquoise-600);
+    --turquoise-ink: var(--turquoise-700);
+    --turquoise-bg: var(--turquoise-50);
+
+    /* Обложки карточек курса — пастельные градиенты, как в ProgressMe Classes */
+    --cover-1: linear-gradient(135deg, #e8f8f7 0%, #d4ede5 45%, #f6efe4 100%);
+    --cover-2: linear-gradient(135deg, #eeedfb 0%, #d9d7f3 50%, #e8f8f7 100%);
+    --cover-3: linear-gradient(135deg, #f6efe4 0%, #ead9c0 50%, #fbeae7 100%);
+    --cover-4: linear-gradient(135deg, #e7f2ea 0%, #cbdccd 50%, #e8f8f7 100%);
+    --cover-5: linear-gradient(135deg, #fbf1dc 0%, #eedcb4 50%, #f6efe4 100%);
+    --cover-6: linear-gradient(135deg, #fbeae7 0%, #f0d2cb 50%, #eeedfb 100%);
+    --cover-7: linear-gradient(135deg, #e7f1f8 0%, #c9dcef 50%, #eeedfb 100%);
+    --cover-8: linear-gradient(135deg, #faf9f6 0%, #f0ede6 50%, #e4ede5 100%);
+
     /* Данные и визуализация — перивинкл */
     --info-bg: #eeedfb;
     --info-ink: #4c4a8a;      /* 6.8:1 на info-bg */

@@ -121,6 +121,7 @@ def console_home(request):
     drafts = Assignment.objects.filter(status=Assignment.Publication.DRAFT).select_related(
         "topic__block"
     )[:5]
+    blocks_data, _ = course_tree(query="", teacher_view=True)
     request.session["_queue_counts"] = {"ts": timezone.now().timestamp(), **overview["queue"]}
     return render(
         request,
@@ -129,6 +130,7 @@ def console_home(request):
             "overview": overview,
             "waiting": list(waiting),
             "drafts": list(drafts),
+            "blocks_data": blocks_data,
             "workspace": "home",
         },
     )

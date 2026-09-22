@@ -38,6 +38,12 @@ urlpatterns = [
     path("upcoming/", views_student.upcoming, name="student_upcoming"),
     path("trainer/", views_student.trainer, name="student_trainer"),
     path("trainer/<int:pk>/", views_student.trainer_session, name="trainer_session"),
+    path("my/words/", views_student.student_dictionary, name="student_dictionary"),
+    path(
+        "my/words/<int:pk>/delete/",
+        views_student.dictionary_word_delete,
+        name="student_dictionary_delete",
+    ),
     path("grades/", views_student.student_grades, name="student_grades"),
     # ── Консоль преподавателя ─────────────────────────────────────────────
     path("teacher/", views_teacher.console_home, name="teacher_home"),

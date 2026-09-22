@@ -63,6 +63,38 @@ def score_question(question, answer):
             ratio = hits / len(pairs)
         else:
             ratio = 0.0
+    elif question.kind == "order":
+        # Эталон — порядок вариантов, заданный преподавателем; частичный балл
+        # за каждое слово, стоящее на своём месте (как в позиционном сопоставлении).
+        expected = " ".join(c.text for c in choices)
+        given = [str(value) for value in (answer or []) if str(value)]
+        given = [pk for pk in given if pk in _choice_ids(question)]
+        if choices:
+            hits = sum(
+                1
+                for position, choice in enumerate(choices)
+                if position < len(given) and given[position] == str(choice.pk)
+            )
+            ratio = hits / len(choices)
+        else:
+            ratio = 0.0
+    elif question.kind == "sort":
+        mapping = {str(key): str(value) for key, value in (answer or {}).items()}
+        pairs = [choice for choice in choices if choice.match_text]
+        expected = ", ".join(f"{c.text} → {c.match_text}" for c in pairs)
+        given = mapping
+        if pairs:
+            hits = sum(1 for choice in pairs if mapping.get(str(choice.pk)) == choice.match_text)
+            ratio = hits / len(pairs)
+        else:
+            ratio = 0.0
+    elif question.kind == "spell":
+        accepted = {normalize_gap(choice.text) for choice in choices if choice.is_correct}
+        if not accepted:
+            accepted = {normalize_gap(choice.text) for choice in choices}
+        accepted.discard("")
+        expected = " / ".join(sorted(accepted))
+        ratio = 1.0 if normalize_gap(answer) in accepted else 0.0
     else:  # неизвестный тип не даёт баллов, но и не роняет проверку
         ratio = 0.0
 
