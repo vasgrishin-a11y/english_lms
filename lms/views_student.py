@@ -130,6 +130,11 @@ def student_home(request):
     )
     decks = deck_stats(student)
     due_total = sum(deck.due_count for deck in decks)
+    deck_block_counts = {}
+    for deck in decks:
+        if deck.topic_id and deck.topic.block_id:
+            block_id = deck.topic.block_id
+            deck_block_counts[block_id] = deck_block_counts.get(block_id, 0) + 1
     context = {
         "continue_item": continue_candidates[0] if continue_candidates else None,
         "continue_draft": drafts.get(continue_candidates[0].pk if continue_candidates else None),
@@ -145,6 +150,7 @@ def student_home(request):
         "recent": recent,
         "decks": decks,
         "due_total": due_total,
+        "deck_block_counts": deck_block_counts,
         "workspace": "home",
     }
     return render(request, "lms/student_home.html", context)

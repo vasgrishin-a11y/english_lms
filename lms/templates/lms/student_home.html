@@ -91,7 +91,7 @@
                     <div class="class-body">
                         <h3 class="class-title">{{ block.name }}</h3>
                         <div class="class-meta">
-                            <span>{{ block_group.list|length }} заданий</span>
+                            <span>{{ block_group.list|length }} заданий{% with dbc=deck_block_counts|get_item:block.pk %}{% if dbc %} + {{ dbc }} квиз.{% endif %}{% endwith %}</span>
                             {% if block.cefr_level %}<span class="tag tag-cefr">{{ block.cefr_level }}</span>{% endif %}
                         </div>
                         <div class="class-foot">

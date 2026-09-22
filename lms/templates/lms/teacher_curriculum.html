@@ -23,6 +23,7 @@
             <li class="row row-between"><span class="small">Блоков</span><strong class="tnum">{{ totals.blocks }}</strong></li>
             <li class="row row-between"><span class="small">Тем</span><strong class="tnum">{{ totals.topics }}</strong></li>
             <li class="row row-between"><span class="small">Заданий</span><strong class="tnum">{{ totals.assignments }}</strong></li>
+            <li class="row row-between"><span class="small">Квизлетов</span><strong class="tnum">{{ totals.decks }}</strong></li>
             <li class="row row-between"><span class="small">Черновиков</span><strong class="tnum">{{ totals.drafts }}</strong></li>
             <li class="row row-between"><span class="small">Ждут проверки</span><strong class="tnum">{{ totals.waiting }}</strong></li>
         </ul>
@@ -105,7 +106,7 @@
                     {% if block.description %}<p class="muted small mb-0">{{ block.description }}</p>{% endif %}
                 </div>
                 <div class="row row-tight">
-                    <span class="tiny muted tnum">{{ block_item.topics|length }} тем · {{ block_item.assignments }} заданий</span>
+                    <span class="tiny muted tnum">{{ block_item.topics|length }} тем · {{ block_item.assignments }} заданий{% if block_item.decks %} · {{ block_item.decks }} квиз.{% endif %}</span>
                     <a class="btn btn-ghost btn-sm" href="{% url 'teacher_block_edit' block.pk %}">{% icon "pencil" %}Изменить</a>
                     <form method="post" action="{% url 'teacher_archive_item' 'block' block.pk %}" data-confirm="Переместить блок «{{ block.name }}» в архив вместе со всеми темами и заданиями?">
                         {% csrf_token %}<button class="btn btn-ghost btn-sm" type="submit">{% icon "archive" %}<span class="sr-only">Архивировать блок</span></button>
