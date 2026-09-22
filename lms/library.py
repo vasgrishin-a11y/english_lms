@@ -5,8 +5,8 @@
 * ``ASSIGNMENT_PRESETS`` — шаблоны заданий (форма «Новое задание»);
 * ``BLOCK_SUGGESTIONS`` / ``TOPIC_SUGGESTIONS`` — готовые формулировки блоков
   и тем, подставляются в соответствующие формы;
-* ``DECK_PRESETS`` — шаблоны квизлетов по темам и уровням CEFR
-  (форма «Новый квизлет» и страница карточек);
+* ``CARD_PRESETS`` — шаблоны наборов карточек по темам и уровням CEFR
+  (страница карточек задания-тренажёра);
 * ``COURSE_PACKS`` — собранные курсы «блоки → темы → задания (+ вопросы теста
   и карточки)», добавляются в курс одним действием через ``import_course_pack``.
 
@@ -18,7 +18,8 @@
 from django.db import transaction
 from django.utils.text import slugify
 
-from .models import Assignment, Block, Choice, Flashcard, FlashcardDeck, Question, Skill, Topic
+from .levels import group_items
+from .models import Assignment, Block, Choice, Flashcard, Question, Skill, Topic
 
 # ── Шаблоны заданий ────────────────────────────────────────────────────────
 # Подставляются в форму «Новое задание» целиком: заголовок, условия, тип сдачи
@@ -29,6 +30,7 @@ ASSIGNMENT_PRESETS = [
         "icon": "pencil",
         "label": "Fill in the Blanks",
         "tagline": "Грамматика: пропуски с маркерами времени",
+        "level": "A2",
         "fields": {
             "title": "Fill in the Blanks: Present Perfect vs Past Simple",
             "description": (
@@ -54,6 +56,7 @@ ASSIGNMENT_PRESETS = [
         "icon": "refresh",
         "label": "Key Word Transformation",
         "tagline": "B1–B2: перефразирование с ключевым словом",
+        "level": "B1",
         "fields": {
             "title": "Key Word Transformations (2–5 words)",
             "description": (
@@ -80,6 +83,7 @@ ASSIGNMENT_PRESETS = [
         "icon": "search",
         "label": "Find & Correct Mistakes",
         "tagline": "Поиск ошибки + объяснение правила",
+        "level": "B1",
         "fields": {
             "title": "Find and Correct the Mistakes",
             "description": (
@@ -105,6 +109,7 @@ ASSIGNMENT_PRESETS = [
         "icon": "file-text",
         "label": "Essay with Rubric",
         "tagline": "Мнение + шкала из 4 критериев",
+        "level": "B2",
         "fields": {
             "title": "Opinion Essay: Should schools ban mobile phones?",
             "description": (
@@ -131,6 +136,7 @@ ASSIGNMENT_PRESETS = [
         "icon": "headphones",
         "label": "Listening & Dictation",
         "tagline": "Аудирование + пословный диктант",
+        "level": "A2",
         "fields": {
             "title": "Listening: comprehension + dictation",
             "description": (
@@ -155,6 +161,7 @@ ASSIGNMENT_PRESETS = [
         "icon": "mic",
         "label": "Speaking Response",
         "tagline": "Устный ответ 1.5–2 минуты",
+        "level": "B1",
         "fields": {
             "title": "Speaking: describe a memorable trip (1.5–2 min)",
             "description": (
@@ -179,6 +186,7 @@ ASSIGNMENT_PRESETS = [
         "icon": "book",
         "label": "Reading Comprehension",
         "tagline": "Текст + вопросы True/False/Not Stated",
+        "level": "B1",
         "fields": {
             "title": "Reading: True / False / Not Stated",
             "description": (
@@ -201,6 +209,7 @@ ASSIGNMENT_PRESETS = [
         "icon": "cards",
         "label": "Vocabulary Set",
         "tagline": "Словообразование и коллокации + карточки",
+        "level": "A2",
         "fields": {
             "title": "Vocabulary: word formation and collocations",
             "description": (
@@ -228,6 +237,7 @@ ASSIGNMENT_PRESETS = [
         "icon": "target",
         "label": "Автопроверяемый тест",
         "tagline": "10 вопросов: выбор, пропуск, соответствие",
+        "level": "A2",
         "fields": {
             "title": "Grammar & Vocabulary Quiz (auto-checked)",
             "description": (
@@ -248,11 +258,12 @@ ASSIGNMENT_PRESETS = [
         "icon": "list-ordered",
         "label": "Sentence Builder",
         "tagline": "Соберите предложение из слов — автопроверка порядка",
+        "level": "A1",
         "fields": {
             "title": "Sentence Builder: put the words in the correct order",
             "description": (
                 "Put the words in the correct order to make a sentence. "
-                "Click the words or drag them — like in ProgressMe / Wordwall.\n\n"
+                "Click the words or drag them to build the sentence.\n\n"
                 "1. never / I / have / to / been / London\n"
                 "2. if / you / study / you / hard / will / pass / the exam\n"
                 "3. was / while / I / cooking / he / called\n\n"
@@ -269,11 +280,12 @@ ASSIGNMENT_PRESETS = [
         "icon": "columns",
         "label": "Sort into Columns",
         "tagline": "Распределите слова по колонкам — автопроверка",
+        "level": "A1",
         "fields": {
             "title": "Sort the words: countable / uncountable / both",
             "description": (
                 "Drag each word into the correct column. "
-                "ProgressMe-style exercise: term → column.\n\n"
+                "Sorting exercise: term → column.\n\n"
                 "Columns: Countable, Uncountable, Both\n"
                 "Words: advice, chair, information, apple, money, child, furniture, job\n\n"
                 "Marking: automatic — 1 point per correctly placed word."
@@ -288,6 +300,7 @@ ASSIGNMENT_PRESETS = [
         "icon": "shuffle",
         "label": "Word from Letters",
         "tagline": "Анаграмма: соберите слово из букв",
+        "level": "A1",
         "fields": {
             "title": "Anagram: make a word from the letters",
             "description": (
@@ -306,6 +319,7 @@ ASSIGNMENT_PRESETS = [
         "icon": "layers",
         "label": "Mini-project",
         "tagline": "Групповой проект + презентация",
+        "level": "B1",
         "fields": {
             "title": "Mini-project: present your idea in 3 slides",
             "description": (
@@ -328,6 +342,7 @@ ASSIGNMENT_PRESETS = [
         "icon": "send",
         "label": "Practical Email",
         "tagline": "B1: письмо с регистром и связками",
+        "level": "B1",
         "fields": {
             "title": "Practical email: change an appointment",
             "description": (
@@ -349,6 +364,7 @@ ASSIGNMENT_PRESETS = [
         "icon": "language",
         "label": "Translation in Context",
         "tagline": "Перевод + объяснение выбора конструкции",
+        "level": "B2",
         "fields": {
             "title": "Translation: everyday phrases in context",
             "description": (
@@ -369,6 +385,7 @@ ASSIGNMENT_PRESETS = [
         "icon": "mic",
         "label": "Role-play Dialogue",
         "tagline": "Ролевая ситуация: говорение и реакция",
+        "level": "A2",
         "fields": {
             "title": "Role-play: solve a problem at a hotel",
             "description": (
@@ -389,6 +406,7 @@ ASSIGNMENT_PRESETS = [
         "icon": "cards",
         "label": "Collocations Sprint",
         "tagline": "Лексические сочетания + личные примеры",
+        "level": "B2",
         "fields": {
             "title": "Collocations: make, do, take or get",
             "description": (
@@ -408,6 +426,7 @@ ASSIGNMENT_PRESETS = [
         "icon": "image",
         "label": "Picture Story",
         "tagline": "A2–B1: последовательный рассказ по картинкам",
+        "level": "A2",
         "fields": {
             "title": "Picture story: an unexpected morning",
             "description": (
@@ -427,6 +446,7 @@ ASSIGNMENT_PRESETS = [
         "icon": "quote",
         "label": "Learning Reflection",
         "tagline": "Метакогнитивное задание с языковой целью",
+        "level": "B1",
         "fields": {
             "title": "Learning reflection: my next English goal",
             "description": (
@@ -443,13 +463,13 @@ ASSIGNMENT_PRESETS = [
     },
 ]
 
-# ── Шаблоны квизлетов (наборов карточек) ───────────────────────────────────
+# ── Шаблоны наборов карточек по уровням ────────────────────────────────────
 # Квизлет в интерфейсе — задание тренажёрного типа: преподаватель выбирает
 # шаблон по теме и уровню, правит название/описание и получает готовые карточки.
 # ``topic`` — ключ группировки, ``level`` — CEFR-уровень набора.
-DECK_LEVELS = ["A1", "A2", "B1", "B2", "C1"]
+CARD_LEVELS = ["A1", "A2", "B1", "B2", "C1"]
 
-DECK_PRESETS = [
+CARD_PRESETS = [
     {
         "id": "everyday-a1",
         "icon": "home",
@@ -619,6 +639,7 @@ DECK_PRESETS = [
     },
     {
         "id": "exam-a2",
+        "exams": ["oge"],
         "icon": "target",
         "label": "Exam Words · A2 (ОГЭ)",
         "tagline": "Школа, учёба, экзамены",
@@ -888,6 +909,7 @@ DECK_PRESETS = [
     },
     {
         "id": "ielts-b2",
+        "exams": ["ielts"],
         "icon": "chart",
         "label": "IELTS Academic · B2",
         "tagline": "Графики и аргументы",
@@ -957,34 +979,29 @@ DECK_PRESETS = [
 ]
 
 
-def get_deck_preset(preset_id):
-    """Шаблон квизлета по id или None."""
-    return next((item for item in DECK_PRESETS if item["id"] == preset_id), None)
+def get_card_preset(preset_id):
+    """Шаблон карточек по id или None."""
+    return next((item for item in CARD_PRESETS if item["id"] == preset_id), None)
 
 
-def deck_preset_topics():
-    """Темы шаблонов квизлетов для группировки: [{"id": ..., "label": ...}]."""
-    seen = {}
-    for preset in DECK_PRESETS:
-        seen.setdefault(preset["topic"], preset.get("topic_label") or preset["topic"])
-    return [
-        {"id": key, "label": label} for key, label in sorted(seen.items(), key=lambda item: item[1])
-    ]
+def card_preset_groups():
+    """Шаблоны карточек, сгруппированные по уровням и экзаменационным трекам."""
+    return group_items(CARD_PRESETS)
 
 
-def create_cards_from_preset(deck, preset_id, *, replace=False):
-    """Добавить карточки шаблона в набор. Возвращает число добавленных."""
+def create_cards_from_preset(assignment, preset_id, *, replace=False):
+    """Добавить карточки шаблона в задание. Возвращает число добавленных."""
     from django.db.models import Max
 
-    preset = get_deck_preset(preset_id)
+    preset = get_card_preset(preset_id)
     if preset is None:
-        raise LookupError(f"Неизвестный шаблон квизлета: {preset_id}")
+        raise LookupError(f"Неизвестный шаблон карточек: {preset_id}")
     if replace:
-        deck.cards.all().delete()
-    start = (deck.cards.aggregate(last=Max("order"))["last"] or 0) + 1
+        assignment.cards.all().delete()
+    start = (assignment.cards.aggregate(last=Max("order"))["last"] or 0) + 1
     cards = [
         Flashcard(
-            deck=deck,
+            assignment=assignment,
             front=item["front"][:300],
             back=item["back"][:300],
             example=item.get("example", "")[:500],
@@ -996,115 +1013,138 @@ def create_cards_from_preset(deck, preset_id, *, replace=False):
     return len(cards)
 
 
-# ── Готовые формулировки блоков ────────────────────────────────────────────
+# ── Готовые формулировки блоков ───────────────────────────────────────────
 BLOCK_SUGGESTIONS = [
     {
         "name": "A1–A2 · Starter Course",
+        "id": "a1-a2-starter-course",
         "cefr_level": "A2",
         "description": "Базовый курс: to be, Present Simple, бытовая лексика, "
         "короткие диалоги и сообщения.",
     },
     {
         "name": "B1 · Intermediate English",
+        "id": "b1-intermediate-english",
         "cefr_level": "B1",
         "description": "Времена группы Perfect, модальные глаголы, темы «работа, "
         "путешествия, технологии», связные тексты 150–200 слов.",
     },
     {
         "name": "B2 · Upper-Intermediate",
+        "id": "b2-upper-intermediate",
         "cefr_level": "B2",
         "description": "Сложные времена, условные предложения, Passive, аргументативное "
         "письмо и дискуссия.",
     },
     {
         "name": "Grammar in Context",
+        "id": "grammar-in-context",
         "cefr_level": "",
         "description": "Сквозной грамматический трек: от Present Simple до смешанных "
         "условных предложений с отработкой в речи и письме.",
     },
     {
         "name": "ОГЭ · Подготовка (9 класс)",
+        "id": "oge-prep",
         "cefr_level": "A2",
+        "exams": ["oge"],
         "description": "Форматы ОГЭ: аудирование, чтение, грамматика и лексика, "
         "письмо (электронное), говорение.",
     },
     {
         "name": "ЕГЭ · Подготовка (11 класс)",
+        "id": "ege-prep",
         "cefr_level": "B2",
+        "exams": ["ege"],
         "description": "Форматы ЕГЭ: письмо (email), проект, говорение (монолог и "
         "сравнение картинок), лексика высокого уровня.",
     },
     {
         "name": "IELTS Academic",
+        "id": "ielts-academic",
         "cefr_level": "C1",
+        "exams": ["ielts"],
         "description": "Task 1 (графики), Task 2 (эссе), стратегии чтения и аудирования, "
         "Speaking Parts 1–3.",
     },
     {
         "name": "Business English",
+        "id": "business-english",
         "cefr_level": "B2",
         "description": "Деловая переписка, встречи, презентации, переговоры, "
         "бизнес-лексика и small talk.",
     },
     {
         "name": "Speaking Club",
+        "id": "speaking-club",
         "cefr_level": "B1",
         "description": "Разговорная практика: обсуждения, дебаты, ролевые ситуации, "
         "работа над беглостью и произношением.",
     },
     {
         "name": "Phonetics & Pronunciation",
+        "id": "phonetics-pronunciation",
         "cefr_level": "",
         "description": "Звуки, ударение, интонация, linking: минимальные пары, "
         "shadowing, скороговорки.",
     },
     {
         "name": "Travel English · B1",
+        "id": "travel-english-b1",
         "cefr_level": "B1",
-        "description": "Аэропорт, бронирование, жалобы, описание мест — как в ProgressMe «Traveling» и «English for traveling».",
+        "description": "Аэропорт, бронирование, жалобы, описание мест — лексика путешествий.",
     },
     {
         "name": "Movie Time · A2–B1",
+        "id": "movie-time-a2-b1",
         "cefr_level": "B1",
         "description": "Фильмы, сериалы, рецензии: лексика эмоций, описание сюжета, выражение мнения.",
     },
     {
         "name": "IT English · B1–B2",
+        "id": "it-english-b1-b2",
         "cefr_level": "B2",
         "description": "Разработка, встречи, документация: agile-лексика, small talk для созвонов.",
     },
     {
         "name": "Happy Learning · Marathon",
+        "id": "happy-learning-marathon",
         "cefr_level": "A2",
-        "description": "Марафон на 5 дней: ежедневные задания, словарь, геймификация — формат ProgressMe Marathon.",
+        "description": "Марафон на 5 дней: ежедневные задания, словарь и мягкая геймификация.",
     },
     {
         "name": "A2 · Everyday Communication",
+        "id": "a2-everyday-communication",
         "cefr_level": "A2",
         "description": "Диалоги и короткие сообщения: знакомство, просьбы, покупки, планы, самочувствие и город.",
     },
     {
         "name": "B1 · Real-world English",
+        "id": "b1-real-world-english",
         "cefr_level": "B1",
         "description": "Практический английский для жизни: сервис, путешествия, новости, мнение и решение проблем.",
     },
     {
         "name": "B2 · Academic Skills",
+        "id": "b2-academic-skills",
         "cefr_level": "B2",
         "description": "Академическая лексика, конспектирование, графики, аргументативное эссе и презентация источников.",
     },
     {
         "name": "English for Parents & Children",
+        "id": "english-for-parents-children",
         "cefr_level": "A1",
         "description": "Игровые мини-уроки: семья, игрушки, еда, движение, песни, команды и простые фразы.",
     },
     {
         "name": "Newsroom · Media Literacy",
+        "id": "newsroom-media-literacy",
         "cefr_level": "B2",
         "description": "Заголовки, факты и мнения, проверка источников, краткое резюме и обсуждение новостей.",
     },
     {
         "name": "English for Customer Support",
+        "id": "english-for-customer-support",
         "cefr_level": "B1",
         "description": "Чат и телефонная поддержка: уточнение проблемы, эмпатия, инструкции, эскалация и follow-up письмо.",
     },
@@ -1114,196 +1154,273 @@ BLOCK_SUGGESTIONS = [
 TOPIC_SUGGESTIONS = [
     {
         "title": "Present Simple vs Present Continuous",
+        "id": "present-simple-vs-present-continuous",
+        "level": "A1",
         "description": "Регулярные действия против действий сейчас; "
         "глаголы состояния (know, believe, own).",
         "skills": ["grammar"],
     },
     {
         "title": "Past Simple vs Past Continuous",
+        "id": "past-simple-vs-past-continuous",
+        "level": "A2",
         "description": "Завершённые действия и фон действия; while, when, as.",
         "skills": ["grammar"],
     },
     {
         "title": "Present Perfect: опыт и результат",
+        "id": "present-perfect-opyt-i-rezultat",
+        "level": "A2",
         "description": "ever, never, already, yet, just, for, since; "
         "отличие от Past Simple по маркерам времени.",
         "skills": ["grammar"],
     },
     {
         "title": "Будущее время: will / going to / Present Continuous",
+        "id": "buduschee-vremya-will-going-to-present-continuou",
+        "level": "A2",
         "description": "Спонтанное решение, план, договорённость; предсказания и намерения.",
         "skills": ["grammar"],
     },
     {
         "title": "Модальные глаголы: возможность, обязанность, совет",
+        "id": "modalnye-glagoly-vozmozhnost-obyazannost-sovet",
+        "level": "A2",
         "description": "can, could, must, have to, should, might, may; оттенки вежливости.",
         "skills": ["grammar"],
     },
     {
         "title": "Условные предложения 0–2",
+        "id": "uslovnye-predlozheniya-0-2",
+        "level": "B1",
         "description": "Zero, First, Second Conditionals; unless, as long as.",
         "skills": ["grammar"],
     },
     {
         "title": "Passive Voice",
+        "id": "passive-voice",
+        "level": "B1",
         "description": "Формы пассива в основных временах, агент и его опущение, "
         "безличные конструкции.",
         "skills": ["grammar"],
     },
     {
         "title": "Reported Speech",
+        "id": "reported-speech",
+        "level": "B1",
         "description": "Согласование времён, вопросы и просьбы в косвенной речи.",
         "skills": ["grammar"],
     },
     {
         "title": "Артикли и квантификаторы",
+        "id": "artikli-i-kvantifikatory",
+        "level": "A2",
         "description": "a/an, the, zero article; some/any, much/many, a few/a little.",
         "skills": ["grammar"],
     },
     {
         "title": "Фразовые глаголы: работа и учёба",
+        "id": "frazovye-glagoly-rabota-i-ucheba",
+        "level": "B1",
         "description": "carry out, put off, look into, come up with, hand in, catch up on.",
         "skills": ["vocabulary"],
     },
     {
         "title": "Коллокации: do / make / take / have",
+        "id": "kollokatsii-do-make-take-have",
+        "level": "A2",
         "description": "Устойчивые сочетания и типичные ошибки русскоязычных.",
         "skills": ["vocabulary"],
     },
     {
         "title": "Словообразование: префиксы и суффиксы",
+        "id": "slovoobrazovanie-prefiksy-i-suffiksy",
+        "level": "B1",
         "description": "Таблицы производных слов, отрицательные префиксы, "
         "форматы экзаменационных заданий.",
         "skills": ["vocabulary"],
     },
     {
         "title": "Лексика: Travel and Transport",
+        "id": "leksika-travel-and-transport",
+        "level": "A2",
         "description": "Поездки, аэропорт, бронирование, жалобы; готовый набор карточек.",
         "skills": ["vocabulary"],
     },
     {
         "title": "Лексика: Work and Careers",
+        "id": "leksika-work-and-careers",
+        "level": "B1",
         "description": "Резюме, собеседование, должностные обязанности, удалённая работа.",
         "skills": ["vocabulary"],
     },
     {
         "title": "Лексика: Food and Health",
+        "id": "leksika-food-and-health",
+        "level": "A2",
         "description": "Питание, привычки, спорт; описание картинки и мини-диалоги.",
         "skills": ["vocabulary"],
     },
     {
         "title": "Лексика: Technology and Media",
+        "id": "leksika-technology-and-media",
+        "level": "B1",
         "description": "Гаджеты, соцсети, цифровая гигиена, аргументы «за и против».",
         "skills": ["vocabulary"],
     },
     {
         "title": "Средства связи для эссе",
+        "id": "sredstva-svyazi-dlya-esse",
+        "level": "B1",
         "description": "Linking words по функциям: добавление, контраст, причина, вывод.",
         "skills": ["writing"],
     },
     {
         "title": "Описание графиков и диаграмм",
+        "id": "opisanie-grafikov-i-diagramm",
+        "level": "B2",
         "description": "Язык трендов (increase, fluctuate, peak), структура отчёта IELTS Task 1.",
         "skills": ["writing"],
     },
     {
         "title": "Email и письмо: формальный и неформальный регистр",
+        "id": "email-i-pismo-formalnyy-i-neformalnyy-registr",
+        "level": "B1",
         "description": "Приветствия, формулировки просьб, вежливые отказы, подпись.",
         "skills": ["writing"],
     },
     {
         "title": "Описательное письмо: place, person, event",
+        "id": "opisatelnoe-pismo-place-person-event",
+        "level": "A2",
         "description": "Порядок прилагательных, сенсорная лексика, структура описания.",
         "skills": ["writing"],
     },
     {
         "title": "Small talk и светская беседа",
+        "id": "small-talk-i-svetskaya-beseda",
+        "level": "A2",
         "description": "Безопасные темы, вопросы-продолжения, вежливое завершение разговора.",
         "skills": ["speaking"],
     },
     {
         "title": "Дебаты: аргумент и контраргумент",
+        "id": "debaty-argument-i-kontrargument",
+        "level": "B2",
         "description": "Формулировка позиции, возражения, hedging (it seems, arguably).",
         "skills": ["speaking"],
     },
     {
         "title": "Описание картинки (экзаменационная задача)",
+        "id": "opisanie-kartinki-ekzamenatsionnaya-zadacha",
+        "level": "A2",
+        "exams": ["oge", "ege"],
         "description": "План монолога: что видно, где, что происходит, предположения и вывод.",
         "skills": ["speaking"],
     },
     {
         "title": "Произношение: ударение и интонация",
+        "id": "proiznoshenie-udarenie-i-intonatsiya",
+        "level": "A1",
         "description": "Словесное ударение, sentence stress, восходящая и нисходящая интонация.",
         "skills": ["speaking"],
     },
     {
         "title": "Чтение: skimming и scanning",
+        "id": "chtenie-skimming-i-scanning",
+        "level": "B1",
         "description": "Стратегии поиска информации и определения главной идеи, "
         "работа с незнакомой лексикой.",
         "skills": ["reading"],
     },
     {
         "title": "Аудирование: конспект и ключевые слова",
+        "id": "audirovanie-konspekt-i-klyuchevye-slova",
+        "level": "B1",
         "description": "Note-taking, прогнозирование ответа, ловушки «похожее звучание».",
         "skills": ["listening"],
     },
     {
         "title": "Travelling and weather",
-        "description": "Let's talk about the Scandinavian countries on the example of Denmark — ProgressMe unit «Denmark» style: description, listening, vocabulary.",
+        "id": "travelling-and-weather",
+        "level": "A2",
+        "description": "Let's talk about the Scandinavian countries on the example of Denmark: description, listening, vocabulary.",
         "skills": ["vocabulary", "listening"],
     },
     {
         "title": "Movie Time: describing a plot",
-        "description": "Warm-up, Vocabulary (genres), Listening (trailer), Speaking, Writing a review — секции как в ProgressMe Sections.",
+        "id": "movie-time-describing-a-plot",
+        "level": "A2",
+        "description": "Warm-up, Vocabulary (genres), Listening (trailer), Speaking, Writing a review — пять секций урока.",
         "skills": ["speaking", "writing"],
     },
     {
         "title": "Group Lessons: virtual class",
-        "description": "Виртуальный класс: чат, реакции, таймер, интерактивная доска — механики ProgressMe Virtual Class.",
+        "id": "group-lessons-virtual-class",
+        "level": "B1",
+        "description": "Виртуальный класс: чат, реакции, таймер, интерактивная доска — онлайн-механики урока.",
         "skills": ["speaking", "listening"],
     },
     {
         "title": "Word Formation from Letters",
+        "id": "word-formation-from-letters",
+        "level": "A1",
         "description": "Anagram and sentence builder: соберите слово из букв, предложение из слов — новые типы автопроверки.",
         "skills": ["vocabulary", "grammar"],
     },
     {
         "title": "Sorting into Columns",
+        "id": "sorting-into-columns",
+        "level": "A1",
         "description": "Распределение по колонкам: countable/uncountable, formal/informal, British/American.",
         "skills": ["vocabulary"],
     },
     {
         "title": "Articles: a, an, the or zero article",
+        "id": "articles-a-an-the-or-zero-article",
+        "level": "A2",
         "description": "Выбор артикля с исчисляемыми и неисчисляемыми существительными, географией и уникальными объектами.",
         "skills": ["grammar"],
     },
     {
         "title": "Modal verbs: advice, obligation and possibility",
+        "id": "modal-verbs-advice-obligation-and-possibility",
+        "level": "A2",
         "description": "must, have to, should, may, might и could в бытовых и рабочих ситуациях.",
         "skills": ["grammar", "speaking"],
     },
     {
         "title": "Phrasal verbs for daily life",
+        "id": "phrasal-verbs-for-daily-life",
+        "level": "B1",
         "description": "get up, find out, look after, put off, run out of: значение, контекст и личные примеры.",
         "skills": ["vocabulary"],
     },
     {
         "title": "Writing an opinion paragraph",
+        "id": "writing-an-opinion-paragraph",
+        "level": "B1",
         "description": "Тезис, причина, пример и вывод в одном связном абзаце; linking words и hedging.",
         "skills": ["writing"],
     },
     {
         "title": "A2 Listening: announcements and directions",
+        "id": "a2-listening-announcements-and-directions",
+        "level": "A2",
         "description": "Понимание коротких объявлений, чисел, времени, маршрутов и перефразированной информации.",
         "skills": ["listening"],
     },
     {
         "title": "Customer support: clarify and reassure",
+        "id": "customer-support-clarify-and-reassure",
+        "level": "B1",
         "description": "Ролевая лексика поддержки: уточнить проблему, проявить эмпатию, дать инструкцию и завершить диалог.",
         "skills": ["speaking", "vocabulary"],
     },
     {
         "title": "News headlines and source checking",
+        "id": "news-headlines-and-source-checking",
+        "level": "B2",
         "description": "Сокращённые заголовки, факт или мнение, надёжность источника и короткое summary.",
         "skills": ["reading", "vocabulary"],
     },
@@ -1494,7 +1611,7 @@ COURSE_PACKS = [
                     {
                         "title": "Travel and Transport",
                         "description": "Поездки, аэропорт, транспорт: слова, коллокации, диалоги.",
-                        "decks": [
+                        "cards": [
                             {
                                 "title": "Travel and Transport · A2",
                                 "description": "20 слов и выражений по теме «путешествия».",
@@ -1575,7 +1692,7 @@ COURSE_PACKS = [
                     {
                         "title": "Food and Shopping",
                         "description": "Продукты, магазины, заказы в кафе.",
-                        "decks": [
+                        "cards": [
                             {
                                 "title": "Food and Shopping · A2",
                                 "description": "Базовая лексика покупок и еды.",
@@ -1824,7 +1941,7 @@ COURSE_PACKS = [
                     {
                         "title": "Phrasal verbs: work and study",
                         "description": "Работа, учёба, дедлайны: 20 фразовых глаголов в контексте.",
-                        "decks": [
+                        "cards": [
                             {
                                 "title": "Phrasal verbs · Work and Study",
                                 "description": "Фразовые глаголы для работы и учёбы с примерами.",
@@ -2015,6 +2132,7 @@ COURSE_PACKS = [
         "summary": "Форматы российских экзаменов: грамматика и лексика, "
         "письмо (email), проект, говорение, чтение и аудирование.",
         "level": "A2–B2",
+        "exams": ["oge", "ege"],
         "blocks": [
             {
                 "name": "ОГЭ · Грамматика и лексика",
@@ -2399,7 +2517,7 @@ COURSE_PACKS = [
                     {
                         "title": "Finance and marketing terms",
                         "description": "Базовые термины с карточками для тренажёра.",
-                        "decks": [
+                        "cards": [
                             {
                                 "title": "Finance and Marketing · B1",
                                 "description": "Термины финансов и маркетинга.",
@@ -2475,13 +2593,13 @@ COURSE_PACKS = [
         "slug": "travel-english",
         "cover": "travel",
         "name": "Travelling and Weather · B1",
-        "summary": "Как в ProgressMe «Travelling an weather» и «English for traveling»: аэропорт, отель, описание стран (Denmark) с секциями Warm-up → Writing.",
+        "summary": "Путешествия и погода: аэропорт, отель, описание стран с секциями Warm-up → Writing.",
         "level": "B1",
         "blocks": [
             {
                 "name": "Travelling and Weather",
                 "cefr_level": "B1",
-                "description": "Let's talk about the Scandinavian countries on the example of Denmark — ProgressMe unit-style.",
+                "description": "Let's talk about the Scandinavian countries on the example of Denmark.",
                 "topics": [
                     {
                         "title": "Denmark and Scandinavia",
@@ -2563,7 +2681,7 @@ COURSE_PACKS = [
                                 ],
                             },
                         ],
-                        "decks": [
+                        "cards": [
                             {
                                 "title": "Travel · B1",
                                 "description": "Travel vocabulary from the unit.",
@@ -2668,7 +2786,7 @@ COURSE_PACKS = [
                                 "skills": ["speaking", "writing"],
                             },
                         ],
-                        "decks": [
+                        "cards": [
                             {
                                 "title": "Hotel · Vocabulary",
                                 "description": "Hotel words.",
@@ -2710,7 +2828,7 @@ COURSE_PACKS = [
         "slug": "movie-time",
         "cover": "movie",
         "name": "Movie Time · A2–B1",
-        "summary": "Как в ProgressMe «MOVIE TIME»: жанры, описание сюжета, рецензия с автопроверяемыми упражнениями.",
+        "summary": "Movie Time: жанры, описание сюжета и рецензия с автопроверяемыми упражнениями.",
         "level": "B1",
         "blocks": [
             {
@@ -2835,7 +2953,7 @@ COURSE_PACKS = [
                                 ],
                             },
                         ],
-                        "decks": [
+                        "cards": [
                             {
                                 "title": "Movie Time · Vocabulary",
                                 "description": "Genres and cinema words.",
@@ -2978,7 +3096,7 @@ COURSE_PACKS = [
                                 ],
                             },
                         ],
-                        "decks": [
+                        "cards": [
                             {
                                 "title": "IT English · Core",
                                 "description": "Core IT vocabulary.",
@@ -3059,7 +3177,7 @@ COURSE_PACKS = [
                                 "skills": ["writing"],
                             },
                         ],
-                        "decks": [
+                        "cards": [
                             {
                                 "title": "Agile · Vocabulary",
                                 "description": "Agile terms.",
@@ -3101,7 +3219,7 @@ COURSE_PACKS = [
         "slug": "happy-learning",
         "cover": "happy",
         "name": "Happy Learning · Marathon A2",
-        "summary": "Марафон 5 дней как в ProgressMe Marathon: VR, group class, словарь и геймификация без давления.",
+        "summary": "Марафон на 5 дней: VR, group class, словарь и геймификация без давления.",
         "level": "A2",
         "blocks": [
             {
@@ -3134,7 +3252,7 @@ COURSE_PACKS = [
                                 "skills": ["writing"],
                             },
                         ],
-                        "decks": [
+                        "cards": [
                             {
                                 "title": "Marathon · Day 2",
                                 "description": "Words for describing lessons.",
@@ -3211,6 +3329,7 @@ COURSE_PACKS = [
         "name": "IELTS Academic · B2–C1",
         "summary": "Структурированный трек IELTS: Writing Task 1–2, Reading, Listening и Speaking с понятными критериями проверки.",
         "level": "C1",
+        "exams": ["ielts"],
         "blocks": [
             {
                 "name": "IELTS · Writing Lab",
@@ -3382,7 +3501,7 @@ COURSE_PACKS = [
                                 ],
                             },
                         ],
-                        "decks": [
+                        "cards": [
                             {
                                 "title": "Kids · My first words",
                                 "description": "Picture-friendly words for the first month.",
@@ -3556,9 +3675,9 @@ def _counts(pack):
         "topics": len(topics),
         "assignments": len(assignments),
         "quizzes": sum(1 for item in assignments if item["type"] == "quiz"),
-        "decks": len([deck for topic in topics for deck in topic.get("decks", [])]),
+        "card_sets": len([item for topic in topics for item in topic.get("cards", [])]),
         "cards": len(
-            [card for topic in topics for deck in topic.get("decks", []) for card in deck["cards"]]
+            [card for topic in topics for item in topic.get("cards", []) for card in item["cards"]]
         ),
     }
 
@@ -3598,6 +3717,36 @@ def _existing_skills(slugs):
     return list(Skill.objects.filter(slug__in=[slug for slug in slugs or []]))
 
 
+# ── Группировка по уровням (порядок в формах учителя) ─────────────────────
+
+
+def assignment_preset_groups():
+    """Шаблоны заданий по уровням: A1 → C2, затем экзаменационные треки."""
+    return group_items(ASSIGNMENT_PRESETS)
+
+
+def block_suggestion_groups():
+    """Готовые формулировки блоков по уровням, отдельно экзамены."""
+    return group_items(BLOCK_SUGGESTIONS, name_key="name")
+
+
+def topic_suggestion_groups():
+    """Готовые формулировки тем по уровням, отдельно экзамены."""
+    return group_items(TOPIC_SUGGESTIONS, name_key="title")
+
+
+def course_pack_groups(with_state=True):
+    """Наборы курсов по уровням и экзаменационным трекам вместе со счётчиками."""
+    entries = packs_with_state() if with_state else [{"pack": pack} for pack in COURSE_PACKS]
+    groups = group_items([entry["pack"] for entry in entries], name_key="name")
+    if not with_state:
+        return groups
+    by_slug = {entry["pack"]["slug"]: entry for entry in entries}
+    for group in groups:
+        group["entries"] = [by_slug[pack["slug"]] for pack in group["items"]]
+    return groups
+
+
 def _create_questions(assignment, questions):
     for order, data in enumerate(questions, start=1):
         question = Question.objects.create(
@@ -3622,33 +3771,46 @@ def _create_questions(assignment, questions):
         )
 
 
-def _create_decks(topic, decks):
-    """Создать наборы карточек темы. Возвращает число созданных карточек."""
+def _create_card_assignments(topic, card_sets):
+    """Создать задания-тренажёры с карточками.
+
+    Возвращает (создано заданий, пропущено заданий, создано карточек): задания
+    с карточками — такие же задания курса, поэтому попадают в общий счётчик.
+    """
     created = 0
-    for deck_data in decks:
-        deck, is_new = FlashcardDeck.objects.get_or_create(
+    skipped = 0
+    cards_total = 0
+    for card_set in card_sets:
+        if Assignment.objects.filter(
             topic=topic,
-            title=deck_data["title"],
-            defaults={
-                "description": deck_data.get("description", ""),
-                "order": topic.decks.count(),
-            },
-        )
-        if not is_new:
+            title=card_set["title"][:200],
+            assignment_type=Assignment.Type.FLASHCARDS,
+        ).exists():
+            skipped += 1
             continue
+        assignment = Assignment.objects.create(
+            topic=topic,
+            title=card_set["title"][:200],
+            description=card_set.get("description", ""),
+            assignment_type=Assignment.Type.FLASHCARDS,
+            status=Assignment.Publication.DRAFT,
+            max_points=0,
+            order=topic.assignments.count(),
+        )
         cards = [
             Flashcard(
-                deck=deck,
+                assignment=assignment,
                 front=card["front"],
                 back=card["back"],
                 example=card.get("example", ""),
                 order=position,
             )
-            for position, card in enumerate(deck_data["cards"], start=1)
+            for position, card in enumerate(card_set["cards"], start=1)
         ]
         Flashcard.objects.bulk_create(cards)
-        created += len(cards)
-    return created
+        created += 1
+        cards_total += len(cards)
+    return created, skipped, cards_total
 
 
 @transaction.atomic
@@ -3700,7 +3862,12 @@ def import_course_pack(slug):
             else:
                 skipped["topics"] += 1
 
-            created["cards"] += _create_decks(topic, topic_data.get("decks", []))
+            sets_created, sets_skipped, cards_created = _create_card_assignments(
+                topic, topic_data.get("cards", [])
+            )
+            created["assignments"] += sets_created
+            created["cards"] += cards_created
+            skipped["assignments"] += sets_skipped
 
             assignment_order = topic.assignments.count()
             for item in topic_data.get("assignments", []):

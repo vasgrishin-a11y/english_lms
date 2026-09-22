@@ -21,6 +21,7 @@ TYPE_SKILL_KINDS = {
     "audio": (Skill.Kind.SPEAKING,),
     "mixed": (Skill.Kind.WRITING, Skill.Kind.SPEAKING),
     "quiz": (Skill.Kind.GRAMMAR,),
+    "flashcards": (Skill.Kind.VOCABULARY,),
 }
 
 

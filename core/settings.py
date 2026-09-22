@@ -168,6 +168,25 @@ if (
     raise ImproperlyConfigured("Private media must not be stored inside STATIC_ROOT")
 FILE_UPLOAD_PERMISSIONS = 0o600
 FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o700
+# ── ИИ-помощник преподавателя ─────────────────────────────────────────────
+# Гибрид: с ключом провайдера разбираем файл моделью, без ключа — офлайн-эвристиками.
+# Пустой ключ не ошибка: помощник просто работает офлайн. Выключить целиком — LMS_AI_ENABLED=0.
+LMS_AI_ENABLED = env_bool("LMS_AI_ENABLED", True)
+LMS_AI_PROVIDER = os.getenv("LMS_AI_PROVIDER", "gemini").strip() or "gemini"
+LMS_AI_API_KEY = os.getenv("LMS_AI_API_KEY", "").strip()
+LMS_AI_MODEL = os.getenv("LMS_AI_MODEL", "gemini-2.0-flash").strip() or "gemini-2.0-flash"
+LMS_AI_ENDPOINT = os.getenv(
+    "LMS_AI_ENDPOINT", "https://generativelanguage.googleapis.com/v1beta/models"
+).strip()
+LMS_AI_TIMEOUT = env_int("LMS_AI_TIMEOUT", 60)
+LMS_AI_MAX_FILE_BYTES = env_int("LMS_AI_MAX_FILE_BYTES", 10 * 1024 * 1024)
+LMS_AI_MAX_BLOCKS = env_int("LMS_AI_MAX_BLOCKS", 5)
+LMS_AI_MAX_TOPICS = env_int("LMS_AI_MAX_TOPICS", 30)
+LMS_AI_MAX_ASSIGNMENTS = env_int("LMS_AI_MAX_ASSIGNMENTS", 60)
+LMS_AI_MAX_QUESTIONS = env_int("LMS_AI_MAX_QUESTIONS", 20)
+LMS_AI_MAX_CARDS = env_int("LMS_AI_MAX_CARDS", 300)
+LMS_AI_MAX_TEXT_CHARS = env_int("LMS_AI_MAX_TEXT_CHARS", 12000)
+
 LMS_MAX_FILE_BYTES = env_int("LMS_MAX_FILE_BYTES", 20 * 1024 * 1024)
 LMS_STUDENT_QUOTA_BYTES = env_int("LMS_STUDENT_QUOTA_BYTES", 200 * 1024 * 1024)
 LMS_SUBMISSIONS_PER_HOUR = env_int("LMS_SUBMISSIONS_PER_HOUR", 30)

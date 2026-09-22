@@ -21,7 +21,6 @@ TYPE_ICONS = {
     "mixed": "layers",
     "quiz": "target",
     "flashcards": "cards",
-    "deck": "cards",
 }
 
 COVER_THEMES = {
@@ -351,8 +350,8 @@ def cover_initials(name):
 
 
 @register.filter
-def deck_cards_map(presets):
-    """Текст «лицо | оборот | пример» по строкам для каждого шаблона квизлета.
+def card_presets_map(presets):
+    """Текст «лицо | оборот | пример» по строкам для каждого шаблона карточек.
 
     Отдаётся в ``json_script`` на странице карточек: кнопка «Подставить
     в импорт» заполняет textarea массового импорта без перезагрузки.
@@ -373,7 +372,7 @@ def deck_cards_map(presets):
 
 @register.filter
 def get_item(mapping, key):
-    """Безопасный доступ к словарю в шаблоне: квизлеты темы, счётчики."""
+    """Безопасный доступ к словарю в шаблоне: наборы карточек темы, счётчики."""
     if not mapping:
         return None
     try:

@@ -14,7 +14,7 @@ from lms.models import (
     Block,
     CommentSnippet,
     Feedback,
-    FlashcardDeck,
+    Flashcard,
     Question,
     Submission,
 )
@@ -118,7 +118,7 @@ class SeedDemoTests(LMSCase):
             Assignment.objects.count(),
             Question.objects.count(),
             Submission.objects.count(),
-            FlashcardDeck.objects.count(),
+            Flashcard.objects.count(),
             CommentSnippet.objects.count(),
         )
 
@@ -138,13 +138,13 @@ class SeedDemoTests(LMSCase):
         self.assertEqual(Block.objects.count(), before[0] + 3)
         self.assertEqual(
             set(Assignment.objects.values_list("assignment_type", flat=True)),
-            {"text", "file", "audio", "mixed", "quiz"},
+            {"text", "file", "audio", "mixed", "quiz", "flashcards"},
         )
         quiz = Assignment.objects.get(title="Тест: времена и маркеры")
         self.assertGreaterEqual(quiz.questions.count(), 7)
         self.assertEqual(quiz.max_points, sum(q.points for q in quiz.questions.all()))
         self.assertTrue(quiz.questions.get(kind="mcq").choices.filter(is_correct=True).exists())
-        # Новые типы из ProgressMe-бенчмарка
+        # Интерактивные типы вопросов: порядок, колонки, ввод слова
         self.assertTrue(quiz.questions.filter(kind="order").exists())
         self.assertTrue(quiz.questions.filter(kind="sort").exists())
         self.assertTrue(quiz.questions.filter(kind="spell").exists())

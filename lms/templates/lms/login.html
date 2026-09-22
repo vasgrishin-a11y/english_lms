@@ -1,17 +1,16 @@
 {% extends "lms/base.html" %}
-{% load lms_tags %}
+{% load static lms_tags %}
 {% block title %}Вход — English LMS{% endblock %}
 {% block workspace_class %}workspace-plain{% endblock %}
 {% block content %}
 <div class="login-layout">
     <div class="card login-promo" style="background: var(--cover-1);border:0;padding:32px">
         <div style="display:flex;gap:12px;align-items:center;margin-bottom:24px;flex-wrap:wrap">
-            <span class="brand-logo" style="width:40px;height:40px">{% icon "compass" %}</span>
+            <span class="brand-logo" style="width:40px;height:40px"><img src="{% static 'lms/img/brand-book.svg' %}" alt="" width="40" height="40" style="width:40px;height:40px" aria-hidden="true"></span>
             <span class="strong" style="font-size:18px">English LMS</span>
-            <span class="badge badge-turquoise" style="margin-left:auto">ProgressMe-inspired</span>
         </div>
         <h1 style="font-size:30px;line-height:1.15;margin-bottom:12px">Современные онлайн-уроки начинаются здесь</h1>
-        <p class="muted">Платформа как ProgressMe: конструктор материалов (30+ шаблонов), виртуальный класс, автопроверка, личный словарь ученика с 4 режимами тренировки, расписание и аналитика — в одном пространстве.</p>
+        <p class="muted">Конструктор учебных материалов с готовыми шаблонами, задания с автоматической проверкой, личный словарь и тренажёры ученика, оценки, сроки и аналитика — в одном учебном пространстве.</p>
         <div class="class-grid login-promo-grid" style="gap:12px;margin-top:24px">
             <div class="class-card" style="pointer-events:none;min-height:0">
                 <div class="class-cover" style="background:var(--cover-2);aspect-ratio:16/9"><span class="class-cover-emoji">🎬</span></div>
@@ -29,7 +28,7 @@
         </div>
     </div>
     <div class="card login-card">
-        <div class="brand-mark">{% icon "compass" "icon icon-xl" %}</div>
+        <div class="brand-mark"><img src="{% static 'lms/img/brand-book.svg' %}" alt="" width="34" height="34" aria-hidden="true"></div>
         <h1>Вход в систему</h1>
         <p class="muted small center">Учебное пространство: задания, проверка, оценки и тренажёры.</p>
         <form method="post" class="stack">
@@ -37,10 +36,6 @@
             {% include "lms/form_fields.html" %}
             <button class="btn btn-lg btn-block" type="submit">Войти</button>
         </form>
-        <p class="muted small center mb-0">Учётные записи создаёт администратор. Демо: teacher / anna / maxim / sofia — пароль из seed_demo.</p>
-        <div class="callout" style="margin-top:16px">
-            {% icon "sparkles" %}<div><p class="small strong mb-0">Что нового</p><p class="small muted mb-0">Типы «предложение из слов», «сортировка по колонкам», «слово из букв», личный словарь «Мой словарь», обложки классов и секции урока как в ProgressMe.</p></div>
-        </div>
     </div>
 </div>
 {% endblock %}

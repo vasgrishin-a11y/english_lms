@@ -92,7 +92,6 @@ class AdminTests(LMSCase):
             "choice",
             "quizattempt",
             "answerdraft",
-            "flashcarddeck",
             "flashcard",
             "cardreview",
         ):

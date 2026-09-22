@@ -17,7 +17,7 @@ class QueryAndMarkupTests(LMSCase):
             response = self.student_client.get("/assignments/")
         self.assertEqual(response.status_code, 200)
         # 7 запросов: сессия, пользователь, роль, счётчик, страница, сводка
-        # и квизлеты тем страницы (один запрос на все темы — бюджет по-прежнему
+        # и карточки заданий страницы (один запрос на все задания — бюджет по-прежнему
         # не зависит от размера курса).
         self.assertLessEqual(len(queries), 7)
         self.assertEqual(len(response.context["page_obj"]), 25)

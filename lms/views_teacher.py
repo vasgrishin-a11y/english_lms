@@ -22,6 +22,7 @@ from django.db import transaction
 from django.db.models import Avg, Count, F, Max, ProtectedError, Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
@@ -32,7 +33,6 @@ from .forms import (
     BlockForm,
     CommentSnippetForm,
     FlashcardBulkForm,
-    FlashcardDeckForm,
     FlashcardForm,
     GroupForm,
     QuestionForm,
@@ -43,16 +43,15 @@ from .forms import (
     TopicForm,
 )
 from .library import (
-    ASSIGNMENT_PRESETS,
-    BLOCK_SUGGESTIONS,
-    DECK_LEVELS,
-    DECK_PRESETS,
-    TOPIC_SUGGESTIONS,
+    CARD_LEVELS,
+    assignment_preset_groups,
+    block_suggestion_groups,
+    card_preset_groups,
+    course_pack_groups,
     create_cards_from_preset,
-    deck_preset_topics,
-    get_deck_preset,
+    get_card_preset,
     import_course_pack,
-    packs_with_state,
+    topic_suggestion_groups,
 )
 from .models import (
     Assignment,
@@ -61,7 +60,6 @@ from .models import (
     Choice,
     CommentSnippet,
     Flashcard,
-    FlashcardDeck,
     Group,
     Profile,
     Question,
@@ -376,7 +374,7 @@ def library(request):
     return render(
         request,
         "lms/teacher_library.html",
-        {"entries": packs_with_state(), "workspace": "curriculum"},
+        {"pack_groups": course_pack_groups(), "workspace": "curriculum"},
     )
 
 
@@ -598,6 +596,11 @@ def _submission_progress(assignment):
     }
 
 
+def _flat_presets(groups):
+    """Плоский список шаблонов в порядке групп: его читает lms.js при подстановке."""
+    return [item for group in groups for item in group["items"]]
+
+
 @teacher_required
 @require_http_methods(["GET", "POST"])
 def block_form(request, pk=None):
@@ -607,13 +610,15 @@ def block_form(request, pk=None):
         instance = form.save()
         messages.success(request, f"Блок сохранён: {instance.name}")
         return redirect("teacher_curriculum")
+    groups = block_suggestion_groups()
     return render(
         request,
         "lms/teacher_block_form.html",
         {
             "form": form,
             "block": block,
-            "suggestions": BLOCK_SUGGESTIONS,
+            "suggestion_groups": groups,
+            "suggestion_payload": _flat_presets(groups),
             "workspace": "curriculum",
         },
     )
@@ -656,6 +661,7 @@ def topic_form(request, pk=None):
         instance = form.save()
         messages.success(request, f"Тема сохранена: {instance.title}")
         return redirect("teacher_curriculum")
+    groups = topic_suggestion_groups()
     return render(
         request,
         "lms/teacher_topic_form.html",
@@ -663,7 +669,8 @@ def topic_form(request, pk=None):
             "form": form,
             "topic": topic,
             "blocks": Block.objects.order_by("order", "name"),
-            "suggestions": TOPIC_SUGGESTIONS,
+            "suggestion_groups": groups,
+            "suggestion_payload": _flat_presets(groups),
             "workspace": "curriculum",
         },
     )
@@ -703,8 +710,13 @@ def assignment_form(request, pk=None):
     initial = {}
     if request.GET.get("topic"):
         initial["topic"] = request.GET["topic"]
+    requested_type = request.GET.get("type")
+    if requested_type in Assignment.Type.values and pk is None:
+        initial["assignment_type"] = requested_type
     if pk is None and request.method != "POST":
-        initial["skills"] = [skill.pk for skill in skills_for_type(Assignment.Type.TEXT)]
+        initial["skills"] = [
+            skill.pk for skill in skills_for_type(requested_type or Assignment.Type.TEXT)
+        ]
     form = AssignmentForm(
         request.POST or None, request.FILES or None, instance=assignment, initial=initial or None
     )
@@ -719,8 +731,12 @@ def assignment_form(request, pk=None):
         )
         if request.POST.get("_save_questions") or (is_new and instance.is_quiz):
             return redirect("teacher_questions", pk=instance.pk)
+        if instance.is_flashcards:
+            messages.info(request, "Добавьте карточки: вручную, списком или из шаблона.")
+            return redirect("teacher_assignment_cards", pk=instance.pk)
         return redirect("teacher_curriculum")
     skill_payload = type_skill_payload()
+    preset_groups = assignment_preset_groups()
     question_items = []
     question_form = None
     if assignment and assignment.is_quiz:
@@ -738,7 +754,8 @@ def assignment_form(request, pk=None):
                 "block__order", "order", "title"
             ),
             "groups": Group.objects.filter(is_active=True).order_by("name"),
-            "presets": ASSIGNMENT_PRESETS,
+            "preset_groups": preset_groups,
+            "preset_payload": _flat_presets(preset_groups),
             "skill_ids": skill_payload["ids"],
             "skills_by_type": skill_payload["by_type"],
             "progress": _submission_progress(assignment) if assignment else None,
@@ -957,71 +974,37 @@ def question_delete(request, pk):
     return redirect("teacher_questions", pk=assignment_id)
 
 
-# ── Квизлеты: наборы карточек как задания тренажёрного типа ────────────────
-@teacher_required
-@require_http_methods(["GET", "POST"])
-def deck_form(request, pk=None):
-    """Квизлет — задание тренажёрного типа: шаблон подставляет название, описание и карточки."""
-    deck = (
-        get_object_or_404(FlashcardDeck.objects.select_related("topic__block"), pk=pk)
-        if pk
-        else None
+# ── Карточки-тренажёр: разновидность задания, а не отдельная сущность ──────
+def _flashcard_assignment(pk):
+    return get_object_or_404(
+        Assignment.objects.select_related("topic__block"),
+        pk=pk,
+        assignment_type=Assignment.Type.FLASHCARDS,
     )
-    initial = {}
-    if request.GET.get("topic"):
-        initial["topic"] = request.GET["topic"]
-    preset_id = request.GET.get("preset") or request.POST.get("preset_id") or ""
-    preset = get_deck_preset(preset_id) if preset_id else None
-    if preset and not deck and request.method == "GET":
-        initial.update(
-            {
-                "title": preset["fields"]["title"],
-                "description": preset["fields"]["description"],
-            }
-        )
-    form = FlashcardDeckForm(request.POST or None, instance=deck, initial=initial or None)
-    if request.method == "POST" and form.is_valid():
-        is_new = deck is None
-        instance = form.save()
-        added = 0
-        if preset_id:
-            try:
-                added = create_cards_from_preset(instance, preset_id)
-            except LookupError:
-                preset = None
-        if is_new and added:
-            messages.success(
-                request,
-                f"Квизлет «{instance.title}» создан из шаблона: добавлено карточек: {added}.",
-            )
-        else:
-            messages.success(request, f"Набор карточек сохранён: {instance.title}")
-        return redirect("teacher_deck_cards", pk=instance.pk)
-    return render(
-        request,
-        "lms/teacher_deck_form.html",
-        {
-            "form": form,
-            "deck": deck,
-            "topics": Topic.objects.select_related("block").order_by(
-                "block__order", "order", "title"
-            ),
-            "presets": DECK_PRESETS,
-            "preset_topics": deck_preset_topics(),
-            "preset_levels": DECK_LEVELS,
-            "active_preset": preset["id"] if preset else "",
-            "workspace": "curriculum",
-        },
-    )
+
+
+def _cards_context(assignment, cards):
+    """Контекст страницы карточек: наборы шаблонов по уровням и число учеников."""
+    groups = card_preset_groups()
+    return {
+        "assignment": assignment,
+        "cards": cards,
+        "preset_groups": groups,
+        "preset_payload": _flat_presets(groups),
+        "preset_levels": CARD_LEVELS,
+        "learners": CardReview.objects.filter(card__assignment=assignment)
+        .values("student_id")
+        .distinct()
+        .count(),
+        "workspace": "curriculum",
+    }
 
 
 @teacher_required
 @require_http_methods(["GET", "POST"])
-def deck_cards(request, pk):
-    """Карточки набора: одиночное добавление, массовый импорт и шаблоны библиотеки."""
-    deck = get_object_or_404(
-        FlashcardDeck.objects.select_related("topic__block").prefetch_related("cards"), pk=pk
-    )
+def assignment_cards(request, pk):
+    """Карточки задания-тренажёра: одиночное добавление, массовый импорт, шаблоны."""
+    assignment = _flashcard_assignment(pk)
     card_form = FlashcardForm(request.POST or None, prefix="card")
     bulk_form = FlashcardBulkForm(request.POST or None, prefix="bulk")
     if request.method == "POST":
@@ -1029,26 +1012,26 @@ def deck_cards(request, pk):
         if preset_id and "_preset" in request.POST:
             try:
                 added = create_cards_from_preset(
-                    deck, preset_id, replace=bool(request.POST.get("preset_replace"))
+                    assignment, preset_id, replace=bool(request.POST.get("preset_replace"))
                 )
             except LookupError:
-                messages.error(request, "Неизвестный шаблон квизлета.")
+                messages.error(request, "Неизвестный шаблон карточек.")
             else:
-                preset = get_deck_preset(preset_id)
+                preset = get_card_preset(preset_id)
                 messages.success(
                     request,
                     f"Из шаблона «{preset['label']}» добавлено карточек: {added}.",
                 )
-            return redirect("teacher_deck_cards", pk=deck.pk)
+            return redirect("teacher_assignment_cards", pk=assignment.pk)
         if "bulk-cards_text" in request.POST and bulk_form.is_valid():
             if bulk_form.cleaned_data["replace"]:
-                deck.cards.all().delete()
-                CardReview.objects.filter(card__deck=deck).delete()
-            start = deck.cards.aggregate(last=Max("order"))["last"] or 0
+                CardReview.objects.filter(card__assignment=assignment).delete()
+                assignment.cards.all().delete()
+            start = assignment.cards.aggregate(last=Max("order"))["last"] or 0
             Flashcard.objects.bulk_create(
                 [
                     Flashcard(
-                        deck=deck,
+                        assignment=assignment,
                         front=item["front"],
                         back=item["back"],
                         example=item["example"],
@@ -1060,31 +1043,22 @@ def deck_cards(request, pk):
             messages.success(
                 request, f"Добавлено карточек: {len(bulk_form.cleaned_data['cards_text'])}"
             )
-            return redirect("teacher_deck_cards", pk=deck.pk)
+            return redirect("teacher_assignment_cards", pk=assignment.pk)
         if card_form.is_valid():
             card = card_form.save(commit=False)
-            card.deck = deck
+            card.assignment = assignment
             if not card.order:
-                card.order = (deck.cards.aggregate(last=Max("order"))["last"] or 0) + 1
+                card.order = (assignment.cards.aggregate(last=Max("order"))["last"] or 0) + 1
             card.save()
             messages.success(request, f"Карточка добавлена: {card.front}")
-            return redirect("teacher_deck_cards", pk=deck.pk)
+            return redirect("teacher_assignment_cards", pk=assignment.pk)
     return render(
         request,
-        "lms/teacher_deck_cards.html",
+        "lms/teacher_assignment_cards.html",
         {
-            "deck": deck,
-            "cards": list(deck.cards.all()),
+            **_cards_context(assignment, list(assignment.cards.all())),
             "card_form": card_form,
             "bulk_form": bulk_form,
-            "presets": DECK_PRESETS,
-            "preset_topics": deck_preset_topics(),
-            "preset_levels": DECK_LEVELS,
-            "learners": CardReview.objects.filter(card__deck=deck)
-            .values("student_id")
-            .distinct()
-            .count(),
-            "workspace": "curriculum",
         },
     )
 
@@ -1093,23 +1067,32 @@ def deck_cards(request, pk):
 @require_POST
 def card_delete(request, pk):
     card = get_object_or_404(Flashcard, pk=pk)
-    deck_id = card.deck_id
+    assignment_id = card.assignment_id
     card.delete()
     messages.success(request, "Карточка удалена.")
-    return redirect("teacher_deck_cards", pk=deck_id)
+    if assignment_id:
+        return redirect("teacher_assignment_cards", pk=assignment_id)
+    return redirect("teacher_curriculum")
+
+
+# ── Прежние адреса наборов карточек: объясняем и ведём к новому месту ─────
+@teacher_required
+@require_GET
+def deck_new_redirect(request):
+    """Старая ссылка «Новый набор карточек» → создание задания с карточками."""
+    return redirect(f"{reverse('teacher_assignment_new')}?type={Assignment.Type.FLASHCARDS}")
 
 
 @teacher_required
-@require_POST
-def deck_delete(request, pk):
-    deck = get_object_or_404(FlashcardDeck, pk=pk)
-    return _delete(
+@require_GET
+def deck_legacy_redirect(request, pk):
+    """Старые ссылки на набор карточек: наборы стали заданиями с карточками."""
+    messages.info(
         request,
-        deck,
-        "teacher_curriculum",
-        "Набор нельзя удалить: ученики уже тренировали карточки. Скройте его флагом «Активен».",
-        blocked=CardReview.objects.filter(card__deck=deck).exists(),
+        "Наборы карточек теперь задания типа «Карточки-тренажёр»: "
+        "откройте задание в теме курса и нажмите «Карточки».",
     )
+    return redirect("teacher_curriculum")
 
 
 # ── Пространство «Ученики» ─────────────────────────────────────────────────

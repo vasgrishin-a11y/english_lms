@@ -1799,7 +1799,7 @@ table .grade-col {
     color: var(--text-muted);
 }
 
-/* Заголовок группы шаблонов (тема библиотеки квизлетов). */
+/* Заголовок группы шаблонов: уровень CEFR или экзамен. */
 .preset-topic {
     margin: var(--sp-5) 0 var(--sp-3);
     font-size: var(--fs-13);
@@ -1979,7 +1979,7 @@ table .grade-col {
     list-style: none;
 }
 
-/* ── ProgressMe-гибрид: карточки курсов / классов ────────── */
+/* ── Карточки курса: обложка, метаданные, быстрые действия ── */
 .classes-head {
     display: flex;
     flex-wrap: wrap;
@@ -2290,7 +2290,7 @@ table .grade-col {
     margin-left: 0;
 }
 
-/* Создание карточки — dashed, как в ProgressMe */
+/* Создание карточки — пунктирная рамка-приглашение */
 .class-card.is-create {
     border-style: dashed;
     border-width: 1.5px;
@@ -2312,7 +2312,7 @@ table .grade-col {
     color: var(--turquoise-ink);
 }
 
-/* ── Урок: секции ProgressMe-style ──────────────────────── */
+/* ── Урок: секции с шагами занятия ───────────────────────── */
 .lesson-shell {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 300px;

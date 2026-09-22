@@ -21,7 +21,6 @@ from lms.models import (
     CardReview,
     Choice,
     Flashcard,
-    FlashcardDeck,
     Question,
     QuizAttempt,
     Skill,
@@ -30,7 +29,7 @@ from lms.models import (
 from lms.services import (
     RATING_CHOICES,
     apply_sm2,
-    deck_stats,
+    card_set_stats,
     practice_queue,
     review_flashcard,
 )
@@ -434,24 +433,28 @@ class DraftAutosaveTests(LMSCase):
 class TrainerTests(LMSCase):
     def setUp(self):
         super().setUp()
-        self.deck = FlashcardDeck.objects.create(topic=self.topic, title="Travel")
+        self.cards_assignment = self.card_assignment(topic=self.topic, title="Travel")
         self.cards = [
             Flashcard.objects.create(
-                deck=self.deck, front=f"word {index}", back=f"слово {index}", order=index
+                assignment=self.cards_assignment,
+                front=f"word {index}",
+                back=f"слово {index}",
+                order=index,
             )
             for index in range(1, 4)
         ]
-        self.session_url = f"/trainer/{self.deck.pk}/"
+        self.session_url = f"/trainer/{self.cards_assignment.pk}/"
 
     def rate(self, rating):
         return self.student_client.post(self.session_url, {"rating": rating})
 
-    def test_trainer_lists_decks_with_due_counts(self):
+    def test_trainer_lists_card_sets_with_due_counts(self):
         response = self.student_client.get("/trainer/")
-        decks = response.context["decks"]
-        self.assertEqual(len(decks), 1)
-        self.assertEqual(decks[0].card_total, 3)
-        self.assertEqual(decks[0].due_count, 3)
+        card_sets = response.context["card_sets"]
+        self.assertEqual(len(card_sets), 2)  # задание-тренажёр + личный словарь
+        course_set = next(item for item in card_sets if not item["is_personal"])
+        self.assertEqual(course_set["card_total"], 3)
+        self.assertEqual(course_set["due_count"], 3)
         self.assertEqual(response.context["due_total"], 3)
 
     def test_session_queue_is_stored_and_advances(self):
@@ -546,14 +549,15 @@ class TrainerTests(LMSCase):
         self.assertIsNotNone(page.context["card"])
         self.assertEqual(len(page.context["queue"]), 2)
 
-    def test_inactive_deck_is_hidden(self):
-        self.deck.is_active = False
-        self.deck.save()
+    def test_inactive_assignment_is_hidden(self):
+        self.cards_assignment.is_active = False
+        self.cards_assignment.save()
         self.assertEqual(self.student_client.get(self.session_url).status_code, 404)
-        self.assertEqual(len(self.student_client.get("/trainer/").context["decks"]), 0)
+        sets = self.student_client.get("/trainer/").context["card_sets"]
+        self.assertEqual([item for item in sets if not item["is_personal"]], [])
 
-    def test_empty_deck_finishes_immediately(self):
-        empty = FlashcardDeck.objects.create(topic=self.topic, title="Empty")
+    def test_empty_assignment_finishes_immediately(self):
+        empty = self.card_assignment(topic=self.topic, title="Empty")
         response = self.student_client.get(f"/trainer/{empty.pk}/")
         self.assertIsNone(response.context["card"])
         self.assertTrue(response.context["done"])
@@ -565,10 +569,10 @@ class TrainerTests(LMSCase):
 class SpacedRepetitionServiceTests(LMSCase):
     def setUp(self):
         super().setUp()
-        self.deck = FlashcardDeck.objects.create(topic=self.topic, title="Travel")
+        self.cards_assignment = self.card_assignment(topic=self.topic, title="Travel")
         self.cards = [
             Flashcard.objects.create(
-                deck=self.deck, front=f"w{index}", back=f"с{index}", order=index
+                assignment=self.cards_assignment, front=f"w{index}", back=f"с{index}", order=index
             )
             for index in range(1, 5)
         ]
@@ -587,7 +591,7 @@ class SpacedRepetitionServiceTests(LMSCase):
             due_at=now - timedelta(hours=2),
             interval_days=30,
         )
-        result = practice_queue(student=self.student, deck=self.deck, limit=3)
+        result = practice_queue(student=self.student, cards=self.cards, limit=3)
         self.assertEqual(
             [card.pk for card in result["queue"]],
             [self.cards[1].pk, self.cards[2].pk, self.cards[3].pk],
@@ -598,30 +602,30 @@ class SpacedRepetitionServiceTests(LMSCase):
         self.assertEqual(result["learned"], 1)
 
     def test_limit_is_at_least_one(self):
-        result = practice_queue(student=self.student, deck=self.deck, limit=0)
+        result = practice_queue(student=self.student, cards=self.cards, limit=0)
         self.assertEqual(len(result["queue"]), 1)
 
-    def test_deck_stats_counts_reviewed_and_due(self):
+    def test_card_set_stats_counts_reviewed_and_due(self):
         CardReview.objects.create(
             card=self.cards[0], student=self.student, due_at=timezone.now() - timedelta(minutes=5)
         )
-        decks = deck_stats(self.student)
-        self.assertEqual(len(decks), 1)
-        self.assertEqual(decks[0].card_total, 4)
-        self.assertEqual(decks[0].reviewed_count, 1)
-        self.assertEqual(decks[0].due_count, 4)
+        card_sets = card_set_stats(self.student)
+        course_set = next(item for item in card_sets if not item["is_personal"])
+        self.assertEqual(course_set["card_total"], 4)
+        self.assertEqual(course_set["reviewed_count"], 1)
+        self.assertEqual(course_set["due_count"], 4)
 
     def test_review_flashcard_validates_rating_and_access(self):
         with self.assertRaises(ValidationError):
             review_flashcard(student=self.student, card_id=self.cards[0].pk, rating=99)
 
-        self.deck.is_active = False
-        self.deck.save()
+        self.cards_assignment.is_active = False
+        self.cards_assignment.save()
         with self.assertRaises(PermissionDenied):
             review_flashcard(student=self.student, card_id=self.cards[0].pk, rating=3)
 
-        self.deck.is_active = True
-        self.deck.save()
+        self.cards_assignment.is_active = True
+        self.cards_assignment.save()
         with self.assertRaises(PermissionDenied):
             review_flashcard(student=self.teacher, card_id=self.cards[0].pk, rating=3)
         with self.assertRaises(PermissionDenied):

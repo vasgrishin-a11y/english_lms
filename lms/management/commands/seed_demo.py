@@ -34,7 +34,6 @@ from lms.models import (
     Choice,
     CommentSnippet,
     Flashcard,
-    FlashcardDeck,
     Group,
     Profile,
     Question,
@@ -396,8 +395,8 @@ class Command(BaseCommand):
             task2.group = b2_group
             task2.save(update_fields=["group", "updated_at"])
 
-        self._deck(topic(lexis, "Travel vocabulary"))
-        self._deck(topic(grammar, "Present Perfect и Past Simple"))
+        self._card_assignment(topic(lexis, "Travel vocabulary"))
+        self._card_assignment(topic(grammar, "Present Perfect и Past Simple"))
 
     def _quiz_questions(self, quiz):
         if quiz.questions.exists():
@@ -496,11 +495,17 @@ class Command(BaseCommand):
         quiz.max_points = sum(question.points for question in quiz.questions.all())
         quiz.save(update_fields=["max_points", "updated_at"])
 
-    def _deck(self, topic_obj):
-        deck, created = FlashcardDeck.objects.get_or_create(
+    def _card_assignment(self, topic_obj):
+        """Задание-тренажёр с карточками: карточки — разновидность задания."""
+        assignment, created = Assignment.objects.get_or_create(
             topic=topic_obj,
-            title=f"Карточки: {topic_obj.title}",
-            defaults={"description": "Набор для интервального повторения.", "order": 1},
+            title=f"Карточки: {topic_obj.title}"[:200],
+            assignment_type=Assignment.Type.FLASHCARDS,
+            defaults={
+                "description": "Тренажёр для интервального повторения слов темы.",
+                "max_points": 0,
+                "status": Assignment.Publication.PUBLISHED,
+            },
         )
         if created:
             pairs = [
@@ -513,9 +518,9 @@ class Command(BaseCommand):
             ]
             for order, (front, back, example) in enumerate(pairs, start=1):
                 Flashcard.objects.create(
-                    deck=deck, front=front, back=back, example=example, order=order
+                    assignment=assignment, front=front, back=back, example=example, order=order
                 )
-        return deck
+        return assignment
 
     # ── Учебная активность ──────────────────────────────────────────
     def _work(self, blocks, users):
@@ -611,15 +616,18 @@ class Command(BaseCommand):
         )
 
         # Повторения карточек: у Анны часть карточек уже изучена.
-        deck = FlashcardDeck.objects.filter(title="Карточки: Travel vocabulary").first()
-        if deck:
-            for card, rating in list(zip(deck.cards.all()[:3], ["good", "easy", "again"])):
+        cards_assignment = Assignment.objects.filter(
+            title="Карточки: Travel vocabulary", assignment_type=Assignment.Type.FLASHCARDS
+        ).first()
+        if cards_assignment:
+            for card, rating in list(
+                zip(cards_assignment.cards.all()[:3], ["good", "easy", "again"])
+            ):
                 review_flashcard(student=anna, card_id=card.pk, rating=RATING_CHOICES[rating])
 
-        # Личный словарь Анны — как в ProgressMe «My Words» с тренировкой.
-        from lms.services import add_dictionary_word, get_or_create_personal_deck
+        # Личный словарь Анны: свои слова с интервальным повторением.
+        from lms.services import add_dictionary_word
 
-        personal = get_or_create_personal_deck(anna)
         for term, translation, example in [
             ("to book", "бронировать", "We booked a table near the harbour."),
             ("breathtaking", "захватывающий", "The view from the lighthouse was breathtaking."),
@@ -629,7 +637,7 @@ class Command(BaseCommand):
         ]:
             add_dictionary_word(student=anna, term=term, translation=translation, example=example)
         # Пару слов уже изучено
-        for card in personal.cards.all()[:2]:
+        for card in Flashcard.objects.filter(owner=anna).order_by("order", "pk")[:2]:
             review_flashcard(student=anna, card_id=card.pk, rating=RATING_CHOICES["good"])
 
     def _submitted(self, student, assignment, text, file_answer=None):

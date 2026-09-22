@@ -8,7 +8,7 @@
 from django.db.models import Avg, Count, OuterRef, Q, Subquery
 from django.utils import timezone
 
-from .models import Assignment, Block, FlashcardDeck, Submission, Topic
+from .models import Assignment, Block, Submission, Topic
 
 WAITING_STATUSES = [Submission.Status.SUBMITTED, Submission.Status.IN_REVIEW]
 
@@ -121,17 +121,16 @@ def course_tree(
         )
     if include_skills:
         assignments_queryset = assignments_queryset.prefetch_related("skills")
-    assignments = list(assignments_queryset.order_by("topic__order", "order", "pk"))
-    decks = FlashcardDeck.objects.select_related("topic__block").annotate(card_total=Count("cards"))
-    if not teacher_view:
-        decks = decks.filter(is_active=True, topic__is_active=True, topic__block__is_active=True)
-    decks = list(decks.order_by("topic__order", "order", "pk"))
+    assignments = list(
+        assignments_queryset.annotate(card_total=Count("cards")).order_by(
+            "topic__order", "order", "pk"
+        )
+    )
     stats = teacher_assignment_stats() if teacher_view else None
     return _assemble(
         blocks,
         topics,
         assignments,
-        decks,
         stats=stats,
         student_view=student is not None,
         query=query,
@@ -145,30 +144,30 @@ def _matches(query, *values):
     return any(needle in str(value or "").casefold() for value in values)
 
 
-def _assemble(blocks, topics, assignments, decks, *, stats, student_view, query):
+def _assemble(blocks, topics, assignments, *, stats, student_view, query):
     topics_by_block = {}
     for topic in topics:
         topics_by_block.setdefault(topic.block_id, []).append(topic)
     assignments_by_topic = {}
     for assignment in assignments:
         assignments_by_topic.setdefault(assignment.topic_id, []).append(assignment)
-    decks_by_topic = {}
-    for deck in decks:
-        decks_by_topic.setdefault(deck.topic_id, []).append(deck)
 
     result = []
     for block in blocks:
         block_topics = []
         block_total = block_done = block_waiting = block_count = block_revision = 0
-        block_decks = 0
+        block_flashcards = 0
         for topic in topics_by_block.get(block.pk, []):
             entries = []
             topic_total = topic_done = topic_waiting = topic_revision = 0
+            flashcard_count = 0
             for assignment in assignments_by_topic.get(topic.pk, []):
                 if not _matches(query, assignment.title, assignment.description):
                     continue
                 entry = {"assignment": assignment, "state": None, "stats": None}
-                if student_view:
+                if assignment.is_flashcards:
+                    flashcard_count += 1
+                if student_view and not assignment.is_flashcards:
                     state = state_of(assignment)
                     entry["state"] = state
                     topic_total += 1
@@ -188,22 +187,19 @@ def _assemble(blocks, topics, assignments, decks, *, stats, student_view, query)
                     topic_waiting += row.get("waiting", 0)
                     topic_revision += row.get("revision", 0)
                 entries.append(entry)
-            topic_decks = decks_by_topic.get(topic.pk, [])
             if query and not entries and not _matches(query, topic.title, block.name):
-                continue
-            if not entries and not topic_decks and query:
                 continue
             block_total += topic_total
             block_done += topic_done
             block_waiting += topic_waiting
             block_revision += topic_revision
             block_count += len(entries)
-            block_decks += len(topic_decks)
+            block_flashcards += flashcard_count
             block_topics.append(
                 {
                     "topic": topic,
                     "assignments": entries,
-                    "decks": topic_decks,
+                    "flashcards": flashcard_count,
                     "total": topic_total,
                     "done": topic_done,
                     "waiting": topic_waiting,
@@ -222,7 +218,7 @@ def _assemble(blocks, topics, assignments, decks, *, stats, student_view, query)
                 "waiting": block_waiting,
                 "revision": block_revision,
                 "assignments": block_count,
-                "decks": block_decks,
+                "flashcards": block_flashcards,
                 "progress": _percent(block_done, block_total),
             }
         )
@@ -230,7 +226,7 @@ def _assemble(blocks, topics, assignments, decks, *, stats, student_view, query)
         "blocks": len(result),
         "topics": sum(len(item["topics"]) for item in result),
         "assignments": sum(item["assignments"] for item in result),
-        "decks": sum(item["decks"] for item in result),
+        "flashcards": sum(item["flashcards"] for item in result),
         "done": sum(item["done"] for item in result),
         "total": sum(item["total"] for item in result),
         "waiting": sum(item["waiting"] for item in result),

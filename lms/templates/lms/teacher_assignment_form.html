@@ -34,27 +34,40 @@
                         {{ form.assignment_type }}
                     </div>
                     {{ form.assignment_type.errors }}
+                    <div class="callout" data-show-types="flashcards" style="margin-top:12px">
+                        {% icon "cards" %}
+                        <div>
+                            <p class="mb-0 strong">Карточки-тренажёр</p>
+                            <p class="mb-0 small">Ученик учит слова по интервалам повторения — сдавать ответ не нужно. После сохранения откроется страница карточек: добавьте слова вручную, списком или из готового шаблона.</p>
+                            {% if assignment and assignment.is_flashcards %}
+                                <p class="mb-0 small"><a href="{% url 'teacher_assignment_cards' assignment.pk %}">Перейти к карточкам ({{ assignment.card_total|default:0 }})</a></p>
+                            {% endif %}
+                        </div>
+                    </div>
                 </fieldset>
 
                 <fieldset class="form-section">
                     <legend>{% icon "sparkles" %}Быстрые шаблоны заданий</legend>
                     <p class="help-text">Выберите формат — заголовок, условия, тип сдачи и баллы подставятся в форму. Всё можно отредактировать перед сохранением.</p>
-                    <div class="preset-grid">
-                        {% for preset in presets %}
-                            <button type="button" class="preset-card" data-preset="{{ preset.id }}">
-                                <span class="preset-icon">{% icon preset.icon "icon" %}</span>
-                                <span class="preset-text">
-                                    <span class="preset-label">{{ preset.label }}</span>
-                                    <span class="preset-tagline">{{ preset.tagline }}</span>
-                                </span>
-                            </button>
-                        {% endfor %}
-                    </div>
+                    {% for group in preset_groups %}
+                        <p class="preset-topic">{% if group.kind == 'exam' %}Экзамены · {{ group.label }}{% else %}{{ group.label }}{% endif %}</p>
+                        <div class="preset-grid">
+                            {% for preset in group.items %}
+                                <button type="button" class="preset-card" data-preset="{{ preset.id }}">
+                                    <span class="preset-icon">{% icon preset.icon "icon" %}</span>
+                                    <span class="preset-text">
+                                        <span class="preset-label">{{ preset.label }}</span>
+                                        <span class="preset-tagline">{{ preset.tagline }}</span>
+                                    </span>
+                                </button>
+                            {% endfor %}
+                        </div>
+                    {% endfor %}
                     <p class="tiny muted mb-0" data-preset-hint aria-live="polite"></p>
                     <noscript>
                         <p class="tiny muted mb-0">Шаблоны подставляются скриптом: включите JavaScript или скопируйте условия из библиотеки курсов.</p>
                     </noscript>
-                    {{ presets|json_script:"assignment-presets" }}
+                    {{ preset_payload|json_script:"assignment-presets" }}
                     {{ skill_ids|json_script:"assignment-skill-ids" }}
                     {{ skills_by_type|json_script:"assignment-skills-by-type" }}
                 </fieldset>
@@ -178,6 +191,12 @@
     </div>
 
     <div class="split-side">
+        <div class="card card-pad-sm">
+            <p class="rail-title">{% icon "sparkles" %}ИИ-помощник</p>
+            <p class="small muted">Загрузите фото, Word, Excel, PDF или видео — помощник соберёт задание (а для упражнений — тест с вопросами) черновиком.</p>
+            <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_ai' %}?target=assignment{% if form.instance.topic_id %}&amp;topic={{ form.instance.topic_id }}{% endif %}">Собрать задание из материала</a>
+            <a class="btn btn-ghost btn-sm btn-block" href="{% url 'teacher_ai' %}?target=quiz">Собрать тест с вопросами</a>
+        </div>
         <div class="card card-pad-sm">
             <p class="rail-title">Как собрать задание</p>
             <ol class="col tiny muted rail-list">

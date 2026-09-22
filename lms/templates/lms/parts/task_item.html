@@ -10,7 +10,11 @@
         <a class="task-title" href="{% url 'assignment_detail' assignment.pk %}">{{ assignment.title }}</a>
         <span class="task-meta">
             <span class="tag">{% icon assignment.assignment_type|type_icon "icon icon-sm" %}{{ assignment.get_assignment_type_display }}</span>
-            <span class="tnum">{{ assignment.max_points }} б.</span>
+            {% if assignment.is_flashcards %}
+                <span class="tnum">{{ assignment.card_total|default:0 }} карт.</span>
+            {% else %}
+                <span class="tnum">{{ assignment.max_points }} б.</span>
+            {% endif %}
             {% if assignment.deadline %}
                 <span class="{% if assignment.deadline|due_state == 'late' %}badge badge-needs_revision{% endif %}">
                     {% icon "calendar" "icon icon-sm" %}{{ assignment.deadline|human_due }}
@@ -19,7 +23,9 @@
         </span>
     </span>
     <span class="task-side">
-        {% if state.status %}
+        {% if assignment.is_flashcards %}
+            <a class="btn btn-secondary btn-sm" href="{% url 'trainer_session' assignment.pk %}">{% icon "play" %}Тренировать</a>
+        {% elif state.status %}
             <span class="badge badge-{{ state.status }}">{% icon state.status|status_icon "icon icon-sm" %}{{ state.status|status_label }}</span>
             {% if state.grade != None %}
                 <span class="grade-pill tnum {{ state.grade|grade_class:state.max_points }}">{{ state.grade }}<small>/{{ state.max_points }}</small></span>

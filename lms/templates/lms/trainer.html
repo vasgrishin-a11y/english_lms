@@ -8,7 +8,7 @@
 <div class="classes-head">
     <div>
         <h1 class="classes-title">Тренажёр слов</h1>
-        <p class="muted small mb-0">Карточки по SM-2: 4 режима тренировки, как в ProgressMe — личный словарь + наборы из тем. Сессия 3–7 минут.</p>
+        <p class="muted small mb-0">Карточки по SM-2: личный словарь и задания с карточками из курса. Сессия 3–7 минут.</p>
     </div>
     <div class="classes-toolbar">
         {% if due_total %}<span class="badge badge-submitted">{% icon "clock" "icon icon-sm" %}К повтору: {{ due_total }}</span>{% endif %}
@@ -16,25 +16,25 @@
     </div>
 </div>
 
-{% if decks %}
+{% if card_sets %}
     <div class="class-grid">
-        {% for deck in decks %}
-            <a class="class-card" href="{% url 'trainer_session' deck.pk %}">
-                {% if deck.due_count %}
-                    {% include "lms/parts/cover.html" with name=deck.title badge=deck.due_count badge_suffix=" к повтору" badge_class="badge-submitted" %}
+        {% for item in card_sets %}
+            <a class="class-card" href="{{ item.session_url }}">
+                {% if item.due_count %}
+                    {% include "lms/parts/cover.html" with name=item.title badge=item.due_count badge_suffix=" к повтору" badge_class="badge-submitted" %}
                 {% else %}
-                    {% include "lms/parts/cover.html" with name=deck.title badge="повторено" badge_class="badge-checked" %}
+                    {% include "lms/parts/cover.html" with name=item.title badge="повторено" badge_class="badge-checked" %}
                 {% endif %}
                 <div class="class-body">
-                    <h2 class="class-title">{{ deck.title }}</h2>
+                    <h2 class="class-title">{{ item.title }}</h2>
                     <div class="class-meta">
-                        <span>{% if deck.is_personal %}Мой словарь{% else %}{{ deck.topic.block.name }} · {{ deck.topic.title }}{% endif %}</span>
+                        <span>{% if item.is_personal %}Личный словарь{% else %}{{ item.subtitle }}{% endif %}</span>
                         <span aria-hidden="true">·</span>
-                        <span class="tnum">{{ deck.card_total }} карточек</span>
+                        <span class="tnum">{{ item.card_total }} карточек</span>
                     </div>
                     <div class="class-foot">
-                        <span class="progress-dots">{% for _ in "12345"|slice:":3" %}<span class="progress-dot {% if deck.due_count %}is-current{% else %}is-done{% endif %}"></span>{% endfor %}</span>
-                        <span class="tiny muted">изучено {{ deck.reviewed_count }}/{{ deck.card_total }}</span>
+                        <span class="progress-dots">{% for _ in "12345"|slice:":3" %}<span class="progress-dot {% if item.due_count %}is-current{% else %}is-done{% endif %}"></span>{% endfor %}</span>
+                        <span class="tiny muted">изучено {{ item.reviewed_count }}/{{ item.card_total }}</span>
                     </div>
                 </div>
             </a>
@@ -47,8 +47,8 @@
     <div class="card">
         <div class="empty">
             <div class="empty-ill">🗂️</div>
-            <h3>Наборов карточек пока нет</h3>
-            <p>Как только преподаватель добавит квизлеты к темам, они появятся здесь — карточками с обложками, как в ProgressMe Classes. А пока — начните с личного словаря.</p>
+            <h3>Карточек пока нет</h3>
+            <p>Личный словарь уже готов к работе. Задания с карточками появятся здесь, когда преподаватель их опубликует.</p>
             <div class="row">
                 <a class="btn" href="{% url 'student_dictionary' %}">{% icon "language" %}Мой словарь</a>
                 <a class="btn btn-secondary" href="{% url 'student_assignments' %}">К заданиям</a>

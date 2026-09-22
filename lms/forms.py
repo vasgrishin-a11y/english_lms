@@ -6,6 +6,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.utils.text import slugify
 
+from . import ai
 from .models import (
     Assignment,
     Block,
@@ -13,7 +14,6 @@ from .models import (
     CommentSnippet,
     Feedback,
     Flashcard,
-    FlashcardDeck,
     Group,
     Profile,
     Question,
@@ -435,7 +435,7 @@ class CommentSnippetForm(forms.ModelForm):
 
 
 class DictionaryWordForm(forms.Form):
-    """Слово в личный словарь ученика (ProgressMe-подобный «словарь с тренировки»)."""
+    """Слово в личный словарь ученика: слово и перевод со страницы задания."""
 
     term = forms.CharField(
         label="Слово или фраза",
@@ -453,21 +453,6 @@ class DictionaryWordForm(forms.Form):
         max_length=500,
         widget=forms.TextInput(attrs={"placeholder": "I'd like to book a table for two."}),
     )
-
-
-class FlashcardDeckForm(forms.ModelForm):
-    class Meta:
-        model = FlashcardDeck
-        fields = ["topic", "title", "description", "order", "is_active"]
-        widgets = {
-            "title": forms.TextInput(attrs={"placeholder": "Например: Travel vocabulary"}),
-            "description": forms.Textarea(attrs={"rows": 2}),
-        }
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Тема обязательна для учебных наборов; личные словари создаёт сервис.
-        self.fields["topic"].required = True
 
 
 class FlashcardForm(forms.ModelForm):
@@ -770,3 +755,111 @@ class StudentEditForm(forms.ModelForm):
                 user.student_groups.set(self.cleaned_data["group_ids"])
 
         return user
+
+
+class AIMaterialForm(forms.Form):
+    """ИИ-помощник: файл (фото, Word, Excel, PDF, видео) или текст + пожелания.
+
+    Материал всегда превращается в черновики курса: помощник ничего не публикует.
+    """
+
+    target = forms.ChoiceField(
+        label="Что собрать",
+        choices=ai.TARGETS,
+        initial="mixed",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    prompt = forms.CharField(
+        label="Пожелания к материалу",
+        required=False,
+        widget=forms.Textarea(
+            attrs={
+                "rows": 3,
+                "placeholder": (
+                    "Например: сделай блок B1 по теме Travel, три темы, тест на Present "
+                    "Perfect и набор карточек"
+                ),
+            }
+        ),
+    )
+    text = forms.CharField(
+        label="Или вставьте текст материала",
+        required=False,
+        widget=forms.Textarea(
+            attrs={
+                "rows": 8,
+                "placeholder": (
+                    "# Блок\n## Тема\n### Задание [quiz]\n? Вопрос\n* верный вариант\n"
+                    "- неверный вариант\n- слово | перевод | пример"
+                ),
+            }
+        ),
+    )
+    upload = forms.FileField(
+        label="Файл материала",
+        required=False,
+        widget=forms.ClearableFileInput(
+            attrs={
+                "accept": ",".join(sorted(ai.UPLOAD_EXTENSIONS)),
+                "data-ai-upload": "1",
+            }
+        ),
+        help_text=(
+            "Фото страницы, Word, Excel, PDF, видео или текстовый файл — до {mb} МБ.".format(
+                mb=ai.max_upload_bytes() // (1024 * 1024)
+            )
+        ),
+    )
+    target_topic = forms.ModelChoiceField(
+        queryset=Topic.objects.none(),
+        required=False,
+        label="Добавить в существующую тему",
+        empty_label="Нет — создать новые блоки и темы",
+        help_text="Если выбрано, задания и карточки попадут прямо в эту тему.",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["target_topic"].queryset = (
+            Topic.objects.select_related("block")
+            .filter(is_active=True, block__is_active=True)
+            .order_by("block__order", "block__name", "order", "title")
+        )
+        self.fields["target_topic"].label_from_instance = lambda obj: (
+            f"[{obj.block.name}] {obj.title}"
+        )
+
+    def clean_upload(self):
+        upload = self.cleaned_data.get("upload")
+        if not upload:
+            return None
+        extension = ai.extension_of(upload.name)
+        if extension not in ai.UPLOAD_EXTENSIONS:
+            raise forms.ValidationError(
+                "Такой формат не поддерживается: загрузите фото, Word, Excel, PDF, видео "
+                "или текстовый файл."
+            )
+        limit = ai.max_upload_bytes()
+        if upload.size > limit:
+            raise forms.ValidationError(
+                "Файл больше {mb} МБ — разделите материал на части.".format(
+                    mb=limit // (1024 * 1024)
+                )
+            )
+        return upload
+
+    def clean(self):
+        cleaned = super().clean()
+        has_input = any(
+            (
+                cleaned.get("upload"),
+                (cleaned.get("text") or "").strip(),
+                (cleaned.get("prompt") or "").strip(),
+            )
+        )
+        if not has_input:
+            raise forms.ValidationError(
+                "Приложите файл, вставьте текст или опишите задачу словами."
+            )
+        return cleaned

@@ -438,7 +438,7 @@
       readJsonScript("assignment-presets") ||
       readJsonScript("block-suggestions") ||
       readJsonScript("topic-suggestions") ||
-      readJsonScript("deck-presets");
+      readJsonScript("card-presets");
     if (!data || !data.length) return;
     var skillIds = readJsonScript("assignment-skill-ids") || {};
     var hint = document.querySelector("[data-preset-hint]");
@@ -472,7 +472,7 @@
         if (ignored.indexOf(name) > -1) return;
         setFieldValue(form, name, fields[name]);
       });
-      // У формы квизлета есть скрытое поле preset_id: сервер создаст карточки
+      // У формы карточек есть скрытое поле preset_id: сервер создаст карточки
       // из шаблона сразу при сохранении. У остальных форм поля нет — no-op.
       if (item.id) setFieldValue(form, "preset_id", item.id);
       if (item.skills && item.skills.length) {
@@ -655,7 +655,10 @@
     var root = document.documentElement;
     function sync() {
       var collapsed = root.getAttribute("data-nav") === "collapsed";
+      var label = collapsed ? "Развернуть меню" : "Свернуть меню";
       button.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      button.setAttribute("aria-label", label);
+      button.setAttribute("title", label);
     }
     sync();
     button.addEventListener("click", function () {
@@ -674,15 +677,15 @@
     });
   }
 
-  function deckPresetFill() {
-    var cards = readJsonScript("deck-preset-cards");
+  function cardPresetFill() {
+    var cards = readJsonScript("card-preset-cards");
     if (!cards) return;
-    var hint = document.querySelector("[data-deck-cards-hint]");
+    var hint = document.querySelector("[data-card-preset-hint]");
     Array.prototype.forEach.call(
-      document.querySelectorAll("[data-deck-cards]"),
+      document.querySelectorAll("[data-card-preset]"),
       function (button) {
         button.addEventListener("click", function () {
-          var text = cards[button.getAttribute("data-deck-cards")];
+          var text = cards[button.getAttribute("data-card-preset")];
           if (!text) return;
           // Форма массового импорта с префиксом bulk: имя поля bulk-cards_text.
           var area = document.querySelector(
@@ -709,7 +712,7 @@
     );
   }
 
-  function deckLevelFilter() {
+  function presetLevelFilter() {
     Array.prototype.forEach.call(
       document.querySelectorAll("[data-level-filter]"),
       function (bar) {
@@ -943,8 +946,8 @@
     deadlineShortcuts();
     quizTiles();
     navToggle();
-    deckPresetFill();
-    deckLevelFilter();
+    cardPresetFill();
+    presetLevelFilter();
     assignmentTypeForm();
     typeahead();
   });

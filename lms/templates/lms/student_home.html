@@ -91,7 +91,7 @@
                     <div class="class-body">
                         <h3 class="class-title">{{ block.name }}</h3>
                         <div class="class-meta">
-                            <span>{{ block_group.list|length }} заданий{% with dbc=deck_block_counts|get_item:block.pk %}{% if dbc %} + {{ dbc }} квиз.{% endif %}{% endwith %}</span>
+                            <span>{{ block_group.list|length }} заданий</span>
                             {% if block.cefr_level %}<span class="tag tag-cefr">{{ block.cefr_level }}</span>{% endif %}
                         </div>
                         <div class="class-foot">
@@ -110,7 +110,7 @@
         <div class="empty">
             <div class="empty-ill">📚</div>
             <h3>Заданий пока нет</h3>
-            <p>Как только преподаватель опубликует задания, они появятся здесь карточками с обложками, как в ProgressMe.</p>
+            <p>Как только преподаватель опубликует задания, они появятся здесь карточками с обложками.</p>
         </div>
     {% endif %}
 </section>
@@ -122,18 +122,18 @@
     </div>
     <div class="home-grid">
         <div>
-            <p class="small muted">Личный словарь · тренировка 4 режимами, как в ProgressMe: перевод по выделению, добавление в словарь, игровые режимы.</p>
-            {% if decks %}
+            <p class="small muted">Личный словарь и карточки из курса: интервальное повторение, сессия 3–7 минут.</p>
+            {% if card_sets %}
                 <div class="rows">
-                    {% for deck in decks|slice:":4" %}
+                    {% for item in card_sets|slice:":4" %}
                         <div class="row-item">
                             <span class="row-main">
-                                <span class="row-title">{% if deck.is_personal %}📚 {% endif %}{{ deck.title }}</span>
-                                <span class="row-meta">{{ deck.topic.block.name|default:"Мой словарь" }} · {{ deck.topic.title|default:"" }} · {{ deck.card_total }} слов</span>
+                                <span class="row-title">{% if item.is_personal %}📚 {% endif %}{{ item.title }}</span>
+                                <span class="row-meta">{{ item.subtitle }} · {{ item.card_total }} слов</span>
                             </span>
                             <span class="row-side">
-                                {% if deck.due_count %}<span class="badge badge-submitted tnum">{{ deck.due_count }} к повтору</span>{% endif %}
-                                <a class="btn btn-secondary btn-sm" href="{% url 'trainer_session' deck.pk %}">Тренировать</a>
+                                {% if item.due_count %}<span class="badge badge-submitted tnum">{{ item.due_count }} к повтору</span>{% endif %}
+                                <a class="btn btn-secondary btn-sm" href="{{ item.session_url }}">Тренировать</a>
                             </span>
                         </div>
                     {% endfor %}

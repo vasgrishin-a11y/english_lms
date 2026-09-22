@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="English LMS">
+  <title>English LMS</title>
+  <defs>
+    <linearGradient id="brandBookPage" x1="4" y1="3" x2="28" y2="29" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f3f7f3"/>
+      <stop offset="1" stop-color="#e4ede5"/>
+    </linearGradient>
+    <linearGradient id="brandBookEdge" x1="5" y1="4" x2="27" y2="28" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5c8a66"/>
+      <stop offset="1" stop-color="#2a9d94"/>
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="30" height="30" rx="9" fill="url(#brandBookPage)"/>
+  <rect x="1" y="1" width="30" height="30" rx="9" fill="none" stroke="url(#brandBookEdge)" stroke-width="1.6" opacity=".85"/>
+  <g fill="none" stroke="#3f5a47" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M16 10.4c-1.9-1.8-4.4-2.5-7.4-2.5v13.7c3 0 5.5.7 7.4 2.5 1.9-1.8 4.4-2.5 7.4-2.5V7.9c-3 0-5.5.7-7.4 2.5Z"/>
+    <path d="M16 10.4v13.7"/>
+  </g>
+  <path fill="#2a9d94" d="M18.3 9.1h3.5v7l-1.8-1.5-1.7 1.5v-7Z"/>
+</svg>

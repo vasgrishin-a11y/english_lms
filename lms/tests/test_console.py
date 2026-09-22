@@ -1,4 +1,4 @@
-"""Консоль преподавателя: проверка, курс, тесты, квизлеты, ученики, аналитика.
+"""Консоль преподавателя: проверка, курс, тесты, карточки, ученики, аналитика.
 
 Консоль — единственный рабочий интерфейс преподавателя, поэтому здесь pokryты
 и счастливые пути, и защитные сценарии: конфликт версий, защищённые удаления,
@@ -18,7 +18,6 @@ from lms.models import (
     Choice,
     CommentSnippet,
     Flashcard,
-    FlashcardDeck,
     Group,
     Profile,
     Question,
@@ -690,21 +689,43 @@ class QuestionEditorTests(LMSCase):
         self.assertEqual(self.assignment.max_points, 2)
 
 
-class DeckEditorTests(LMSCase):
-    def test_create_deck_and_go_to_cards(self):
-        response = self.teacher_client.post(
-            "/teacher/curriculum/decks/new/",
-            {"topic": self.topic.pk, "title": "Travel", "description": "", "order": 1},
-        )
-        deck = FlashcardDeck.objects.get(title="Travel")
+class AssignmentCardsTests(LMSCase):
+    """Карточки живут внутри задания: страница карточек, импорт и защита прогресса."""
+
+    def cards_url(self, assignment):
+        return f"/teacher/curriculum/assignments/{assignment.pk}/cards/"
+
+    def test_legacy_card_url_redirects_to_new_place(self):
+        response = self.teacher_client.get("/teacher/curriculum/decks/new/")
+        self.assertRedirects(response, "/teacher/curriculum/assignments/new/?type=flashcards")
         self.assertRedirects(
-            response, f"/teacher/curriculum/decks/{deck.pk}/cards/", fetch_redirect_response=False
+            self.teacher_client.get("/teacher/curriculum/decks/5/cards/"),
+            "/teacher/curriculum/",
         )
 
-    def test_add_single_card(self):
-        deck = FlashcardDeck.objects.create(topic=self.topic, title="Travel")
+    def test_flashcard_assignment_leads_to_cards_page(self):
         response = self.teacher_client.post(
-            f"/teacher/curriculum/decks/{deck.pk}/cards/",
+            "/teacher/curriculum/assignments/new/",
+            {
+                "topic": self.topic.pk,
+                "title": "Travel",
+                "description": "Слова темы",
+                "assignment_type": Assignment.Type.FLASHCARDS,
+                "max_points": 0,
+                "status": Assignment.Publication.DRAFT,
+                "skills": [],
+                "order": 0,
+            },
+        )
+        assignment = Assignment.objects.get(title="Travel")
+        self.assertEqual(assignment.assignment_type, Assignment.Type.FLASHCARDS)
+        self.assertRedirects(response, self.cards_url(assignment), fetch_redirect_response=False)
+
+    def test_add_single_card(self):
+        assignment = self.card_assignment(title="Travel")
+        url = self.cards_url(assignment)
+        response = self.teacher_client.post(
+            url,
             {
                 "card-front": "departure",
                 "card-back": "отправление",
@@ -712,16 +733,17 @@ class DeckEditorTests(LMSCase):
                 "card-order": 0,
             },
         )
-        self.assertRedirects(response, f"/teacher/curriculum/decks/{deck.pk}/cards/")
-        card = deck.cards.get()
+        self.assertRedirects(response, url)
+        card = assignment.cards.get()
         self.assertEqual(card.front, "departure")
         self.assertEqual(card.order, 1)
 
     def test_bulk_import_appends_and_can_replace(self):
-        deck = FlashcardDeck.objects.create(topic=self.topic, title="Travel")
-        Flashcard.objects.create(deck=deck, front="old", back="старое", order=1)
+        assignment = self.card_assignment(title="Travel")
+        Flashcard.objects.create(assignment=assignment, front="old", back="старое", order=1)
+        url = self.cards_url(assignment)
         response = self.teacher_client.post(
-            f"/teacher/curriculum/decks/{deck.pk}/cards/",
+            url,
             {
                 "bulk-cards_text": (
                     "# комментарий пропускается\n"
@@ -730,54 +752,60 @@ class DeckEditorTests(LMSCase):
                 )
             },
         )
-        self.assertRedirects(response, f"/teacher/curriculum/decks/{deck.pk}/cards/")
-        self.assertEqual(deck.cards.count(), 3)
-        self.assertEqual(deck.cards.get(front="departure").example, "The departure time changed.")
+        self.assertRedirects(response, url)
+        self.assertEqual(assignment.cards.count(), 3)
+        self.assertEqual(
+            assignment.cards.get(front="departure").example, "The departure time changed."
+        )
 
         response = self.teacher_client.post(
-            f"/teacher/curriculum/decks/{deck.pk}/cards/",
-            {"bulk-cards_text": "gate | выход", "bulk-replace": "on"},
+            url, {"bulk-cards_text": "gate | выход", "bulk-replace": "on"}
         )
-        self.assertEqual(deck.cards.count(), 1)
-        self.assertEqual(deck.cards.get().front, "gate")
+        self.assertEqual(assignment.cards.count(), 1)
+        self.assertEqual(assignment.cards.get().front, "gate")
         self.assertEqual(response.status_code, 302)
 
     def test_bulk_import_validates_lines(self):
-        deck = FlashcardDeck.objects.create(topic=self.topic, title="Travel")
+        assignment = self.card_assignment(title="Travel")
+        url = self.cards_url(assignment)
         for bad in ["only-front", "a | b | c | d", "| b", "a |"]:
             with self.subTest(line=bad):
-                response = self.teacher_client.post(
-                    f"/teacher/curriculum/decks/{deck.pk}/cards/", {"bulk-cards_text": bad}
-                )
+                response = self.teacher_client.post(url, {"bulk-cards_text": bad})
                 self.assertEqual(response.status_code, 200)
                 self.assertTrue(response.context["bulk_form"].errors)
-        self.assertEqual(deck.cards.count(), 0)
+        self.assertEqual(assignment.cards.count(), 0)
 
-    def test_delete_card_and_deck(self):
-        deck = FlashcardDeck.objects.create(topic=self.topic, title="Travel")
-        card = Flashcard.objects.create(deck=deck, front="a", back="b", order=1)
+    def test_card_preset_can_be_added_directly(self):
+        assignment = self.card_assignment(title="Travel")
+        response = self.teacher_client.post(
+            self.cards_url(assignment), {"preset_id": "travel-a2", "_preset": "1"}
+        )
+        self.assertRedirects(response, self.cards_url(assignment))
+        self.assertGreater(assignment.cards.count(), 0)
+
+    def test_delete_card_keeps_assignment(self):
+        assignment = self.card_assignment(title="Travel")
+        card = Flashcard.objects.create(assignment=assignment, front="a", back="b", order=1)
         self.teacher_client.post(f"/teacher/curriculum/cards/{card.pk}/delete/")
-        self.assertEqual(deck.cards.count(), 0)
+        self.assertEqual(assignment.cards.count(), 0)
+        self.assertTrue(Assignment.objects.filter(pk=assignment.pk).exists())
 
-        self.teacher_client.post(f"/teacher/curriculum/decks/{deck.pk}/delete/")
-        self.assertFalse(FlashcardDeck.objects.filter(pk=deck.pk).exists())
-
-    def test_deck_with_learner_progress_is_protected(self):
-        deck = FlashcardDeck.objects.create(topic=self.topic, title="Travel")
-        card = Flashcard.objects.create(deck=deck, front="a", back="b", order=1)
+    def test_assignment_with_learner_progress_is_not_silently_lost(self):
+        assignment = self.card_assignment(title="Travel")
+        card = Flashcard.objects.create(assignment=assignment, front="a", back="b", order=1)
         CardReview.objects.create(card=card, student=self.student)
-        response = self.teacher_client.post(f"/teacher/curriculum/decks/{deck.pk}/delete/")
-        self.assertRedirects(response, "/teacher/curriculum/")
-        self.assertTrue(FlashcardDeck.objects.filter(pk=deck.pk).exists())
+        response = self.teacher_client.post(self.cards_url(assignment))
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(CardReview.objects.count(), 1)
 
-    def test_inactive_deck_is_hidden_from_students(self):
-        deck = FlashcardDeck.objects.create(topic=self.topic, title="Travel", is_active=False)
-        Flashcard.objects.create(deck=deck, front="a", back="b", order=1)
+    def test_inactive_card_assignment_is_hidden_from_students(self):
+        assignment = self.card_assignment(title="Travel", is_active=False)
+        Flashcard.objects.create(assignment=assignment, front="a", back="b", order=1)
         response = self.student_client.get("/trainer/")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.context["decks"]), 0)
-        self.assertEqual(self.student_client.get(f"/trainer/{deck.pk}/").status_code, 404)
+        course_sets = [item for item in response.context["card_sets"] if not item["is_personal"]]
+        self.assertEqual(course_sets, [])
+        self.assertEqual(self.student_client.get(f"/trainer/{assignment.pk}/").status_code, 404)
 
 
 class StudentDirectoryTests(LMSCase):

@@ -19,7 +19,7 @@
     <span class="pill is-active turquoise">{% icon assignment.assignment_type|type_icon "icon icon-sm" %}{{ assignment.get_assignment_type_display }}</span>
     {% if assignment.topic.block.cefr_level %}<span class="tag tag-cefr">{{ assignment.topic.block.cefr_level }}</span>{% endif %}
     {% for skill in assignment.skills.all %}<span class="tag">{% icon skill.kind|skill_icon "icon icon-sm" %}{{ skill.name }}</span>{% endfor %}
-    <span class="tiny muted tnum">{{ assignment.max_points }} баллов</span>
+    {% if not assignment.is_flashcards %}<span class="tiny muted tnum">{{ assignment.max_points }} баллов</span>{% endif %}
 </div>
 
 <div class="lesson-shell">
@@ -45,13 +45,42 @@
                 </div>
             {% endif %}
 
-            <div class="callout" style="margin-top:16px">
-                {% icon "info" %}
-                <div>
-                    <p class="mb-0 strong">Как сдавать</p>
-                    <p class="mb-0 small">Отправленный ответ изменить нельзя — каждая отправка создаёт новую попытку. Текст сохраняется в черновик автоматически, как в ProgressMe.</p>
+            {% if assignment.is_flashcards %}
+                <div class="callout" style="margin-top:16px">
+                    {% icon "cards" %}
+                    <div>
+                        <p class="mb-0 strong">Как учить слова</p>
+                        <p class="mb-0 small">Сдавать ответ не нужно: тренажёр показывает карточки по интервалам повторения и сам ведёт прогресс. Откройте сессию — и отмечайте, насколько уверенно вспомнили слово.</p>
+                    </div>
                 </div>
-            </div>
+                <div class="row" style="margin-top:16px">
+                    <a class="btn" href="{% url 'trainer_session' assignment.pk %}">{% icon "play" %}Тренировать {{ cards|length }} слов</a>
+                    {% if trainer_queue.due %}<span class="badge badge-submitted tnum">К повтору: {{ trainer_queue.due }}</span>{% endif %}
+                </div>
+                {% if cards %}
+                    <ul class="card-grid" style="margin-top:16px">
+                        {% for card in cards %}
+                            <li>
+                                <div class="panel" style="height:100%;display:flex;flex-direction:column;gap:6px">
+                                    <strong style="font-size:var(--fs-18)">{{ card.front }}</strong>
+                                    <span class="small">{{ card.back }}</span>
+                                    {% if card.example %}<span class="tiny muted">«{{ card.example }}»</span>{% endif %}
+                                </div>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="small muted" style="margin-top:12px">Преподаватель ещё не добавил слова — загляните позже.</p>
+                {% endif %}
+            {% else %}
+                <div class="callout" style="margin-top:16px">
+                    {% icon "info" %}
+                    <div>
+                        <p class="mb-0 strong">Как сдавать</p>
+                        <p class="mb-0 small">Отправленный ответ изменить нельзя — каждая отправка создаёт новую попытку. Текст сохраняется в черновик автоматически.</p>
+                    </div>
+                </div>
+            {% endif %}
         </section>
 
         {% if assignment.is_quiz %}
@@ -118,13 +147,15 @@
             </section>
         {% endif %}
 
-        <section class="card">
-            <div class="card-head">
-                <h2 class="card-title">{% icon "clock" %}История попыток</h2>
-                <span class="tiny muted">Каждая попытка неизменяема</span>
-            </div>
-            {% include "lms/attempt_history.html" %}
-        </section>
+        {% if not assignment.is_flashcards %}
+            <section class="card">
+                <div class="card-head">
+                    <h2 class="card-title">{% icon "clock" %}История попыток</h2>
+                    <span class="tiny muted">Каждая попытка неизменяема</span>
+                </div>
+                {% include "lms/attempt_history.html" %}
+            </section>
+        {% endif %}
     </div>
 
     <aside class="lesson-side">
@@ -132,7 +163,7 @@
             <div>
                 {% icon "play" "icon icon-xl" %}
                 <p class="strong mb-0" style="margin-top:8px">Видео-урок</p>
-                <p class="tiny muted mb-0">Здесь может быть встроенная видеосвязь, как в ProgressMe Virtual Class. Пока — материалы задания.</p>
+                <p class="tiny muted mb-0">Встроенная видеосвязь появится позже. Пока — материалы задания.</p>
             </div>
         </div>
 
@@ -151,6 +182,7 @@
             <button class="btn btn-secondary btn-sm btn-block" style="margin-top:12px" disabled>{% icon "check-circle" %}Finish this unit</button>
         </div>
 
+        {% if not assignment.is_flashcards %}
         <div class="card card-pad-sm">
             <p class="rail-title">Статус</p>
             {% if submission %}
@@ -172,6 +204,7 @@
                 <p class="small muted mb-0">Ответ ещё не отправлен.</p>
             {% endif %}
         </div>
+        {% endif %}
 
         {% if assignment.deadline %}
             <div class="card card-pad-sm">
@@ -185,11 +218,13 @@
             <p class="rail-title">Тема и словарь</p>
             <p class="small mb-0"><strong>{{ assignment.topic.title }}</strong></p>
             <p class="tiny muted mb-0">{{ assignment.topic.block.name }}{% if assignment.topic.block.cefr_level %} · {{ assignment.topic.block.cefr_level }}{% endif %}</p>
-            {% for deck in assignment.topic.decks.all %}
-                <a class="chip" style="margin-top:8px" href="{% url 'trainer_session' deck.pk %}">{% icon "cards" "icon icon-sm" %}{{ deck.title }}</a>
-            {% empty %}
-                <p class="tiny muted mb-0" style="margin-top:8px">Карточек для этой темы пока нет.</p>
-            {% endfor %}
+            {% if trainer_cards %}
+                {% for item in trainer_cards %}
+                    <a class="chip" style="margin-top:8px" href="{% url 'trainer_session' item.pk %}">{% icon "cards" "icon icon-sm" %}{{ item.title }}</a>
+                {% endfor %}
+            {% else %}
+                <p class="tiny muted mb-0" style="margin-top:8px">Заданий с карточками в этой теме пока нет.</p>
+            {% endif %}
             <a class="btn btn-ghost btn-sm btn-block" href="{% url 'student_dictionary' %}" style="margin-top:8px">{% icon "language" %}Мой словарь</a>
         </div>
     </aside>
