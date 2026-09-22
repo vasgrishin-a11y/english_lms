@@ -1,0 +1,49 @@
+{% load lms_tags %}
+<div id="quiz-editor" class="quiz-editor">
+    <section class="card">
+        <div class="card-head">
+            <h2 class="card-title">{% icon "list" %}Вопросы теста</h2>
+            <p class="tiny muted mb-0">Максимум баллов: <strong class="tnum">{{ total_points }}</strong> из {{ questions|length }} вопросов.</p>
+        </div>
+        {% if questions %}
+            <ol class="col list-plain">
+                {% for question in questions %}
+                    <li class="panel" style="margin-bottom:8px">
+                        <div class="row row-tight">
+                            <strong>{{ forloop.counter }}. {{ question.text }}</strong>
+                            <span class="tag">{{ question.get_kind_display }}</span>
+                            <span class="tiny muted tnum">{{ question.points }} б.</span>
+                        </div>
+                        {% include "lms/parts/question_choices.html" with reveal=True %}
+                        {% if question.explanation %}<p class="tiny muted mb-0" style="margin-top:6px">{% icon "lightbulb" "icon icon-sm" %} {{ question.explanation }}</p>{% endif %}
+                        <div class="row" style="margin-top:8px">
+                            <a class="btn btn-secondary btn-sm" href="{% url 'teacher_question_edit' question.pk %}">{% icon "pencil" %}Изменить</a>
+                            <form method="post" action="{% url 'teacher_question_delete' question.pk %}" data-confirm="Удалить вопрос «{{ question.text|truncatechars:60 }}»?">
+                                {% csrf_token %}
+                                <button class="btn btn-danger-ghost btn-sm" type="submit">{% icon "trash" %}Удалить</button>
+                            </form>
+                        </div>
+                    </li>
+                {% endfor %}
+            </ol>
+        {% else %}
+            <div class="empty">
+                <div class="empty-icon">{% icon "list" "icon icon-xl" %}</div>
+                <h3>Вопросов пока нет</h3>
+                <p>Добавьте первый вопрос. Тест без вопросов ученик сдать не сможет.</p>
+            </div>
+        {% endif %}
+    </section>
+    <section class="card card-pad-sm">
+        <div class="card-head" style="margin-bottom:12px"><h2 class="card-title">{% icon "plus" %}Новый вопрос</h2></div>
+        <form method="post" action="{% url 'teacher_questions' assignment.pk %}" novalidate
+              hx-post="{% url 'teacher_questions' assignment.pk %}"
+              hx-target="#quiz-editor"
+              hx-swap="outerHTML">
+            {% csrf_token %}
+            {% include "lms/form_fields.html" %}
+            <button class="btn btn-block" type="submit">{% icon "plus" %}Добавить вопрос</button>
+        </form>
+        <p class="tiny muted">Один вариант оценивается целиком; в тесте на несколько вариантов балл делится между верными; в соответствиях — по числу верных пар.</p>
+    </section>
+</div>

@@ -20,6 +20,7 @@ from django.views.decorators.http import require_GET
 
 from .decorators import get_user_role
 from .models import Assignment, Profile, Submission
+from .search import student_suggest, teacher_suggest
 
 logger = logging.getLogger(__name__)
 
@@ -62,10 +63,23 @@ def _add_validation_errors(form, error):
 
 @login_required
 @require_GET
-def dashboard(request):
-    """Единая точка входа: учитель попадает в консоль проверки, ученик — на свою главную."""
+def suggest(request):
+    """Подсказки поиска: только объекты из БД, в контексте роли и экрана."""
+    query = request.GET.get("q", "")
+    scope = request.GET.get("scope", "")
     if get_user_role(request.user) == Profile.Role.TEACHER:
-        return redirect("teacher_review_queue")
+        items = teacher_suggest(scope, query)
+    else:
+        items = student_suggest(scope, query, request.user)
+    return JsonResponse({"items": items})
+
+
+@login_required
+@require_GET
+def dashboard(request):
+    """Единая точка входа: учитель — в консоль, ученик — на свою главную."""
+    if get_user_role(request.user) == Profile.Role.TEACHER:
+        return redirect("teacher_home")
     return redirect("student_home")
 
 

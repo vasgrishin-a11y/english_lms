@@ -65,11 +65,11 @@ from .models import (
     Group,
     Profile,
     Question,
-    Skill,
     Submission,
     Topic,
 )
 from .services import ConflictError, review_submission
+from .skills import skills_for_type, type_skill_payload
 from .views import _add_validation_errors
 
 logger = logging.getLogger(__name__)
@@ -703,10 +703,13 @@ def assignment_form(request, pk=None):
     initial = {}
     if request.GET.get("topic"):
         initial["topic"] = request.GET["topic"]
+    if pk is None and request.method != "POST":
+        initial["skills"] = [skill.pk for skill in skills_for_type(Assignment.Type.TEXT)]
     form = AssignmentForm(
         request.POST or None, request.FILES or None, instance=assignment, initial=initial or None
     )
     if request.method == "POST" and form.is_valid():
+        is_new = assignment is None
         instance = form.save()
         messages.success(
             request,
@@ -714,9 +717,17 @@ def assignment_form(request, pk=None):
             if instance.status == Assignment.Publication.DRAFT
             else f"Задание сохранено: {instance.title}",
         )
-        if request.POST.get("_save_questions"):
+        if request.POST.get("_save_questions") or (is_new and instance.is_quiz):
             return redirect("teacher_questions", pk=instance.pk)
         return redirect("teacher_curriculum")
+    skill_payload = type_skill_payload()
+    question_items = []
+    question_form = None
+    if assignment and assignment.is_quiz:
+        question_items = list(
+            assignment.questions.prefetch_related("choices").order_by("order", "pk")
+        )
+        question_form = QuestionForm()
     return render(
         request,
         "lms/teacher_assignment_form.html",
@@ -728,8 +739,12 @@ def assignment_form(request, pk=None):
             ),
             "groups": Group.objects.filter(is_active=True).order_by("name"),
             "presets": ASSIGNMENT_PRESETS,
-            "skill_ids": {skill.slug: skill.pk for skill in Skill.objects.all()},
+            "skill_ids": skill_payload["ids"],
+            "skills_by_type": skill_payload["by_type"],
             "progress": _submission_progress(assignment) if assignment else None,
+            "questions": question_items,
+            "question_form": question_form,
+            "total_points": sum(item.points for item in question_items),
             "workspace": "curriculum",
         },
     )
@@ -871,19 +886,24 @@ def questions(request, pk):
         form.save_choices(question)
         _sync_quiz_points(assignment)
         messages.success(request, "Вопрос добавлен.")
-        return redirect("teacher_questions", pk=assignment.pk)
+        if request.headers.get("HX-Request"):
+            form = QuestionForm()
+        else:
+            return redirect("teacher_questions", pk=assignment.pk)
     items = list(assignment.questions.prefetch_related("choices").order_by("order", "pk"))
-    return render(
-        request,
-        "lms/teacher_questions.html",
-        {
-            "assignment": assignment,
-            "questions": items,
-            "form": form,
-            "total_points": sum(item.points for item in items),
-            "workspace": "curriculum",
-        },
+    context = {
+        "assignment": assignment,
+        "questions": items,
+        "form": form,
+        "total_points": sum(item.points for item in items),
+        "workspace": "curriculum",
+    }
+    template = (
+        "lms/parts/quiz_questions.html"
+        if request.headers.get("HX-Request")
+        else "lms/teacher_questions.html"
     )
+    return render(request, template, context)
 
 
 def _sync_quiz_points(assignment):

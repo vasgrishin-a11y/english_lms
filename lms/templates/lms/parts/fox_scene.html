@@ -1,24 +1,12 @@
 {% load static %}
-<div class="fox-scene" role="img" aria-label="Лиса бежит по лесной опушке к книгам, читает их, возвращается домой и спит">
-    <div class="fox-scene-sky" aria-hidden="true"></div>
-    <div class="fox-scene-trees" aria-hidden="true">
-        <span class="fox-tree" style="left:2%;font-size:22px">🌲</span>
-        <span class="fox-tree" style="left:9%;font-size:16px">🌲</span>
-        <span class="fox-tree" style="left:17%;font-size:26px">🌲</span>
-        <span class="fox-tree" style="left:30%;font-size:15px">🌲</span>
-        <span class="fox-tree" style="left:44%;font-size:24px">🌲</span>
-        <span class="fox-tree" style="left:58%;font-size:16px">🌲</span>
-        <span class="fox-tree" style="left:70%;font-size:25px">🌲</span>
-    </div>
-    <div class="fox-scene-ground" aria-hidden="true"></div>
-    <div class="fox-scene-path" aria-hidden="true"></div>
-    <div class="fox-scene-den" aria-hidden="true" title="Нора лисы">🦊🏠</div>
-    <div class="fox-scene-books" aria-hidden="true">
-        <img src="{% static 'lms/img/fox-books.svg' %}" alt="" width="44" height="34">
-    </div>
-    <div class="fox-runner" aria-hidden="true">
-        <img class="fox-runner-img" src="{% static 'lms/img/fox-run.svg' %}" alt="" width="52" height="36">
-        <span class="fox-read">📖</span>
-        <span class="fox-zzz"><i>z</i><i>Z</i><i>Z</i></span>
-    </div>
+<div class="fox-scene"
+     data-fox-scene
+     data-fox-src="{% static 'lms/img/fox-run.svg' %}"
+     data-books-src="{% static 'lms/img/fox-books.svg' %}"
+     role="img"
+     aria-label="Лиса бежит по лесной опушке к книгам, читает их, возвращается домой и спит">
+    <canvas class="fox-scene-canvas" width="640" height="46" aria-hidden="true"></canvas>
+    <noscript>
+        <img class="fox-scene-fallback" src="{% static 'lms/img/fox-run.svg' %}" alt="" width="52" height="36">
+    </noscript>
 </div>

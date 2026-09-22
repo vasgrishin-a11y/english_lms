@@ -63,7 +63,7 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
                 page.get_by_label("Пароль", exact=True).fill(password)
                 page.get_by_role("button", name="Войти", exact=True).click()
                 page.wait_for_url(
-                    "**/teacher/review/" if username == "browser_teacher" else "**/my/"
+                    "**/teacher/" if username == "browser_teacher" else "**/my/"
                 )
 
             try:

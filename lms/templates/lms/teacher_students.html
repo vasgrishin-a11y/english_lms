@@ -15,7 +15,7 @@
             <label for="id_q" class="sr-only">Поиск ученика</label>
             <div class="search">
                 {% icon "search" %}
-                <input type="search" id="id_q" name="q" maxlength="200" value="{{ query }}" placeholder="Имя, логин или Telegram…">
+                <input type="search" id="id_q" name="q" maxlength="200" value="{{ query }}" placeholder="Имя, логин или Telegram…" data-suggest="{% url 'suggest' %}" data-suggest-scope="students" autocomplete="off">
             </div>
             <button class="btn btn-secondary btn-sm" type="submit">Найти</button>
             {% if query %}<a class="btn btn-ghost btn-sm" href="{% url 'teacher_students' %}">Сбросить</a>{% endif %}

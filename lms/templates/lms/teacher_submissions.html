@@ -10,7 +10,7 @@
         <label for="id_q">Поиск</label>
         <div class="search">
             {% icon "search" %}
-            <input type="search" id="id_q" name="q" maxlength="200" value="{{ query }}" placeholder="Ученик, задание, тема…">
+            <input type="search" id="id_q" name="q" maxlength="200" value="{{ query }}" placeholder="Ученик, задание, тема…" data-suggest="{% url 'suggest' %}" data-suggest-scope="review" autocomplete="off">
         </div>
         <div class="form-field" style="margin-top:12px">
             <label for="id_status">Статус</label>

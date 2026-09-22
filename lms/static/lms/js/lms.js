@@ -482,6 +482,8 @@
           })
           .filter(Boolean);
         if (ids.length) setFieldValue(form, "skills", ids);
+        var manual = form.querySelector("#id_skills_manual");
+        if (manual) manual.value = "1";
       }
     }
 
@@ -742,6 +744,193 @@
     );
   }
 
+  function assignmentTypeForm() {
+    var form = document.querySelector("[data-assignment-form]");
+    if (!form) return;
+    var typeField = form.elements.assignment_type;
+    var skillsField = form.elements.skills;
+    var manual = form.querySelector("#id_skills_manual");
+    var byType = readJsonScript("assignment-skills-by-type") || {};
+    var panels = document.querySelectorAll("[data-show-types]");
+
+    function selectedType() {
+      if (!typeField) return "";
+      if (typeof typeField.value === "string") return typeField.value;
+      for (var i = 0; i < typeField.length; i += 1) {
+        if (typeField[i].checked) return typeField[i].value;
+      }
+      return "";
+    }
+
+    function applySkills(type) {
+      if (!skillsField || (manual && manual.value === "1")) return;
+      var ids = (byType[type] || []).map(String);
+      setFieldValue(form, "skills", ids);
+    }
+
+    function syncPanels(type) {
+      Array.prototype.forEach.call(panels, function (panel) {
+        var allowed = (panel.getAttribute("data-show-types") || "").split(/\s+/);
+        var show = !type || allowed.indexOf(type) > -1;
+        panel.hidden = !show;
+      });
+    }
+
+    function onTypeChange() {
+      var type = selectedType();
+      applySkills(type);
+      syncPanels(type);
+    }
+
+    if (typeField) {
+      if (typeof typeField.length === "number" && typeField.type === undefined) {
+        Array.prototype.forEach.call(typeField, function (input) {
+          input.addEventListener("change", onTypeChange);
+        });
+      } else {
+        typeField.addEventListener("change", onTypeChange);
+      }
+    }
+    if (skillsField) {
+      var boxes =
+        typeof skillsField.length === "number" && skillsField.type === undefined
+          ? skillsField
+          : [skillsField];
+      Array.prototype.forEach.call(boxes, function (input) {
+        input.addEventListener("change", function () {
+          if (manual) manual.value = "1";
+        });
+      });
+    }
+    syncPanels(selectedType());
+  }
+
+  function typeahead() {
+    var inputs = document.querySelectorAll("[data-suggest]");
+    if (!inputs.length) return;
+
+    Array.prototype.forEach.call(inputs, function (input) {
+      var url = input.getAttribute("data-suggest");
+      var scope = input.getAttribute("data-suggest-scope") || "";
+      if (!url) return;
+      var host = input.closest(".search-pill, .search, form") || input.parentNode;
+      if (host && window.getComputedStyle(host).position === "static") {
+        host.style.position = "relative";
+      }
+      var list = document.createElement("ul");
+      list.className = "suggest-list";
+      list.hidden = true;
+      list.setAttribute("role", "listbox");
+      if (host) host.appendChild(list);
+      var timer = null;
+      var items = [];
+      var active = -1;
+
+      function close() {
+        list.hidden = true;
+        list.innerHTML = "";
+        items = [];
+        active = -1;
+      }
+
+      function highlight() {
+        var buttons = list.querySelectorAll(".suggest-item");
+        Array.prototype.forEach.call(buttons, function (button, index) {
+          button.classList.toggle("is-active", index === active);
+        });
+      }
+
+      function go(index) {
+        var item = items[index];
+        if (!item || !item.url) return;
+        window.location.href = item.url;
+      }
+
+      function render(next) {
+        items = next || [];
+        active = items.length ? 0 : -1;
+        list.innerHTML = "";
+        if (!items.length) {
+          close();
+          return;
+        }
+        items.forEach(function (item, index) {
+          var li = document.createElement("li");
+          var button = document.createElement("button");
+          button.type = "button";
+          button.className = "suggest-item";
+          button.setAttribute("role", "option");
+          var label = document.createElement("span");
+          label.className = "suggest-item-label";
+          label.textContent = item.label || "";
+          button.appendChild(label);
+          if (item.hint) {
+            var hint = document.createElement("span");
+            hint.className = "suggest-item-hint";
+            hint.textContent = item.hint;
+            button.appendChild(hint);
+          }
+          button.addEventListener("mousedown", function (event) {
+            event.preventDefault();
+            go(index);
+          });
+          li.appendChild(button);
+          list.appendChild(li);
+        });
+        list.hidden = false;
+        highlight();
+      }
+
+      function lookup() {
+        var query = (input.value || "").trim();
+        if (query.length < 1) {
+          close();
+          return;
+        }
+        var target = url + (url.indexOf("?") > -1 ? "&" : "?") + "q=" + encodeURIComponent(query);
+        if (scope) target += "&scope=" + encodeURIComponent(scope);
+        fetch(target, { credentials: "same-origin", headers: { Accept: "application/json" } })
+          .then(function (response) {
+            if (!response.ok) throw new Error("HTTP " + response.status);
+            return response.json();
+          })
+          .then(function (payload) {
+            if ((input.value || "").trim() !== query) return;
+            render(payload.items || []);
+          })
+          .catch(function () {
+            close();
+          });
+      }
+
+      input.setAttribute("aria-autocomplete", "list");
+      input.addEventListener("input", function () {
+        window.clearTimeout(timer);
+        timer = window.setTimeout(lookup, 160);
+      });
+      input.addEventListener("keydown", function (event) {
+        if (list.hidden || !items.length) return;
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          active = (active + 1) % items.length;
+          highlight();
+        } else if (event.key === "ArrowUp") {
+          event.preventDefault();
+          active = (active - 1 + items.length) % items.length;
+          highlight();
+        } else if (event.key === "Enter" && active > -1) {
+          event.preventDefault();
+          go(active);
+        } else if (event.key === "Escape") {
+          close();
+        }
+      });
+      input.addEventListener("blur", function () {
+        window.setTimeout(close, 120);
+      });
+    });
+  }
+
   ready(function () {
     autohideAlerts();
     confirmForms();
@@ -756,5 +945,7 @@
     navToggle();
     deckPresetFill();
     deckLevelFilter();
+    assignmentTypeForm();
+    typeahead();
   });
 })();

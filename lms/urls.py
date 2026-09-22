@@ -25,6 +25,7 @@ urlpatterns = [
         name="password_change_done",
     ),
     path("", views.dashboard, name="dashboard"),
+    path("suggest/", views.suggest, name="suggest"),
     # Защищённые файлы: скачивание и inline-превью изображений/аудио
     path("files/<path:name>", views.private_file, name="private_file"),
     path("preview/<path:name>", views.media_preview, name="media_preview"),
