@@ -8,6 +8,7 @@ import time
 
 from django.core.exceptions import PermissionDenied
 
+from . import ui_text
 from .curriculum import queue_counts
 from .decorators import get_user_role
 from .models import Profile
@@ -26,6 +27,8 @@ def console_context(request):
         "workspace": None,
         "is_impersonating": False,
         "impersonating_teacher_name": "",
+        "ui_lang": getattr(request, "ui_lang", None) or ui_text.DEFAULT_LANGUAGE,
+        "ui_languages": ui_text.LANGUAGES,
     }
     user = getattr(request, "user", None)
     if not user or not user.is_authenticated:

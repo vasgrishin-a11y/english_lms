@@ -19,10 +19,10 @@
         <form class="rating-row" method="post" action="{{ session_url }}"
               hx-post="{{ session_url }}" hx-target="#trainer-stage" hx-swap="outerHTML">
             {% csrf_token %}
-            <button class="btn btn-secondary" type="submit" name="rating" value="again">{% icon "refresh" %}Не помню</button>
-            <button class="btn btn-secondary" type="submit" name="rating" value="hard">{% icon "alert" %}С трудом</button>
-            <button class="btn" type="submit" name="rating" value="good">{% icon "check" %}Помню</button>
-            <button class="btn btn-quiet" type="submit" name="rating" value="easy">{% icon "star" %}Легко</button>
+            <button class="btn btn-secondary" type="submit" name="rating" value="again">{% icon "refresh" %}{% t "Не помню" %}</button>
+            <button class="btn btn-secondary" type="submit" name="rating" value="hard">{% icon "alert" %}{% t "С трудом" %}</button>
+            <button class="btn" type="submit" name="rating" value="good">{% icon "check" %}{% t "Помню" %}</button>
+            <button class="btn btn-quiet" type="submit" name="rating" value="easy">{% icon "star" %}{% t "Легко" %}</button>
         </form>
         <p class="tiny muted center mb-0">Клавиши: <kbd>1</kbd> не помню · <kbd>2</kbd> с трудом · <kbd>3</kbd> помню · <kbd>4</kbd> легко · <kbd>Пробел</kbd> перевернуть</p>
     {% else %}
@@ -31,11 +31,11 @@
             <h3>Сессия завершена</h3>
             <p>Все карточки из очереди повторены. Следующие повторы придут по расписанию интервалов.</p>
             <div class="row">
-                <a class="btn" href="{% url 'student_trainer' %}">К списку наборов</a>
+                <a class="btn" href="{% url 'student_trainer' %}">{% t "К списку наборов" %}</a>
                 <form method="post" action="{{ session_url }}">
                     {% csrf_token %}
                     <input type="hidden" name="reset" value="1">
-                    <button class="btn btn-secondary" type="submit">{% icon "refresh" %}Новая сессия</button>
+                    <button class="btn btn-secondary" type="submit">{% icon "refresh" %}{% t "Новая сессия" %}</button>
                 </form>
             </div>
         </div>

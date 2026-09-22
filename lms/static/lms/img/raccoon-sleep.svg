@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Спящая мордочка енота">
+  <defs>
+    <linearGradient id="raccoonFur" x1="10" y1="8" x2="54" y2="60" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#c4cfd7"/>
+      <stop offset="1" stop-color="#8b96a2"/>
+    </linearGradient>
+    <linearGradient id="raccoonMuzzle" x1="32" y1="34" x2="32" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#f0ebe4"/>
+    </linearGradient>
+    <radialGradient id="raccoonCheek" cx="0.5" cy="0.5" r="0.5">
+      <stop stop-color="#e0897c" stop-opacity=".42"/>
+      <stop offset="1" stop-color="#e0897c" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Уши: шерсть снаружи, тёплая подкладка внутри -->
+  <g fill="url(#raccoonFur)" stroke="url(#raccoonFur)" stroke-width="4" stroke-linejoin="round">
+    <path d="M13.6 31.4 17.6 7.2 30.4 21.4Z"/>
+    <path d="M50.4 31.4 46.4 7.2 33.6 21.4Z"/>
+  </g>
+  <path fill="#e8d6cd" opacity=".95" d="M17 28.6 19.8 13.4 28.6 22.2Z"/>
+  <path fill="#e8d6cd" opacity=".95" d="M47 28.6 44.2 13.4 35.4 22.2Z"/>
+
+  <!-- Голова -->
+  <ellipse cx="32" cy="35.4" rx="23.8" ry="21.6" fill="url(#raccoonFur)"/>
+  <ellipse cx="32" cy="35.4" rx="23.8" ry="21.6" fill="none" stroke="#5f6a75" stroke-width="1.1" opacity=".35"/>
+
+  <!-- Тёмные пятна вокруг глаз: между ними остаётся светлая полоска -->
+  <g fill="#3f454d">
+    <ellipse cx="20.4" cy="32.6" rx="10.8" ry="9.4" transform="rotate(-13 20.4 32.6)"/>
+    <ellipse cx="43.6" cy="32.6" rx="10.8" ry="9.4" transform="rotate(13 43.6 32.6)"/>
+  </g>
+
+  <!-- Светлые «брови» над пятнами -->
+  <ellipse cx="20" cy="21.6" rx="4.8" ry="2.5" transform="rotate(-16 20 21.6)" fill="#f7f5f1" opacity=".95"/>
+  <ellipse cx="44" cy="21.6" rx="4.8" ry="2.5" transform="rotate(16 44 21.6)" fill="#f7f5f1" opacity=".95"/>
+
+  <!-- Глаза закрыты: спокойные дуги, как у спящего -->
+  <g stroke="#f4f1ea" stroke-width="1.9" stroke-linecap="round" fill="none">
+    <path d="M17.4 31.6c1 3 2.5 4.4 4.4 3.9 1.9-.5 2.9-2.1 3.2-4.6"/>
+    <path d="M46.6 31.6c-1 3-2.5 4.4-4.4 3.9-1.9-.5-2.9-2.1-3.2-4.6"/>
+  </g>
+
+  <!-- Мордочка: нос, улыбка, язычок -->
+  <ellipse cx="32" cy="46.8" rx="14" ry="10.6" fill="url(#raccoonMuzzle)"/>
+  <path fill="#2b3138" d="M32 38.6c2.9 0 5.3 1.9 5.3 4 0 2.4-2.5 4.1-5.3 4.1s-5.3-1.7-5.3-4.1c0-2.1 2.4-4 5.3-4Z"/>
+  <ellipse cx="30.2" cy="40.4" rx="1.6" ry=".9" fill="#ffffff" opacity=".55"/>
+  <path d="M32 46.8v2.2" stroke="#4a5158" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+  <path d="M32 49c-1.3 2.2-3.8 2.3-5.1.3M32 49c1.3 2.2 3.8 2.3 5.1.3" stroke="#4a5158" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+  <ellipse cx="32" cy="52.8" rx="2.4" ry="1.3" fill="#e58f8a"/>
+
+  <!-- Усы и румянец -->
+  <g stroke="#ffffff" stroke-width="1.1" stroke-linecap="round" opacity=".5" fill="none">
+    <path d="M18.4 45.6c-3.2.1-6 .9-8 2.2"/>
+    <path d="M45.6 45.6c3.2.1 6 .9 8 2.2"/>
+  </g>
+  <ellipse cx="13.4" cy="42.6" rx="4.8" ry="3.4" fill="url(#raccoonCheek)"/>
+  <ellipse cx="50.6" cy="42.6" rx="4.8" ry="3.4" fill="url(#raccoonCheek)"/>
+
+  <!-- Шарф — фирменный акцент бренда -->
+  <path fill="#2a9d94" d="M14.8 50.8c4.8 4 10.8 6.1 17.2 6.1s12.4-2.1 17.2-6.1l3.2 5.1C47 60.7 39.8 63.2 32 63.2s-15-2.5-20.4-7.3l3.2-5.1Z"/>
+  <path fill="#63c3bc" opacity=".75" d="M14.8 50.8c4.8 4 10.8 6.1 17.2 6.1s12.4-2.1 17.2-6.1l1.6 2.5c-5.2 4.2-11.8 6.4-18.8 6.4s-13.6-2.2-18.8-6.4l1.6-2.5Z"/>
+  <path fill="#5c8a66" d="M19.8 55.8c3.2.4 5.4 1.8 6.4 4.4 1 2.6.6 5-1.2 7-.8-2.4-2-4.2-3.8-5.4-1.8-1.2-3.2-2.2-4.2-3.2l2.8-2.8Z" opacity=".95"/>
+</svg>

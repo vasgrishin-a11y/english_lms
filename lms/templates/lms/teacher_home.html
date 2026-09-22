@@ -12,8 +12,8 @@
         <div class="row" style="margin-top:16px">
             <a class="btn" href="{% url 'teacher_review_queue' %}">{% icon "check-circle" %}К очереди проверки
                 {% if overview.queue.waiting %}<span class="chip count">{{ overview.queue.waiting }}</span>{% endif %}</a>
-            <a class="btn btn-secondary" href="{% url 'teacher_curriculum' %}">{% icon "layers" %}Карта курса</a>
-            <a class="btn btn-ghost" href="{% url 'teacher_assignment_new' %}">{% icon "plus" %}Новое задание</a>
+            <a class="btn btn-secondary" href="{% url 'teacher_curriculum' %}">{% icon "layers" %}{% t "Карта курса" %}</a>
+            <a class="btn btn-ghost" href="{% url 'teacher_assignment_new' %}">{% icon "plus" %}{% t "Новое задание" %}</a>
         </div>
     </div>
     <div class="hero-side">
@@ -40,7 +40,7 @@
 <section class="card">
     <div class="card-head">
         <h2 class="card-title">{% icon "layers" %}Блоки курса</h2>
-        <a class="btn btn-ghost btn-sm" href="{% url 'teacher_curriculum' %}">Карта курса</a>
+        <a class="btn btn-ghost btn-sm" href="{% url 'teacher_curriculum' %}">{% t "Карта курса" %}</a>
     </div>
     <div class="class-grid">
         {% for block_item in blocks_data|slice:":5" %}
@@ -56,7 +56,7 @@
         {% empty %}
             <p class="muted small">Блоков пока нет — создайте первый: он станет разделом курса.</p>
         {% endfor %}
-        <a class="class-card is-create" href="{% url 'teacher_block_new' %}">{% icon "plus" %}<span class="small strong" style="margin-top:8px">Новый блок</span></a>
+        <a class="class-card is-create" href="{% url 'teacher_block_new' %}">{% icon "plus" %}<span class="small strong" style="margin-top:8px">{% t "Новый блок" %}</span></a>
     </div>
 </section>
 
@@ -64,7 +64,7 @@
     <section class="card">
         <div class="card-head">
             <h2 class="card-title">{% icon "clock" %}Самые старые работы</h2>
-            <a class="btn btn-ghost btn-sm" href="{% url 'teacher_review_queue' %}">Вся очередь</a>
+            <a class="btn btn-ghost btn-sm" href="{% url 'teacher_review_queue' %}">{% t "Вся очередь" %}</a>
         </div>
         {% for submission in waiting %}
             <div class="row-item" style="margin-bottom:8px">
@@ -78,7 +78,7 @@
                     </span>
                 </span>
                 <span class="row-side">
-                    <a class="btn btn-sm" href="{% url 'teacher_submission_review' submission.pk %}">Открыть</a>
+                    <a class="btn btn-sm" href="{% url 'teacher_submission_review' submission.pk %}">{% t "Открыть" %}</a>
                 </span>
             </div>
         {% empty %}
@@ -93,7 +93,7 @@
     <section class="card">
         <div class="card-head">
             <h2 class="card-title">{% icon "pencil" %}Черновики заданий</h2>
-            <a class="btn btn-ghost btn-sm" href="{% url 'teacher_curriculum' %}">Карта курса</a>
+            <a class="btn btn-ghost btn-sm" href="{% url 'teacher_curriculum' %}">{% t "Карта курса" %}</a>
         </div>
         {% for assignment in drafts %}
             <div class="row-item" style="margin-bottom:8px">
@@ -108,14 +108,14 @@
                     <form method="post" action="{% url 'teacher_assignment_publish' assignment.pk %}">
                         {% csrf_token %}
                         <input type="hidden" name="publish" value="1">
-                        <button class="btn btn-sm btn-quiet" type="submit">{% icon "send" %}Опубликовать</button>
+                        <button class="btn btn-sm btn-quiet" type="submit">{% icon "send" %}{% t "Опубликовать" %}</button>
                     </form>
                 </span>
             </div>
         {% empty %}
             <p class="muted small mb-0">Черновиков нет. Новое задание можно собрать из файла с помощью ИИ-помощника или вручную.</p>
         {% endfor %}
-        <a class="btn btn-secondary btn-sm" href="{% url 'teacher_assignment_new' %}">{% icon "plus" %}Создать задание</a>
+        <a class="btn btn-secondary btn-sm" href="{% url 'teacher_assignment_new' %}">{% icon "plus" %}{% t "Создать задание" %}</a>
     </section>
 </div>
 
@@ -126,7 +126,7 @@
         <a class="chip" href="{% url 'teacher_topic_new' %}">{% icon "plus" "icon icon-sm" %}Новая тема</a>
         <a class="chip" href="{% url 'teacher_assignment_new' %}?type=flashcards">{% icon "cards" "icon icon-sm" %}Карточки-тренажёр</a>
         <a class="chip" href="{% url 'teacher_analytics' %}">{% icon "grid" "icon icon-sm" %}Журнал оценок</a>
-        <a class="chip" href="{% url 'teacher_analytics_export' %}">{% icon "download" "icon icon-sm" %}Выгрузить журнал CSV</a>
+        <a class="chip" href="{% url 'teacher_analytics_export' %}">{% icon "download" "icon icon-sm" %}Выгрузить журнал XLSX</a>
         <a class="chip" href="{% url 'teacher_settings' %}">{% icon "hash" "icon icon-sm" %}Банк комментариев</a>
         <a class="chip" href="{% url 'teacher_archive' %}">{% icon "archive" "icon icon-sm" %}Архив курса</a>
     </div>

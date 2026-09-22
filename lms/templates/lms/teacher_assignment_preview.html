@@ -7,7 +7,7 @@
 {% block content %}
 <nav aria-label="Хлебные крошки">
     <ol class="crumbs">
-        <li><a href="{% url 'teacher_curriculum' %}">Карта курса</a></li>
+        <li><a href="{% url 'teacher_curriculum' %}">{% t "Карта курса" %}</a></li>
         <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_assignment_form' assignment.pk %}">{{ assignment.title }}</a></li>
         <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">Предпросмотр</span></li>
     </ol>
@@ -58,7 +58,7 @@
                             {% include "lms/parts/question_choices.html" %}
                             {% if question.explanation %}<p class="tiny muted mb-0" style="margin-top:6px">{% icon "lightbulb" "icon icon-sm" %} {{ question.explanation }}</p>{% endif %}
                             <p class="tiny" style="margin-top:8px">
-                                <a href="{% url 'teacher_question_edit' question.pk %}">Изменить</a>
+                                <a href="{% url 'teacher_question_edit' question.pk %}">{% t "Изменить" %}</a>
                             </p>
                         </li>
                     {% endfor %}
@@ -77,8 +77,8 @@
                 <a class="btn btn-secondary btn-sm btn-block" href="{% if reveal %}{% url 'teacher_assignment_preview' assignment.pk %}{% else %}{% url 'teacher_assignment_preview' assignment.pk %}?answers=1{% endif %}">
                     {% icon "eye" %}{% if reveal %}Скрыть ответы{% else %}Показать ответы{% endif %}
                 </a>
-                <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_assignment_form' assignment.pk %}">{% icon "pencil" %}Изменить задание</a>
-                {% if assignment.is_quiz %}<a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_questions' assignment.pk %}">{% icon "list" %}Вопросы</a>{% endif %}
+                <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_assignment_form' assignment.pk %}">{% icon "pencil" %}{% t "Изменить задание" %}</a>
+                {% if assignment.is_quiz %}<a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_questions' assignment.pk %}">{% icon "list" %}{% t "Вопросы" %}</a>{% endif %}
                 <form method="post" action="{% url 'teacher_assignment_publish' assignment.pk %}">
                     {% csrf_token %}
                     <input type="hidden" name="publish" value="{% if assignment.is_published %}0{% else %}1{% endif %}">
@@ -88,9 +88,9 @@
                 </form>
                 <form method="post" action="{% url 'teacher_assignment_duplicate' assignment.pk %}">
                     {% csrf_token %}
-                    <button class="btn btn-ghost btn-sm btn-block" type="submit">{% icon "copy" %}Дублировать</button>
+                    <button class="btn btn-ghost btn-sm btn-block" type="submit">{% icon "copy" %}{% t "Дублировать" %}</button>
                 </form>
-                <a class="btn btn-ghost btn-sm btn-block" href="{% url 'teacher_curriculum' %}">К карте курса</a>
+                <a class="btn btn-ghost btn-sm btn-block" href="{% url 'teacher_curriculum' %}">{% t "К карте курса" %}</a>
             </div>
         </div>
         <div class="card card-pad-sm">

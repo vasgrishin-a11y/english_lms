@@ -7,7 +7,7 @@
 {% block content %}
 <div class="content-head">
     <div>
-        <h1>Группы</h1>
+        <h1>{% t "Группы" %}</h1>
         <p class="page-note">Учебные группы для разделения учеников и назначения заданий.</p>
     </div>
     <div class="row row-gap">
@@ -17,8 +17,8 @@
                 {% icon "search" %}
                 <input type="search" id="id_q" name="q" maxlength="200" value="{{ query }}" placeholder="Название или описание…" data-suggest="{% url 'suggest' %}" data-suggest-scope="groups" autocomplete="off">
             </div>
-            <button class="btn btn-secondary btn-sm" type="submit">Найти</button>
-            {% if query %}<a class="btn btn-ghost btn-sm" href="{% url 'teacher_groups' %}">Сбросить</a>{% endif %}
+            <button class="btn btn-secondary btn-sm" type="submit">{% t "Найти" %}</button>
+            {% if query %}<a class="btn btn-ghost btn-sm" href="{% url 'teacher_groups' %}">{% t "Сбросить" %}</a>{% endif %}
         </form>
         <a class="btn btn-primary btn-sm" href="{% url 'teacher_group_new' %}">
             {% icon "plus" "icon icon-sm" %}
@@ -48,10 +48,10 @@
                 <span class="badge {% if group.is_active %}badge-checked{% else %}badge-outline{% endif %}">
                     {% if group.is_active %}Активна{% else %}Архив{% endif %}
                 </span>
-                <a class="btn btn-sm" href="{% url 'teacher_group_edit' group.pk %}">Редактировать</a>
+                <a class="btn btn-sm" href="{% url 'teacher_group_edit' group.pk %}">{% t "Редактировать" %}</a>
                 <form method="post" action="{% url 'teacher_group_delete' group.pk %}" data-confirm="Удалить группу «{{ group.name }}»? Это нельзя отменить.">
                     {% csrf_token %}
-                    <button type="submit" class="btn btn-sm btn-danger-ghost">Удалить</button>
+                    <button type="submit" class="btn btn-sm btn-danger-ghost">{% t "Удалить" %}</button>
                 </form>
             </span>
         </div>

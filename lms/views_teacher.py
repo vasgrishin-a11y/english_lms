@@ -9,7 +9,6 @@
 при этом идут через существующие сервисы с блокировками и контролем версий.
 """
 
-import csv
 import logging
 
 from django.conf import settings
@@ -26,6 +25,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
+from . import xlsx
 from .curriculum import course_tree, gradebook, queue_counts, teacher_overview
 from .decorators import get_user_role, teacher_required
 from .forms import (
@@ -109,6 +109,82 @@ def _delete(request, obj, redirect_to, protected_message, blocked=False):
         messages.error(request, protected_message)
     else:
         messages.success(request, f"Удалено: {obj}")
+    return redirect(redirect_to)
+
+
+def block_tree_stats(block):
+    """Сколько вложенного уйдёт вместе с блоком: темы, задания, вопросы, карточки."""
+    assignments = Assignment.objects.filter(topic__block=block)
+    return {
+        "topics": block.topics.count(),
+        "assignments": assignments.count(),
+        "questions": Question.objects.filter(assignment__in=assignments).count(),
+        "cards": Flashcard.objects.filter(assignment__in=assignments).count(),
+        "submissions": Submission.objects.filter(assignment__in=assignments).count(),
+    }
+
+
+def topic_tree_stats(topic):
+    assignments = topic.assignments.all()
+    return {
+        "topics": 1,
+        "assignments": assignments.count(),
+        "questions": Question.objects.filter(assignment__in=assignments).count(),
+        "cards": Flashcard.objects.filter(assignment__in=assignments).count(),
+        "submissions": Submission.objects.filter(assignment__in=assignments).count(),
+    }
+
+
+def _delete_cascade(request, obj, redirect_to, kind, stats):
+    """Удалить блок или тему целиком: вместе с темами, заданиями и карточками.
+
+    Работы учеников неприкосновенны: если в поддереве есть сдачи, удаление
+    запрещено и предлагается архив — иначе пропали бы оценки и история попыток.
+    Требуется явное подтверждение ``confirm``: одна кнопка не должна сносить
+    полкурса по случайному нажатию.
+    """
+    if request.POST.get("confirm") != "1":
+        messages.error(
+            request,
+            f"Удаление {kind} не подтверждено: откройте подтверждение и повторите действие.",
+        )
+        return redirect(redirect_to)
+    if stats["submissions"]:
+        messages.error(
+            request,
+            f"{kind.capitalize()} «{obj}» нельзя удалить: есть работы учеников "
+            f"({stats['submissions']}). Используйте архив — история и оценки сохранятся.",
+        )
+        return redirect(redirect_to)
+    label, pk = str(obj), obj.pk
+    try:
+        obj.delete()
+    except ProtectedError:
+        messages.error(
+            request,
+            f"{kind.capitalize()} «{label}» нельзя удалить: есть связанные данные. "
+            "Используйте архив.",
+        )
+        return redirect(redirect_to)
+    parts = [
+        f"тем {stats['topics']}",
+        f"заданий {stats['assignments']}",
+        f"вопросов {stats['questions']}",
+        f"карточек {stats['cards']}",
+    ]
+    logger.info(
+        "curriculum_delete kind=%s pk=%s topics=%s assignments=%s questions=%s cards=%s",
+        kind,
+        pk,
+        stats["topics"],
+        stats["assignments"],
+        stats["questions"],
+        stats["cards"],
+    )
+    messages.success(
+        request,
+        f"Удалено: {kind} «{label}» вместе с содержимым — " + ", ".join(parts) + ".",
+    )
     return redirect(redirect_to)
 
 
@@ -627,14 +703,12 @@ def block_form(request, pk=None):
 @teacher_required
 @require_POST
 def block_delete(request, pk):
+    """Удалить блок целиком: темы, задания, вопросы теста и карточки — вместе с ним."""
     block = get_object_or_404(Block, pk=pk)
-    return _delete(
-        request,
-        block,
-        "teacher_archive" if request.POST.get("from_archive") == "1" else "teacher_curriculum",
-        "Блок нельзя удалить: в нём есть темы или сдачи работ. Сначала удалите пустые дочерние элементы или используйте архив.",
-        blocked=block.topics.exists(),
-    )
+    target = "teacher_archive" if request.POST.get("from_archive") == "1" else "teacher_curriculum"
+    if not block.topics.exists():  # пустой блок: прежнее простое удаление
+        return _delete(request, block, target, "Блок нельзя удалить: есть связанные данные.")
+    return _delete_cascade(request, block, target, "блок", block_tree_stats(block))
 
 
 @teacher_required
@@ -679,14 +753,12 @@ def topic_form(request, pk=None):
 @teacher_required
 @require_POST
 def topic_delete(request, pk):
+    """Удалить тему целиком вместе с её заданиями, вопросами и карточками."""
     topic = get_object_or_404(Topic, pk=pk)
-    return _delete(
-        request,
-        topic,
-        "teacher_archive" if request.POST.get("from_archive") == "1" else "teacher_curriculum",
-        "Тему нельзя удалить: в ней есть задания или сдачи работ. Сначала удалите пустые дочерние элементы или используйте архив.",
-        blocked=topic.assignments.exists(),
-    )
+    target = "teacher_archive" if request.POST.get("from_archive") == "1" else "teacher_curriculum"
+    if not topic.assignments.exists():
+        return _delete(request, topic, target, "Тему нельзя удалить: есть связанные данные.")
+    return _delete_cascade(request, topic, target, "тему", topic_tree_stats(topic))
 
 
 @teacher_required
@@ -1230,37 +1302,37 @@ def analytics(request):
 @teacher_required
 @require_GET
 def analytics_export(request):
-    """Выгрузка журнала в CSV (Excel-совместимая: BOM и точка с запятой)."""
+    """Выгрузка журнала в XLSX: одна книга, шапка закреплена, автофильтр включён."""
     block = request.GET.get("block", "")
     topic = request.GET.get("topic", "")
     data = gradebook(
         block=int(block) if block.isdigit() else None,
         topic=int(topic) if topic.isdigit() else None,
     )
-    response = HttpResponse(content_type="text/csv; charset=utf-8")
-    response["Content-Disposition"] = 'attachment; filename="journal.csv"'
-    response.write("\ufeff")
-    writer = csv.writer(response, delimiter=";")
-    writer.writerow(
-        ["Ученик", "Прогресс, %", "Сдано", "Проверено"]
-        + [
-            f"{item.topic.block.name} / {item.topic.title} / {item.title}"
-            for item in data["assignments"]
-        ]
-    )
+    assignments = [
+        f"{item.topic.block.name} / {item.topic.title} / {item.title}"
+        for item in data["assignments"]
+    ]
+    rows = [["Ученик", "Прогресс, %", "Сдано", "Проверено", *assignments, "Итого баллов"]]
     for row in data["rows"]:
-        writer.writerow(
+        grades = [cell["grade"] for cell in row["cells"] if cell["grade"] is not None]
+        rows.append(
             [
                 row["student"].get_full_name() or row["student"].username,
                 row["percent"],
                 row["submitted"],
                 row["checked"],
-            ]
-            + [
-                (f"{cell['grade']}/{cell['maximum']}" if cell["grade"] is not None else "")
-                for cell in row["cells"]
+                *[
+                    (f"{cell['grade']}/{cell['maximum']}" if cell["grade"] is not None else "")
+                    for cell in row["cells"]
+                ],
+                sum(grades),
             ]
         )
+    payload = xlsx.build_xlsx(rows, sheet_name="Журнал")
+    response = HttpResponse(payload, content_type=xlsx.CONTENT_TYPE)
+    response["Content-Disposition"] = 'attachment; filename="journal.xlsx"'
+    response["Content-Length"] = str(len(payload))
     return response
 
 

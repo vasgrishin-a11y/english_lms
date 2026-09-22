@@ -11,7 +11,7 @@
         <p class="page-note">Матрица «ученик × задание» по последним попыткам. Пустая клетка — работа не сдана.</p>
     </div>
     <div class="row">
-        <a class="btn btn-secondary" href="{% url 'teacher_analytics_export' %}{% querystring %}">{% icon "download" %}Выгрузить CSV</a>
+        <a class="btn btn-secondary" href="{% url 'teacher_analytics_export' %}{% querystring %}">{% icon "download" %}{% t "Выгрузить XLSX" %}</a>
     </div>
 </div>
 
@@ -27,7 +27,7 @@
 <section class="card card-pad-sm">
     <form method="get" class="row row-tight">
         <div class="form-field" style="min-width:200px">
-            <label for="id_block">Блок</label>
+            <label for="id_block">{% t "Блок" %}</label>
             <select id="id_block" name="block">
                 <option value="">Все блоки</option>
                 {% for block in blocks %}
@@ -36,7 +36,7 @@
             </select>
         </div>
         <div class="form-field" style="min-width:200px">
-            <label for="id_topic">Тема</label>
+            <label for="id_topic">{% t "Тема" %}</label>
             <select id="id_topic" name="topic">
                 <option value="">Все темы</option>
                 {% for topic in topics %}
@@ -45,8 +45,8 @@
             </select>
         </div>
         <div class="row row-tight" style="align-items:flex-end">
-            <button class="btn btn-sm" type="submit">Показать</button>
-            <a class="btn btn-ghost btn-sm" href="{% url 'teacher_analytics' %}">Сбросить</a>
+            <button class="btn btn-sm" type="submit">{% t "Показать" %}</button>
+            <a class="btn btn-ghost btn-sm" href="{% url 'teacher_analytics' %}">{% t "Сбросить" %}</a>
         </div>
     </form>
 </section>

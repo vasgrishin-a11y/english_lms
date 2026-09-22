@@ -10,7 +10,7 @@
         <h1>Настройки консоли</h1>
         <p class="page-note">Профиль, банк комментариев и параметры интерфейса. Системные настройки — в административной панели.</p>
     </div>
-    <a class="btn btn-secondary" href="{% url 'password_change' %}">{% icon "key" %}Сменить пароль</a>
+    <a class="btn btn-secondary" href="{% url 'password_change' %}">{% icon "key" %}{% t "Сменить пароль" %}</a>
 </div>
 
 <div class="split">
@@ -22,14 +22,14 @@
             <form method="post" novalidate>
                 {% csrf_token %}
                 {% include "lms/form_fields.html" %}
-                <button class="btn" type="submit">{% icon "save" %}Сохранить профиль</button>
+                <button class="btn" type="submit">{% icon "save" %}{% t "Сохранить профиль" %}</button>
             </form>
         </section>
 
         <section class="card">
             <div class="card-head">
                 <h2 class="card-title">{% icon "hash" %}Банк комментариев</h2>
-                <a class="btn btn-secondary btn-sm" href="{% url 'teacher_snippet_new' %}">{% icon "plus" %}Новый шаблон</a>
+                <a class="btn btn-secondary btn-sm" href="{% url 'teacher_snippet_new' %}">{% icon "plus" %}{% t "Новый шаблон" %}</a>
             </div>
             <p class="small muted">Шаблоны подставляются в поле комментария на странице проверки одним нажатием. Короткий код (например, <code>gl</code>) помогает найти нужный шаблон быстрее.</p>
             {% if snippets %}
@@ -45,7 +45,7 @@
                                 <span class="row-meta"><span>{{ snippet.text|truncatechars:160 }}</span></span>
                             </span>
                             <span class="row-side">
-                                <a class="btn btn-ghost btn-sm" href="{% url 'teacher_snippet_edit' snippet.pk %}">{% icon "pencil" %}Изменить</a>
+                                <a class="btn btn-ghost btn-sm" href="{% url 'teacher_snippet_edit' snippet.pk %}">{% icon "pencil" %}{% t "Изменить" %}</a>
                                 <form method="post" action="{% url 'teacher_snippet_delete' snippet.pk %}" data-confirm="Удалить шаблон «{{ snippet.title }}»?">
                                     {% csrf_token %}
                                     <button class="btn btn-danger-ghost btn-sm icon-only" type="submit" aria-label="Удалить шаблон {{ snippet.title }}">{% icon "trash" %}</button>
@@ -59,7 +59,7 @@
                     <div class="empty-icon">{% icon "hash" "icon icon-xl" %}</div>
                     <h3>Шаблонов пока нет</h3>
                     <p>Добавьте частые формулировки — проверка станет заметно быстрее.</p>
-                    <a class="btn" href="{% url 'teacher_snippet_new' %}">Создать первый шаблон</a>
+                    <a class="btn" href="{% url 'teacher_snippet_new' %}">{% t "Создать первый шаблон" %}</a>
                 </div>
             {% endif %}
         </section>
@@ -81,7 +81,7 @@
                         <span>Компактная — больше работ на экране</span>
                     </label>
                 </fieldset>
-                <button class="btn btn-block" type="submit" style="margin-top:12px">{% icon "save" %}Сохранить настройки</button>
+                <button class="btn btn-block" type="submit" style="margin-top:12px">{% icon "save" %}{% t "Сохранить настройки" %}</button>
             </form>
             <p class="tiny muted mb-0">Настройки хранятся в вашей сессии и не влияют на учеников.</p>
         </section>
@@ -90,7 +90,7 @@
             <p class="rail-title">Системные инструменты</p>
             <ul class="col tiny muted" style="padding-left:18px;margin:0">
                 <li><a href="{% url 'admin:index' %}">Административная панель</a> — пользователи, права, журналы.</li>
-                <li><a href="{% url 'teacher_analytics_export' %}">Выгрузка журнала в CSV</a> — для отчётов и родительских встреч.</li>
+                <li><a href="{% url 'teacher_analytics_export' %}">Выгрузка журнала в XLSX</a> — открывается в Excel и Google Таблицах, для отчётов и родительских встреч.</li>
                 <li><a href="{% url 'health_ready' %}">Проверка готовности сервиса</a>.</li>
             </ul>
         </section>

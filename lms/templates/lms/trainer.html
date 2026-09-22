@@ -12,7 +12,7 @@
     </div>
     <div class="classes-toolbar">
         {% if due_total %}<span class="badge badge-submitted">{% icon "clock" "icon icon-sm" %}К повтору: {{ due_total }}</span>{% endif %}
-        <a class="btn btn-secondary btn-sm" href="{% url 'student_dictionary' %}">{% icon "language" %}Мой словарь</a>
+        <a class="btn btn-secondary btn-sm" href="{% url 'student_dictionary' %}">{% icon "language" %}{% t "Мой словарь" %}</a>
     </div>
 </div>
 
@@ -50,8 +50,8 @@
             <h3>Карточек пока нет</h3>
             <p>Личный словарь уже готов к работе. Задания с карточками появятся здесь, когда преподаватель их опубликует.</p>
             <div class="row">
-                <a class="btn" href="{% url 'student_dictionary' %}">{% icon "language" %}Мой словарь</a>
-                <a class="btn btn-secondary" href="{% url 'student_assignments' %}">К заданиям</a>
+                <a class="btn" href="{% url 'student_dictionary' %}">{% icon "language" %}{% t "Мой словарь" %}</a>
+                <a class="btn btn-secondary" href="{% url 'student_assignments' %}">{% t "К заданиям" %}</a>
             </div>
         </div>
     </div>

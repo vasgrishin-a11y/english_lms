@@ -7,8 +7,8 @@
 {% block content %}
 <nav aria-label="Хлебные крошки">
     <ol class="crumbs">
-        <li><a href="{% url 'teacher_curriculum' %}">Карта курса</a></li>
-        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_questions' assignment.pk %}">Вопросы</a></li>
+        <li><a href="{% url 'teacher_curriculum' %}">{% t "Карта курса" %}</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_questions' assignment.pk %}">{% t "Вопросы" %}</a></li>
         <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">Вопрос {{ question.order }}</span></li>
     </ol>
 </nav>
@@ -22,13 +22,13 @@
                 {% csrf_token %}
                 {% include "lms/form_fields.html" %}
                 <div class="row">
-                    <button class="btn" type="submit">{% icon "save" %}Сохранить вопрос</button>
-                    <a class="btn btn-secondary" href="{% url 'teacher_questions' assignment.pk %}">Отмена</a>
+                    <button class="btn" type="submit">{% icon "save" %}{% t "Сохранить вопрос" %}</button>
+                    <a class="btn btn-secondary" href="{% url 'teacher_questions' assignment.pk %}">{% t "Отмена" %}</a>
                 </div>
             </form>
             <form method="post" action="{% url 'teacher_question_delete' question.pk %}" data-confirm="Удалить этот вопрос?" style="margin-top:12px">
                 {% csrf_token %}
-                <button class="btn btn-danger-ghost btn-sm" type="submit">{% icon "trash" %}Удалить вопрос</button>
+                <button class="btn btn-danger-ghost btn-sm" type="submit">{% icon "trash" %}{% t "Удалить вопрос" %}</button>
             </form>
         </section>
     </div>

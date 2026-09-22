@@ -7,7 +7,7 @@
 {% block content %}
 <nav aria-label="Хлебные крошки">
     <ol class="crumbs">
-        <li><a href="{% url 'student_assignments' %}">Курс</a></li>
+        <li><a href="{% url 'student_assignments' %}">{% t "Курс" %}</a></li>
         <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'student_assignments' %}?q={{ assignment.topic.block.name|urlencode }}">{{ assignment.topic.block.name }}</a></li>
         <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'student_assignments' %}?q={{ assignment.topic.title|urlencode }}">{{ assignment.topic.title }}</a></li>
         <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">{{ assignment.title }}</span></li>
@@ -15,7 +15,7 @@
 </nav>
 
 <div class="row row-tight" style="margin-bottom:16px">
-    <a class="btn btn-secondary btn-sm" href="{% url 'student_assignments' %}">{% icon "arrow-left" %}К курсу</a>
+    <a class="btn btn-secondary btn-sm" href="{% url 'student_assignments' %}">{% icon "arrow-left" %}{% t "К курсу" %}</a>
     <span class="pill is-active turquoise">{% icon assignment.assignment_type|type_icon "icon icon-sm" %}{{ assignment.get_assignment_type_display }}</span>
     {% if assignment.topic.block.cefr_level %}<span class="tag tag-cefr">{{ assignment.topic.block.cefr_level }}</span>{% endif %}
     {% for skill in assignment.skills.all %}<span class="tag">{% icon skill.kind|skill_icon "icon icon-sm" %}{{ skill.name }}</span>{% endfor %}
@@ -41,7 +41,7 @@
                     {% elif assignment.material_file.name|media_kind == 'audio' %}
                         <audio controls preload="none" src="{% url 'media_preview' assignment.material_file.name %}"></audio>
                     {% endif %}
-                    <a class="btn btn-secondary btn-sm" href="{{ assignment.material_file.url }}">{% icon "download" %}Скачать материалы</a>
+                    <a class="btn btn-secondary btn-sm" href="{{ assignment.material_file.url }}">{% icon "download" %}{% t "Скачать материалы" %}</a>
                 </div>
             {% endif %}
 
@@ -97,7 +97,7 @@
                     {% csrf_token %}
                     <input type="hidden" name="expected_version" value="{{ submission.version|default:0 }}">
                     {% include "lms/parts/quiz_form.html" %}
-                    <button class="btn btn-lg" type="submit" style="margin-top:16px">{% icon "send" %}Отправить и проверить</button>
+                    <button class="btn btn-lg" type="submit" style="margin-top:16px">{% icon "send" %}{% t "Отправить и проверить" %}</button>
                 </form>
             </section>
         {% else %}
@@ -135,14 +135,14 @@
                         </div>
                     {% endif %}
                     {% if form.file_answer %}
-                        <div class="form-field{% if form.file_answer.errors %} field-error{% endif %}">
+                        <div class="form-field upload-block{% if form.file_answer.errors %} field-error{% endif %}">
                             <label for="{{ form.file_answer.id_for_label }}">{{ form.file_answer.label }}</label>
                             {{ form.file_answer }}
                             {% if form.file_answer.help_text %}<div class="help-text" id="{{ form.file_answer.auto_id }}_helptext">{{ form.file_answer.help_text }}</div>{% endif %}
                             {{ form.file_answer.errors }}
                         </div>
                     {% endif %}
-                    <button class="btn btn-lg" type="submit">{% icon "send" %}Отправить на проверку</button>
+                    <button class="btn btn-lg" type="submit">{% icon "send" %}{% t "Отправить на проверку" %}</button>
                 </form>
             </section>
         {% endif %}
@@ -220,12 +220,12 @@
             <p class="tiny muted mb-0">{{ assignment.topic.block.name }}{% if assignment.topic.block.cefr_level %} · {{ assignment.topic.block.cefr_level }}{% endif %}</p>
             {% if trainer_cards %}
                 {% for item in trainer_cards %}
-                    <a class="chip" style="margin-top:8px" href="{% url 'trainer_session' item.pk %}">{% icon "cards" "icon icon-sm" %}{{ item.title }}</a>
+                    <a class="chip chip-wrap" style="margin-top:8px" href="{% url 'trainer_session' item.pk %}">{% icon "cards" "icon icon-sm" %}{{ item.title }}</a>
                 {% endfor %}
             {% else %}
                 <p class="tiny muted mb-0" style="margin-top:8px">Заданий с карточками в этой теме пока нет.</p>
             {% endif %}
-            <a class="btn btn-ghost btn-sm btn-block" href="{% url 'student_dictionary' %}" style="margin-top:8px">{% icon "language" %}Мой словарь</a>
+            <a class="btn btn-ghost btn-sm btn-block" href="{% url 'student_dictionary' %}" style="margin-top:8px">{% icon "language" %}{% t "Мой словарь" %}</a>
         </div>
     </aside>
 </div>

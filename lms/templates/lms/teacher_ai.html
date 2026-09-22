@@ -7,26 +7,30 @@
 {% block content %}
 <nav aria-label="Хлебные крошки">
     <ol class="crumbs">
-        <li><a href="{% url 'teacher_home' %}">Консоль</a></li>
-        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_curriculum' %}">Карта курса</a></li>
-        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">ИИ-помощник</span></li>
+        <li><a href="{% url 'teacher_home' %}">{% t "Консоль" %}</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_curriculum' %}">{% t "Карта курса" %}</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">{% t "ИИ-помощник" %}</span></li>
     </ol>
 </nav>
 
 <div class="content-head">
     <div>
-        <h1>{% icon "sparkles" %}ИИ-помощник</h1>
-        <p class="page-note">Загрузите фото страницы, документ Word, таблицу Excel, PDF или видео — помощник соберёт из материала структуру курса: блоки, темы, задания, тесты и карточки. Всё создаётся <strong>черновиками</strong>: публикует только преподаватель.</p>
+        <h1>{% icon "sparkles" %}{% t "ИИ-помощник" %}</h1>
+        <p class="page-note">Загрузите фото страницы, документ Word, таблицу Excel или PDF — помощник соберёт из материала структуру курса: блоки, темы, задания, тесты и карточки. Всё создаётся <strong>черновиками</strong>: публикует только преподаватель.</p>
     </div>
-    <span class="badge {% if mode == 'online' %}badge-turquoise{% else %}badge-outline{% endif %}">{{ mode_label }}</span>
+    <span class="badge badge-wrap {% if mode == 'online' %}badge-turquoise{% else %}badge-outline{% endif %}">{{ mode_label }}</span>
 </div>
+
+{% if mode != 'online' and provider_hint %}
+    <p class="page-note">Модель по умолчанию — {{ provider.label }}: {{ provider_hint }}</p>
+{% endif %}
 
 {% if mode == 'off' %}
     <section class="card">
         <div class="empty">
             <div class="empty-icon">{% icon "sparkles" "icon icon-xl" %}</div>
             <h2>Помощник выключен</h2>
-            <p>Включите его переменной окружения <code>LMS_AI_ENABLED=1</code>. Ключ ИИ (<code>LMS_AI_API_KEY</code>) не обязателен: без него работает офлайн-разбор файлов и текста.</p>
+            <p>Включите его переменной окружения <code>LMS_AI_ENABLED=1</code>. Модель и её адрес задаются переменными <code>LMS_AI_PROVIDER</code>, <code>LMS_AI_MODEL</code> и <code>LMS_AI_ENDPOINT</code>; пока модель не запущена, работает офлайн-разбор файлов и текста.</p>
         </div>
     </section>
 {% else %}
@@ -38,9 +42,9 @@
                     {% csrf_token %}
                     {% include "lms/form_fields.html" %}
                     <div class="form-actions">
-                        <button class="btn" type="submit">{% icon "sparkles" %}Собрать материал</button>
+                        <button class="btn" type="submit">{% icon "sparkles" %}{% t "Собрать материал" %}</button>
                         {% if material %}
-                            <button class="btn btn-ghost" type="submit" name="reset" value="1">{% icon "refresh" %}Очистить результат</button>
+                            <button class="btn btn-ghost" type="submit" name="reset" value="1">{% icon "refresh" %}{% t "Очистить результат" %}</button>
                         {% endif %}
                     </div>
                 </form>
@@ -51,7 +55,7 @@
                     <div class="card-head">
                         <h2 class="card-title" id="ai-preview-title">{% icon "layers" %}Что получилось: {{ material.title }}</h2>
                         <span class="badge {% if meta.result == 'online' %}badge-turquoise{% else %}badge-outline{% endif %}">
-                            {% if meta.result == 'online' %}разобрал ИИ{% else %}офлайн-разбор{% endif %}
+                            {% if meta.result == 'online' %}разобрал ИИ{% if meta.provider_label %} · {{ meta.provider_label }}{% endif %}{% else %}офлайн-разбор{% endif %}
                         </span>
                     </div>
                     <div class="stats" style="margin-bottom:16px">
@@ -98,24 +102,24 @@
                     <form method="post" action="{% url 'teacher_ai_import' %}">
                         {% csrf_token %}
                         <div class="form-actions">
-                            <button class="btn" type="submit">{% icon "plus" %}Импортировать черновиками</button>
-                            <a class="btn btn-secondary" href="{% url 'teacher_curriculum' %}">Посмотреть карту курса</a>
+                            <button class="btn" type="submit">{% icon "plus" %}{% t "Импортировать черновиками" %}</button>
+                            <a class="btn btn-secondary" href="{% url 'teacher_curriculum' %}">{% t "Посмотреть карту курса" %}</a>
                         </div>
                     </form>
                 </section>
             {% endif %}
         </div>
 
-        <div class="split-side">
+        <aside class="split-side" tabindex="0" aria-label="Как работает помощник, формат материала и лимиты">
             <section class="card card-pad-sm">
                 <p class="rail-title">Как это работает</p>
                 <ol class="small muted" style="padding-left:18px">
                     <li>Материал разбирается в структуру: блок → темы → задания → вопросы → карточки.</li>
-                    <li>С ключом ИИ понимает фото, PDF и видео; без ключа офлайн читает текст, Word, Excel и PDF.</li>
+                    <li>Локальная vision-модель понимает фото страницы; Word, Excel и PDF читаются офлайн.</li>
                     <li>Импорт создаёт только черновики — ученики ничего не видят до публикации.</li>
                     <li>Черновики дальше правятся вручную: как обычные задания курса.</li>
                 </ol>
-                <p class="tiny muted mb-0">Приватность: файл отправляется провайдеру только в режиме ИИ и не сохраняется в системе. В журнал попадают лишь счётчики.</p>
+                <p class="tiny muted mb-0">Приватность: файл уходит только локальной модели на своём сервере и в системе не сохраняется. В журнал попадают лишь счётчики.</p>
             </section>
 
             <section class="card card-pad-sm">
@@ -139,7 +143,7 @@
                     <li>вопросов на задание {{ limits.questions }}, карточек {{ limits.cards }}.</li>
                 </ul>
             </section>
-        </div>
+        </aside>
     </div>
 {% endif %}
 {% endblock %}

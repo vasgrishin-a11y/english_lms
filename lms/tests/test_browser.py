@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from pathlib import Path
 from unittest import skipUnless
 
@@ -13,6 +14,57 @@ from lms.models import Assignment, Block, Profile, Submission, Topic
     os.getenv("RUN_BROWSER_TESTS") == "1", "Opt-in Playwright/axe suite; runs in browser CI job."
 )
 class BrowserWorkflowTests(StaticLiveServerTestCase):
+    def check_cascade_delete_panel(self, page):
+        """Удаление блока целиком спрятано за подтверждением, а не висит на виду."""
+        from playwright.sync_api import expect
+
+        zone = page.locator(".danger-zone").first
+        expect(zone).to_be_visible()
+        zone.locator("summary").click()
+        expect(zone.get_by_role("button", name="Удалить всё", exact=False)).to_be_visible()
+        expect(zone.get_by_role("button", name="В архив", exact=False)).to_be_visible()
+        zone.locator("summary").click()
+
+    def check_description_editor(self, page):
+        """«Условия задания» разворачиваются и складываются обратно."""
+        from playwright.sync_api import expect
+
+        block = page.locator("[data-editor-block]")
+        expect(block).to_have_count(1)
+        page.get_by_role("button", name="Развернуть", exact=False).click()
+        expect(block).to_have_class(re.compile("is-expanded"))
+        expect(
+            page.get_by_role("button", name="Вернуть прежний размер", exact=False)
+        ).to_be_visible()
+        page.get_by_role("button", name="Вернуть прежний размер", exact=False).click()
+        expect(block).not_to_have_class(re.compile("is-expanded"))
+
+    def check_dropzone(self, page):
+        """Файл, выбранный в скрытом поле, показывается в дропзоне с размером."""
+        from playwright.sync_api import expect
+
+        zone = page.locator(".dropzone").first
+        expect(zone).to_be_visible()
+        # Кнопка «Выбрать файл» открывает системный диалог — то есть поле живое.
+        with page.expect_file_chooser() as chooser:
+            zone.locator("[data-dropzone-pick]").click()
+        chooser.value.set_files(
+            files=[
+                {
+                    "name": "page.png",
+                    "mimeType": "image/png",
+                    "buffer": b"\x89PNG\r\n\x1a\n" + b"0" * 2048,
+                }
+            ]
+        )
+        # Имя и человекочитаемый размер: 2056 байт → «2,0 КБ».
+        expect(zone.locator("[data-dropzone-name]")).to_have_text(
+            re.compile(r"page\.png\s*2,0\s*КБ")
+        )
+        expect(zone).to_have_class(re.compile("is-filled"))
+        page.locator("[data-dropzone-clear]").first.click()
+        expect(zone.locator("[data-dropzone-name]")).to_be_hidden()
+
     def test_login_submit_review_resubmit_and_accessibility(self):
         from playwright.sync_api import expect, sync_playwright
 
@@ -64,11 +116,43 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
                 page.get_by_role("button", name="Войти", exact=True).click()
                 page.wait_for_url("**/teacher/" if username == "browser_teacher" else "**/my/")
 
+            def check_language(page):
+                """Переключатель RU|ENG переводит меню и действия, выбор помнит cookie."""
+                page.goto(self.live_server_url + "/teacher/")
+                expect(page.locator(".topbar-side .lang-switch-option.is-active")).to_have_text(
+                    "RU"
+                )
+                expect(
+                    page.locator(".app-nav-label", has_text=re.compile("^Консоль$"))
+                ).to_have_count(1)
+                page.get_by_role("link", name="ENG", exact=True).click()
+                page.wait_for_load_state("load")
+                expect(
+                    page.locator(".app-nav-label", has_text=re.compile("^Console$"))
+                ).to_have_count(1)
+                expect(
+                    page.locator(".app-nav-label", has_text=re.compile("^Консоль$"))
+                ).to_have_count(0)
+                expect(page.locator(".topbar-side .lang-switch-option.is-active")).to_have_text(
+                    "ENG"
+                )
+                page.goto(self.live_server_url + "/teacher/")
+                expect(
+                    page.locator(".app-nav-label", has_text=re.compile("^Console$"))
+                ).to_have_count(1)
+                page.get_by_role("link", name="RU", exact=True).click()
+                page.wait_for_load_state("load")
+                expect(
+                    page.locator(".app-nav-label", has_text=re.compile("^Консоль$"))
+                ).to_have_count(1)
+
             try:
                 page.goto(self.live_server_url + "/accounts/login/")
                 check_page("login")
                 login("browser_student")
                 check_page("home")
+                page.goto(self.live_server_url + "/my/words/")
+                check_page("dictionary")
                 page.goto(self.live_server_url + "/assignments/")
                 check_page("catalog")
                 page.get_by_role("link", name="Browser assignment", exact=True).click()
@@ -78,7 +162,23 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
                 expect(page.get_by_role("heading", name="Попытка 1", exact=True)).to_be_visible()
                 page.get_by_role("button", name="Выйти", exact=True).click()
                 login("browser_teacher")
+                check_language(page)
                 check_page("queue")
+                page.goto(self.live_server_url + "/teacher/curriculum/")
+                check_page("curriculum")
+                self.check_cascade_delete_panel(page)
+                page.goto(self.live_server_url + "/teacher/analytics/")
+                check_page("analytics")
+                expect(page.get_by_role("link", name="Выгрузить XLSX", exact=False)).to_be_visible()
+                page.goto(self.live_server_url + "/teacher/ai/")
+                check_page("assistant")
+                self.check_dropzone(page)
+                page.goto(
+                    self.live_server_url + f"/teacher/curriculum/assignments/{assignment.pk}/"
+                )
+                check_page("assignment-form")
+                self.check_description_editor(page)
+                page.goto(self.live_server_url + "/teacher/")
                 page.get_by_role("link", name="Открыть", exact=True).click()
                 check_page("review")
                 page.get_by_label("Балл", exact=True).fill("80")

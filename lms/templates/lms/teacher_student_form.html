@@ -81,8 +81,8 @@
     </fieldset>
     
     <div class="form-actions">
-        <a href="{% url 'teacher_students' %}" class="btn btn-ghost">Отмена</a>
-        <button type="submit" class="btn btn-primary">Сохранить</button>
+        <a href="{% url 'teacher_students' %}" class="btn btn-ghost">{% t "Отмена" %}</a>
+        <button type="submit" class="btn btn-primary">{% t "Сохранить" %}</button>
     </div>
 </form>
 
@@ -92,12 +92,12 @@
     <div class="row row-gap" style="margin-top:16px">
         <form method="post" action="{% url 'teacher_student_reset_password' student.pk %}" onsubmit="return confirm('Сгенерировать новый пароль для ученика?')">
             {% csrf_token %}
-            <button type="submit" class="btn btn-secondary">Сбросить пароль</button>
+            <button type="submit" class="btn btn-secondary">{% t "Сбросить пароль" %}</button>
         </form>
         
         <form method="post" action="{% url 'teacher_student_delete' student.pk %}" onsubmit="return confirm('Удалить ученика «{{ student.get_full_name|default:student.username }}»? Это нельзя отменить.')">
             {% csrf_token %}
-            <button type="submit" class="btn btn-danger">Удалить ученика</button>
+            <button type="submit" class="btn btn-danger">{% t "Удалить ученика" %}</button>
         </form>
     </div>
 </div>

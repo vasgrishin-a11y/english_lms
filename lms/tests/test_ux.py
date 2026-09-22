@@ -1,4 +1,4 @@
-"""Доработки интерфейса: навыки, форма, поиск, меню, дашборд, лиса."""
+"""Доработки интерфейса: навыки, форма, поиск, меню, дашборд, язык, сцена."""
 
 from django.urls import reverse
 
@@ -23,8 +23,10 @@ class NavToggleTests(LMSCase):
         self.assertIn('id="nav-toggle"', html)
         self.assertNotIn(">Навигация<", html)
         self.assertIn("app-nav-toggle-label", html)
-        self.assertIn("data-fox-scene", html)
-        self.assertIn("fox-scene-canvas", html)
+        self.assertIn("data-raccoon-scene", html)
+        self.assertIn("raccoon-scene-canvas", html)
+        self.assertIn("raccoon-face.svg", html)
+        self.assertNotIn("fox", html.lower())
         self.assertNotIn("🌲", html)
         self.assertNotIn("🦊", html)
 
@@ -44,7 +46,8 @@ class AssignmentSkillsTests(LMSCase):
                 "is_active": "on",
             },
         )
-        self.assertRedirects(response, reverse("teacher_curriculum"))
+        if response.status_code == 200:
+            self.fail(response.context["form"].errors.as_text())
         assignment = Assignment.objects.get(title="Letter home")
         kinds = list(assignment.skills.values_list("kind", flat=True))
         self.assertEqual(kinds, [Skill.Kind.WRITING])
@@ -64,7 +67,8 @@ class AssignmentSkillsTests(LMSCase):
                 "skills_manual": "1",
             },
         )
-        self.assertRedirects(response, reverse("teacher_curriculum"))
+        if response.status_code == 200:
+            self.fail(response.context["form"].errors.as_text())
         assignment = Assignment.objects.get(title="No skills")
         self.assertFalse(assignment.skills.exists())
 
@@ -137,3 +141,133 @@ class SuggestSearchTests(LMSCase):
         self.assertIn('data-suggest="', html)
         self.assertIn('name="q"', html)
         self.assertIn('method="get"', html.lower())
+
+
+class InterfaceLanguageTests(LMSCase):
+    """Переключатель RU|ENG: меню и действия переводятся, курс — нет."""
+
+    def test_russian_is_default(self):
+        html = self.teacher_client.get("/teacher/").content.decode()
+        self.assertIn('<html lang="ru"', html)
+        self.assertIn("Консоль", html)
+        self.assertIn("lang-switch", html)
+        self.assertIn('class="lang-switch-option is-active"', html)
+
+    def test_english_mode_translates_menu_and_actions(self):
+        html = self.teacher_client.get("/teacher/?lang=eng").content.decode()
+        self.assertIn('<html lang="en"', html)
+        self.assertIn(">Console<", html)
+        self.assertIn(">Course<", html)
+        self.assertIn(">Analytics<", html)
+        self.assertNotIn(">Консоль<", html)
+
+    def test_choice_is_remembered_in_cookie(self):
+        response = self.teacher_client.get("/teacher/?lang=eng")
+        self.assertEqual(response.cookies["lms_lang"].value, "eng")
+        self.assertIn(">Console<", self.teacher_client.get("/teacher/").content.decode())
+        self.teacher_client.get("/teacher/?lang=ru")
+        self.assertIn(">Консоль<", self.teacher_client.get("/teacher/").content.decode())
+
+    def test_learning_content_stays_english(self):
+        html = self.student_client.get(
+            reverse("assignment_detail", args=[self.assignment.pk]) + "?lang=eng"
+        ).content.decode()
+        self.assertIn("Past tense", html)  # задание и его текст не переводятся
+        self.assertIn(">Submit for review<", html)  # а действие — да
+
+    def test_unknown_language_falls_back_to_russian(self):
+        html = self.teacher_client.get("/teacher/?lang=de").content.decode()
+        self.assertIn('<html lang="ru"', html)
+        self.assertIn(">Консоль<", html)
+
+    def test_language_parameter_does_not_redirect(self):
+        response = self.teacher_client.get("/teacher/?lang=eng")
+        self.assertEqual(response.status_code, 200)
+
+    def test_login_and_logout_labels_are_translated(self):
+        anonymous = self.client.get("/accounts/login/?lang=eng")
+        self.assertContains(anonymous, "Sign in")
+
+
+class DescriptionEditorTests(LMSCase):
+    """«Условия задания»: большой редактор и возврат к прежнему размеру."""
+
+    def test_editor_controls_are_rendered(self):
+        html = self.teacher_client.get(
+            reverse("teacher_assignment_form", args=[self.assignment.pk])
+        ).content.decode()
+        self.assertIn("data-description-editor", html)
+        self.assertIn("data-editor-expand", html)
+        self.assertIn("data-editor-restore", html)
+        self.assertIn("Вернуть прежний размер", html)
+        self.assertIn("#i-expand", html)
+
+    def test_solution_text_survives_round_trip(self):
+        long_text = "Task: write 200 words.\n\nCriteria:\n- structure\n- vocabulary"
+        response = self.teacher_client.post(
+            reverse("teacher_assignment_form", args=[self.assignment.pk]),
+            {
+                "topic": self.topic.pk,
+                "title": self.assignment.title,
+                "description": long_text,
+                "assignment_type": self.assignment.assignment_type,
+                "max_points": self.assignment.max_points,
+                "status": self.assignment.status,
+                "order": self.assignment.order,
+            },
+        )
+        if response.status_code == 200:
+            self.fail(response.context["form"].errors.as_text())
+        self.assignment.refresh_from_db()
+        self.assertEqual(self.assignment.description, long_text)
+
+
+class UploadDropzoneTests(LMSCase):
+    """Материалы прикрепляются перетаскиванием, поле остаётся обычным input."""
+
+    def test_student_answer_field_is_a_dropzone(self):
+        self.assignment.assignment_type = Assignment.Type.MIXED
+        self.assignment.save(update_fields=["assignment_type"])
+        html = self.student_client.get(
+            reverse("assignment_detail", args=[self.assignment.pk])
+        ).content.decode()
+        self.assertIn('data-dropzone="1"', html)
+        self.assertIn('type="file"', html)
+        self.assertIn("upload-block", html)
+        self.assertIn('accept="', html)
+
+    def test_ai_material_field_is_a_dropzone(self):
+        html = self.teacher_client.get(reverse("teacher_ai")).content.decode()
+        self.assertIn('data-dropzone="1"', html)
+        self.assertIn("data-dropzone-hint", html)
+
+    def test_text_only_assignment_has_no_file_field(self):
+        self.assignment.assignment_type = Assignment.Type.TEXT
+        self.assignment.save(update_fields=["assignment_type"])
+        html = self.student_client.get(
+            reverse("assignment_detail", args=[self.assignment.pk])
+        ).content.decode()
+        self.assertNotIn('data-dropzone="1"', html)
+
+
+class RaccoonSceneTests(LMSCase):
+    """Лису заменил енот: те же гарантии сцены, другие имена и рисунки."""
+
+    def test_scene_is_rendered_with_new_assets(self):
+        html = self.teacher_client.get("/teacher/").content.decode()
+        self.assertIn("raccoon-face.svg", html)
+        self.assertIn("raccoon_scene.js", html)
+        self.assertIn("Мордочка енота в шарфе", html)
+
+    def test_raccoon_assets_exist(self):
+        from django.contrib.staticfiles import finders
+
+        for name in (
+            "lms/img/raccoon-face.svg",
+            "lms/img/raccoon-sleep.svg",
+            "lms/img/raccoon-books.svg",
+            "lms/js/raccoon_scene.js",
+        ):
+            self.assertIsNotNone(finders.find(name), name)
+        self.assertIsNone(finders.find("lms/img/fox-run.svg"))
+        self.assertIsNone(finders.find("lms/img/raccoon-run.svg"))

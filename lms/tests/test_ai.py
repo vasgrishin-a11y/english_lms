@@ -5,11 +5,16 @@
 """
 
 import io
+import json
+import ssl
+import urllib.error
 import zipfile
 from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import override_settings
+from django.core.management import call_command
+from django.core.management.base import CommandError
+from django.test import SimpleTestCase, override_settings
 from django.urls import reverse
 
 from lms import ai
@@ -73,6 +78,46 @@ def xlsx_blob(rows):
             f"<sheetData>{''.join(sheet_rows)}</sheetData></worksheet>",
         )
     return buffer.getvalue()
+
+
+class FakeResponse:
+    """Минимальный ответ urlopen: JSON-тело и контекстный менеджер."""
+
+    def __init__(self, payload):
+        self._raw = json.dumps(payload).encode("utf-8")
+
+    def read(self):
+        return self._raw
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        return False
+
+
+class FakeTransport:
+    """Подмена urlopen: записывает запросы и отдаёт заготовленные ответы по порядку."""
+
+    def __init__(self, *responses):
+        self.responses = list(responses)
+        self.requests = []
+
+    def __call__(self, request, timeout=None, context=None):
+        body = request.data or b""
+        self.requests.append(
+            {
+                "url": request.full_url,
+                "method": request.get_method(),
+                "headers": {key.lower(): value for key, value in request.header_items()},
+                "body": body.decode("utf-8", errors="ignore"),
+                "raw": body,
+            }
+        )
+        payload = self.responses.pop(0) if self.responses else {}
+        if isinstance(payload, Exception):
+            raise payload
+        return FakeResponse(payload)
 
 
 class AssistantAccessTests(LMSCase):
@@ -170,8 +215,8 @@ class OfflineParsingTests(LMSCase):
     def test_extensions_and_notes_are_explained(self):
         self.assertEqual(ai.upload_kind("page.jpg"), "image")
         self.assertEqual(ai.upload_kind("lesson.docx"), "docx")
-        self.assertIn("нужен ключ", ai.offline_notes("page.jpg"))
-        self.assertIn("нужен ключ", ai.offline_notes("clip.mp4"))
+        self.assertIn("LMS_AI_LOCAL", ai.offline_notes("page.jpg"))
+        self.assertIn("LMS_AI_LOCAL", ai.offline_notes("clip.mp4"))
         self.assertEqual(ai.offline_notes("text.txt"), "")
 
 
@@ -330,9 +375,11 @@ class OnlineModeTests(LMSCase):
         ],
     }
 
-    @override_settings(LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True)
+    @override_settings(
+        LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="ollama", LMS_AI_LOCAL=True
+    )
     def test_online_answer_is_imported_as_drafts(self):
-        with patch("lms.ai._gemini_material", return_value=self.AI_PAYLOAD):
+        with patch("lms.ai._provider_material", return_value=self.AI_PAYLOAD):
             response = self.teacher_client.post(
                 reverse("teacher_ai"), {"target": "mixed", "prompt": "Сделай блок B1"}
             )
@@ -343,29 +390,37 @@ class OnlineModeTests(LMSCase):
         self.assertEqual(Block.objects.get(name="Travel B1").cefr_level, "B1")
         self.assertEqual(Flashcard.objects.count(), 2)
 
-    @override_settings(LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True)
+    @override_settings(
+        LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="ollama", LMS_AI_LOCAL=True
+    )
     def test_provider_failure_falls_back_to_offline(self):
-        with patch("lms.ai._gemini_material", side_effect=ai.AiError("Провайдер недоступен")):
+        with patch("lms.ai._provider_material", side_effect=ai.AiError("Модель недоступна")):
             response = self.teacher_client.post(
                 reverse("teacher_ai"), {"target": "mixed", "text": MARKDOWN}
             )
         self.assertContains(response, "разобран офлайн")
         self.assertContains(response, "Что получилось")
 
-    @override_settings(LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True)
+    @override_settings(
+        LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="ollama", LMS_AI_LOCAL=True
+    )
     def test_online_mode_sends_only_the_prompt_and_file(self):
         captured = {}
 
-        def fake(parts):
-            captured["parts"] = parts
+        def fake(spec, prompt_text, **kwargs):
+            captured["prompt"] = prompt_text
+            captured["spec"] = spec
+            captured["kwargs"] = kwargs
             return self.AI_PAYLOAD
 
-        with patch("lms.ai._gemini_material", side_effect=fake):
+        with patch("lms.ai._provider_material", side_effect=fake):
             self.teacher_client.post(
                 reverse("teacher_ai"), {"target": "cards", "text": "gate | выход"}
             )
-        self.assertEqual(len(captured["parts"]), 1)
-        self.assertIn("карточки", captured["parts"][0]["text"].lower())
+        self.assertEqual(captured["spec"]["key"], "ollama")
+        self.assertEqual(captured["kwargs"], {"filename": "", "blob": b""})
+        self.assertIn("карточки", captured["prompt"].lower())
+        self.assertIn("gate | выход", captured["prompt"])
 
 
 class AssistantModelTests(LMSCase):
@@ -375,7 +430,15 @@ class AssistantModelTests(LMSCase):
             self.assertEqual(ai.ai_mode(), "offline")
         with override_settings(LMS_AI_API_KEY="key"):
             self.assertEqual(ai.ai_mode(), "online")
-            self.assertIn("gemini", ai.ai_mode_label())
+            self.assertIn("Ollama", ai.ai_mode_label())
+            self.assertIn("qwen3-vl:8b", ai.ai_mode_label())
+        with override_settings(LMS_AI_API_KEY="", LMS_AI_LOCAL=True):
+            self.assertEqual(ai.ai_mode(), "online")
+            self.assertIn("локально", ai.ai_mode_label())
+            self.assertIn("локальная модель", ai.ai_mode_label(mode=None).split("—")[0] or "")
+        with override_settings(LMS_AI_API_KEY="", LMS_AI_LOCAL=False, LMS_AI_PROVIDER="lmstudio"):
+            self.assertEqual(ai.ai_mode(), "offline")
+            self.assertIn("LMS_AI_LOCAL", ai.ai_mode_label())
         with override_settings(LMS_AI_ENABLED=False):
             self.assertEqual(ai.ai_mode(), "off")
             self.assertIn("выключен", ai.ai_mode_label())
@@ -387,3 +450,369 @@ class AssistantModelTests(LMSCase):
         self.assertIn("побольше лексики", prompt)
         self.assertIn("JSON", prompt)
         self.assertIn("текст", prompt)
+
+
+class ProviderSettingsTests(SimpleTestCase):
+    """Локальная модель по умолчанию: Ollama, LM Studio и свой шлюз."""
+
+    def test_default_provider_is_local_ollama_with_vision(self):
+        self.assertEqual(ai.ai_provider(), "ollama")
+        spec = ai.provider_spec()
+        self.assertEqual(spec["kind"], "openai")
+        self.assertEqual(spec["label"], "Ollama (локальная модель)")
+        self.assertEqual(ai.ai_endpoint(), "http://localhost:11434/v1")
+        self.assertEqual(ai.ai_model(), "qwen3-vl:8b")
+        self.assertIn("image", ai.provider_uploads())
+        self.assertIn("vision-модель", ai.provider_hint())
+        self.assertTrue(spec["keyless"])
+
+    def test_there_is_no_cloud_provider_anymore(self):
+        for gone in ("gemini", "gigachat", "yandex", "proxyapi", "openrouter", "deepseek"):
+            self.assertNotIn(gone, ai.PROVIDERS)
+            # Незнакомое имя остаётся рабочим: это свой OpenAI-совместимый шлюз.
+            with override_settings(LMS_AI_PROVIDER=gone, LMS_AI_ENDPOINT="https://gw.example/v1"):
+                self.assertEqual(ai.provider_spec()["kind"], "openai")
+                self.assertEqual(ai.ai_endpoint(), "https://gw.example/v1")
+
+    def test_legacy_model_name_does_not_leak(self):
+        with override_settings(
+            LMS_AI_PROVIDER="ollama", LMS_AI_MODEL="gemini-2.0-flash", LMS_AI_ENDPOINT=""
+        ):
+            self.assertEqual(ai.ai_model(), "qwen3-vl:8b")
+            self.assertEqual(ai.ai_endpoint(), "http://localhost:11434/v1")
+
+    def test_lmstudio_requires_model_from_settings(self):
+        with override_settings(LMS_AI_PROVIDER="lmstudio", LMS_AI_MODEL="", LMS_AI_ENDPOINT=""):
+            self.assertEqual(ai.ai_endpoint(), "http://localhost:1234/v1")
+            self.assertEqual(ai.ai_model(), "")
+
+    def test_own_model_value_is_kept(self):
+        with override_settings(
+            LMS_AI_PROVIDER="lmstudio", LMS_AI_MODEL="qwen/qwen3-vl-8b", LMS_AI_ENDPOINT=""
+        ):
+            self.assertEqual(ai.ai_model(), "qwen/qwen3-vl-8b")
+            self.assertEqual(ai.ai_endpoint(), "http://localhost:1234/v1")
+
+    def test_upload_kinds_are_overridable_and_typos_fall_back(self):
+        with override_settings(LMS_AI_UPLOAD_KINDS="image"):
+            self.assertEqual(ai.provider_uploads(), ("image",))
+        with override_settings(LMS_AI_UPLOAD_KINDS="none"):
+            self.assertEqual(ai.provider_uploads(), ())
+        with override_settings(LMS_AI_UPLOAD_KINDS="image,none"):
+            self.assertEqual(ai.provider_uploads(), ("image",))  # лишнее значение отброшено
+        with override_settings(LMS_AI_UPLOAD_KINDS="мусор"):
+            self.assertEqual(ai.provider_uploads(), ai.provider_spec()["uploads"])
+
+    def test_local_mode_needs_an_explicit_flag(self):
+        with override_settings(LMS_AI_LOCAL=False, LMS_AI_API_KEY=""):
+            self.assertEqual(ai.ai_mode(), "offline")
+            self.assertIn("LMS_AI_LOCAL", ai.ai_mode_label())
+        with override_settings(LMS_AI_LOCAL=True):
+            self.assertEqual(ai.ai_mode(), "online")
+            self.assertTrue(ai.ai_local())
+        with override_settings(LMS_AI_LOCAL=True, LMS_AI_PROVIDER="openai"):
+            self.assertFalse(ai.ai_local())  # свой шлюз ключом и включается
+            self.assertEqual(ai.ai_mode(), "offline")
+
+    def test_unsupported_upload_note_explains_limits(self):
+        spec = ai.provider_spec()
+        self.assertIn("не читает видео", ai.unsupported_upload_note("clip.mp4", spec))
+        self.assertIn("vision-модель", ai.unsupported_upload_note("clip.mp4", spec))
+        self.assertIn("не читает PDF", ai.unsupported_upload_note("book.pdf", spec))
+        self.assertEqual(ai.unsupported_upload_note("lesson.docx", spec), "")
+        self.assertIn("вставьте текст", ai.unsupported_upload_note("virus.exe", spec))
+
+    def test_json_mode_defaults_to_off_for_local_models(self):
+        with override_settings(LMS_AI_JSON_MODE=False, LMS_AI_PROVIDER="ollama"):
+            self.assertFalse(ai._json_mode(ai.provider_spec()))
+        with override_settings(LMS_AI_JSON_MODE=True, LMS_AI_PROVIDER="ollama"):
+            self.assertTrue(ai._json_mode(ai.provider_spec()))
+        with override_settings(LMS_AI_JSON_MODE=False, LMS_AI_PROVIDER="openai"):
+            self.assertFalse(ai._json_mode(ai.provider_spec()))
+
+    def test_image_mime_by_extension(self):
+        self.assertEqual(ai._image_mime("page.png"), "image/png")
+        self.assertEqual(ai._image_mime("page.webp"), "image/webp")
+        self.assertEqual(ai._image_mime("scan.heic"), "image/jpeg")
+
+    def test_json_from_text_strips_fences_and_prose(self):
+        self.assertEqual(ai._json_from_text('```json\n{"blocks": []}\n```'), {"blocks": []})
+        self.assertEqual(
+            ai._json_from_text('Материал: {"blocks": []} — проверьте.'), {"blocks": []}
+        )
+        with self.assertRaises(ai.AiError):
+            ai._json_from_text("   ")
+        with self.assertRaises(ai.AiError):
+            ai._json_from_text("не JSON")
+
+
+class ProviderTransportTests(SimpleTestCase):
+    """Транспорт локальной модели: запрос, фото data-url, ошибки сервера."""
+
+    def openai_response(self, payload=None):
+        return {"choices": [{"message": {"content": json.dumps(payload or {})}}]}
+
+    def test_request_goes_to_ollama_without_key(self):
+        material = {"blocks": [{"name": "Travel"}]}
+        transport = FakeTransport(self.openai_response(material))
+        with (
+            patch("lms.ai.urllib.request.urlopen", transport),
+            override_settings(LMS_AI_LOCAL=True, LMS_AI_API_KEY=""),
+        ):
+            payload = ai._provider_material(ai.provider_spec(), "промпт")
+        self.assertEqual(payload, material)
+        request = transport.requests[0]
+        self.assertEqual(request["url"], "http://localhost:11434/v1/chat/completions")
+        self.assertNotIn("authorization", request["headers"])
+        body = json.loads(request["body"])
+        self.assertEqual(body["model"], "qwen3-vl:8b")
+        self.assertEqual(body["messages"][0]["content"], "промпт")
+        self.assertNotIn("response_format", body)
+
+    def test_photo_goes_as_data_url_for_vision_model(self):
+        transport = FakeTransport(self.openai_response({"blocks": []}))
+        with (
+            patch("lms.ai.urllib.request.urlopen", transport),
+            override_settings(LMS_AI_LOCAL=True, LMS_AI_MODEL="qwen2.5vl:7b"),
+        ):
+            ai._provider_material(
+                ai.provider_spec(), "Разбери страницу", filename="page.png", blob=b"\x89PNG"
+            )
+        body = json.loads(transport.requests[0]["body"])
+        content = body["messages"][0]["content"]
+        self.assertEqual(content[0], {"type": "text", "text": "Разбери страницу"})
+        self.assertTrue(content[1]["image_url"]["url"].startswith("data:image/png;base64,"))
+
+    def test_json_mode_and_key_are_used_for_own_gateway(self):
+        transport = FakeTransport(self.openai_response({"blocks": []}))
+        with override_settings(
+            LMS_AI_PROVIDER="my-gateway",
+            LMS_AI_ENDPOINT="https://gw.example/v1",
+            LMS_AI_API_KEY="secret",
+            LMS_AI_MODEL="my-model",
+            LMS_AI_JSON_MODE=True,
+        ):
+            with patch("lms.ai.urllib.request.urlopen", transport):
+                ai._provider_material(ai.provider_spec(), "промпт")
+        body = json.loads(transport.requests[0]["body"])
+        self.assertEqual(transport.requests[0]["url"], "https://gw.example/v1/chat/completions")
+        self.assertEqual(transport.requests[0]["headers"]["authorization"], "Bearer secret")
+        self.assertEqual(body["response_format"], {"type": "json_object"})
+        self.assertEqual(body["model"], "my-model")
+
+    def test_missing_model_and_endpoint_are_explained(self):
+        with override_settings(LMS_AI_PROVIDER="lmstudio", LMS_AI_MODEL="", LMS_AI_ENDPOINT=""):
+            with self.assertRaisesMessage(ai.AiError, "LMS_AI_MODEL"):
+                ai._provider_material(ai.provider_spec(), "промпт")
+        with override_settings(LMS_AI_PROVIDER="my-gateway", LMS_AI_ENDPOINT=""):
+            with self.assertRaisesMessage(ai.AiError, "LMS_AI_ENDPOINT"):
+                ai._provider_material(ai.provider_spec(), "промпт")
+
+    def test_connection_error_points_to_ollama(self):
+        transport = FakeTransport(urllib.error.URLError(ConnectionRefusedError("refused")))
+        with (
+            patch("lms.ai.urllib.request.urlopen", transport),
+            override_settings(LMS_AI_LOCAL=True),
+        ):
+            with self.assertRaisesMessage(ai.AiError, "Запущен ли Ollama"):
+                ai._provider_material(ai.provider_spec(), "промпт")
+
+    def test_unknown_model_suggests_ollama_list(self):
+        error = urllib.error.HTTPError(
+            "http://localhost:11434/v1", 404, "Not Found", {}, io.BytesIO(b"")
+        )
+        transport = FakeTransport(error)
+        with (
+            patch("lms.ai.urllib.request.urlopen", transport),
+            override_settings(LMS_AI_LOCAL=True),
+        ):
+            with self.assertRaisesMessage(ai.AiError, "ollama list"):
+                ai._provider_material(ai.provider_spec(), "промпт")
+
+    def test_model_without_json_support_gets_a_readable_error(self):
+        error = urllib.error.HTTPError(
+            "http://localhost:11434/v1", 400, "Bad Request", {}, io.BytesIO(b'{"error":"json"}')
+        )
+        with (
+            patch("lms.ai.urllib.request.urlopen", FakeTransport(error)),
+            override_settings(LMS_AI_LOCAL=True),
+        ):
+            with self.assertRaisesMessage(ai.AiError, "LMS_AI_JSON_MODE=0"):
+                ai._provider_material(ai.provider_spec(), "промпт")
+
+    def test_content_parts_are_joined(self):
+        payload = {
+            "choices": [{"message": {"content": [{"text": '{"blocks":'}, {"text": " []}"}]}}]
+        }
+        transport = FakeTransport(payload)
+        with (
+            patch("lms.ai.urllib.request.urlopen", transport),
+            override_settings(LMS_AI_LOCAL=True),
+        ):
+            self.assertEqual(ai._provider_material(ai.provider_spec(), "п"), {"blocks": []})
+
+    def test_tls_error_explains_ca_bundle(self):
+        transport = FakeTransport(
+            urllib.error.URLError(ssl.SSLCertVerificationError("self-signed certificate in chain"))
+        )
+        with override_settings(
+            LMS_AI_PROVIDER="gw", LMS_AI_ENDPOINT="https://gw.example/v1", LMS_AI_MODEL="my-model"
+        ):
+            with patch("lms.ai.urllib.request.urlopen", transport):
+                with self.assertRaisesMessage(ai.AiError, "LMS_AI_CA_BUNDLE"):
+                    ai._provider_material(ai.provider_spec(), "промпт")
+
+    def test_ssl_settings_build_the_context(self):
+        with override_settings(LMS_AI_VERIFY_SSL=True, LMS_AI_CA_BUNDLE=""):
+            self.assertIsNone(ai._ssl_context())
+        with override_settings(LMS_AI_CA_BUNDLE="/нет/такого/файла.pem"):
+            with self.assertRaisesMessage(ai.AiError, "LMS_AI_CA_BUNDLE"):
+                ai._ssl_context()
+        with override_settings(LMS_AI_VERIFY_SSL=False):
+            self.assertFalse(ai._ssl_context().verify_mode)  # CERT_NONE — явный отказ админа
+
+
+class LocalModelFallbackTests(SimpleTestCase):
+    """Что уходит в модель, что разбирается офлайн и как это объясняется."""
+
+    @override_settings(LMS_AI_ENABLED=True, LMS_AI_LOCAL=True)
+    def test_photo_goes_to_vision_model_with_text_from_document(self):
+        captured = {}
+
+        def fake(spec, prompt_text, *, filename="", blob=b""):
+            captured.update(filename=filename, blob=blob, prompt=prompt_text, label=spec["label"])
+            raise ai.AiError("нет сети")
+
+        upload = SimpleUploadedFile("page.jpg", b"\xff\xd8\xff")
+        with patch("lms.ai._provider_material", side_effect=fake):
+            material, meta = ai.build_material(upload=upload, text=MARKDOWN)
+        self.assertEqual(captured["filename"], "page.jpg")
+        self.assertEqual(captured["blob"], b"\xff\xd8\xff")
+        self.assertIn("# Travel B1", captured["prompt"])
+        self.assertEqual(meta["result"], "offline")
+        self.assertEqual(meta["provider"], "ollama")
+        self.assertIn("Ollama", meta["provider_label"])
+        self.assertTrue(any("разобран офлайн" in note for note in meta["notes"]))
+        self.assertTrue(material["blocks"])
+
+    @override_settings(LMS_AI_ENABLED=True, LMS_AI_LOCAL=True)
+    def test_video_is_not_sent_to_model_and_is_reported(self):
+        captured = {}
+
+        def fake(spec, prompt_text, *, filename="", blob=b""):
+            captured.update(filename=filename, blob=blob)
+            raise ai.AiError("нет сети")
+
+        upload = SimpleUploadedFile("clip.mp4", b"\x00\x00\x00\x18ftypmp42")
+        with patch("lms.ai._provider_material", side_effect=fake):
+            material, meta = ai.build_material(upload=upload, text=MARKDOWN)
+        self.assertEqual(captured["filename"], "")
+        self.assertEqual(captured["blob"], b"")
+        self.assertTrue(any("не читает видео" in note for note in meta["notes"]))
+        self.assertTrue(any("vision-модель" in note for note in meta["notes"]))
+        self.assertTrue(material["blocks"])
+
+    @override_settings(LMS_AI_ENABLED=True, LMS_AI_LOCAL=True)
+    def test_video_without_text_asks_for_manual_text(self):
+        upload = SimpleUploadedFile("clip.mp4", b"\x00\x00\x00\x18ftypmp42")
+        with patch("lms.ai._provider_material", side_effect=AssertionError("не вызывается")):
+            with self.assertRaisesMessage(ai.AiError, "вставьте текст вручную"):
+                ai.build_material(upload=upload)
+
+    @override_settings(LMS_AI_ENABLED=True, LMS_AI_LOCAL=False, LMS_AI_API_KEY="")
+    def test_offline_mode_reports_that_photo_cannot_be_read(self):
+        upload = SimpleUploadedFile("page.jpg", b"\xff\xd8\xff")
+        _, meta = ai.build_material(upload=upload, prompt="Соберите тему Travel")
+        self.assertEqual(meta["result"], "offline")
+        self.assertTrue(any("LMS_AI_LOCAL=1" in note for note in meta["notes"]))
+
+
+class AiCheckCommandTests(SimpleTestCase):
+    """`manage.py ai_check`: показать настройки и по флагу --live проверить модель."""
+
+    SAMPLE_MATERIAL = {
+        "blocks": [
+            {
+                "name": "Travel A2",
+                "description": "",
+                "cefr_level": "A2",
+                "topics": [
+                    {
+                        "title": "At the airport",
+                        "description": "",
+                        "assignments": [
+                            {
+                                "type": "quiz",
+                                "title": "Airport quiz",
+                                "description": "Ответьте на вопросы.",
+                                "questions": [
+                                    {
+                                        "kind": "mcq",
+                                        "text": "Where do you check in?",
+                                        "choices": [{"text": "At the desk", "correct": True}],
+                                    }
+                                ],
+                            }
+                        ],
+                        "cards": [],
+                    }
+                ],
+            }
+        ]
+    }
+
+    def test_offline_mode_is_reported_without_network(self):
+        output = io.StringIO()
+        call_command("ai_check", stdout=output)
+        text = output.getvalue()
+        self.assertIn("Офлайн-разбор", text)
+        self.assertIn("Ollama (локальная модель)", text)
+        self.assertIn("http://localhost:11434/v1", text)
+        self.assertIn("LMS_AI_LOCAL", text)
+
+    @override_settings(LMS_AI_ENABLED=False)
+    def test_disabled_assistant_stops_the_check(self):
+        with self.assertRaisesMessage(CommandError, "выключен"):
+            call_command("ai_check")
+
+    @override_settings(LMS_AI_LOCAL=True)
+    def test_live_check_confirms_the_model_answer(self):
+        transport = FakeTransport(
+            {"choices": [{"message": {"content": json.dumps(self.SAMPLE_MATERIAL)}}]}
+        )
+        output = io.StringIO()
+        with patch("lms.ai.urllib.request.urlopen", transport):
+            call_command("ai_check", "--live", stdout=output)
+        self.assertIn("Модель ответила", output.getvalue())
+        self.assertIn("Импорт не выполнялся", output.getvalue())
+        self.assertEqual(
+            [request["url"] for request in transport.requests],
+            ["http://localhost:11434/v1/chat/completions"],
+        )
+        json.loads(transport.requests[0]["body"])  # тело — корректный JSON
+        self.assertIn("Travel A2", transport.requests[0]["body"])
+
+    @override_settings(LMS_AI_LOCAL=True)
+    def test_live_check_fails_with_the_model_reason(self):
+        transport = FakeTransport(urllib.error.URLError("network down"))
+        with patch("lms.ai.urllib.request.urlopen", transport):
+            with self.assertRaisesMessage(CommandError, "Онлайн-разбор не сработал"):
+                call_command("ai_check", "--live")
+
+    @override_settings(LMS_AI_LOCAL=True)
+    def test_live_check_warns_about_plain_http_gateway(self):
+        transport = FakeTransport(
+            {"choices": [{"message": {"content": json.dumps(self.SAMPLE_MATERIAL)}}]}
+        )
+        output = io.StringIO()
+        with (
+            patch("lms.ai.urllib.request.urlopen", transport),
+            override_settings(
+                LMS_AI_PROVIDER="gw",
+                LMS_AI_ENDPOINT="http://gw.internal/v1",
+                LMS_AI_MODEL="m",
+                LMS_AI_API_KEY="secret",
+            ),
+        ):
+            call_command("ai_check", "--live", stdout=output)
+        self.assertIn("без HTTPS", output.getvalue())

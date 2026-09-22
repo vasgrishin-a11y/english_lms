@@ -1,0 +1,9 @@
+{% load lms_tags %}{# Переключатель RU|ENG: только подписи меню и действий, выбор помнит cookie. #}
+<div class="lang-switch{% if compact %} lang-switch-compact{% endif %}" role="group" aria-label="{% t 'Язык интерфейса' %}">
+    {% for code, label in ui_languages %}
+        <a class="lang-switch-option{% if ui_lang == code %} is-active{% endif %}"
+           href="{% querystring lang=code %}"
+           hreflang="{% if code == 'eng' %}en{% else %}ru{% endif %}"
+           {% if ui_lang == code %}aria-current="true"{% endif %}>{{ label }}</a>
+    {% endfor %}
+</div>

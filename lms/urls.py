@@ -214,7 +214,7 @@ urlpatterns = [
     ),
     path("teacher/analytics/", views_teacher.analytics, name="teacher_analytics"),
     path(
-        "teacher/analytics/export.csv",
+        "teacher/analytics/export.xlsx",
         views_teacher.analytics_export,
         name="teacher_analytics_export",
     ),

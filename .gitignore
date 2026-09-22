@@ -36,6 +36,9 @@ Thumbs.db
 htmlcov/
 coverage/
 
+# Скриншоты упавших браузерных проверок (артефакт CI)
+test-results/
+
 # Distribution / packaging
 dist/
 build/

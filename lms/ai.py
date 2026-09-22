@@ -1,20 +1,31 @@
 """ИИ-помощник преподавателя: файл или текст → структура курса черновиками.
 
-Режим работы гибридный (решение продукта):
+Помощник работает на **локальной модели** — ничего не уходит в облако:
 
-* **online** — задан ключ провайдера (по умолчанию Gemini): материал отправляется
-  в модель вместе с фото/PDF/видео, ответ разбирается в структуру курса;
-* **offline** — ключа нет: работаем без сети, извлекаем текст из файла
-  (DOCX, XLSX, PDF, TXT/MD/CSV) и раскладываем его по структуре эвристиками;
+* ``ollama`` (по умолчанию) — Ollama на http://localhost:11434;
+* ``lmstudio`` — LM Studio на http://localhost:1234;
+* ``openai`` — свой OpenAI-совместимый шлюз через ``LMS_AI_ENDPOINT``.
+
+Фото страницы учебника читает vision-модель (qwen3-vl, qwen2.5vl, gemma3,
+minicpm-v, llava) — картинка уходит в запрос data-url. Текст из DOCX, XLSX,
+PDF и TXT извлекается офлайн и уходит промптом, поэтому модель нужна только
+для «понять материал и собрать структуру».
+
+Режимы:
+
+* **online** — модель включена (``LMS_AI_LOCAL=1`` для локальной или
+  непустой ``LMS_AI_API_KEY`` для своего шлюза);
+* **offline** — модель не включена: работаем без сети, извлекаем текст из
+  файла и раскладываем его по структуре эвристиками;
 * **off** — помощник выключен переменной окружения ``LMS_AI_ENABLED=0``.
 
 Гарантии: ИИ ничего не публикует сам — импорт всегда создаёт **черновики**;
 ответ модели валидируется и обрезается по лимитам; содержимое файлов не
 логируется (в журнал попадают только счётчики).
 
-Внешних зависимостей нет: запрос к REST API выполняется через ``urllib``,
-архивы Office разбираются стандартным ``zipfile``. Это важно для сборки
-Amvera: ``requirements.txt`` с хешами не меняется.
+Внешних зависимостей нет: запрос к модели идёт через ``urllib``, архивы
+Office разбираются стандартным ``zipfile``. Это важно для сборки Amvera:
+``requirements.txt`` с хешами не меняется.
 """
 
 from __future__ import annotations
@@ -23,6 +34,7 @@ import base64
 import json
 import logging
 import re
+import ssl
 import urllib.error
 import urllib.request
 import zipfile
@@ -107,6 +119,73 @@ class AiError(Exception):
     """Понятная преподавателю ошибка помощника."""
 
 
+# ── Провайдеры ─────────────────────────────────────────────────────────────
+# Локальные модели: ни ключа, ни облака, материалы не покидают сервер.
+#   ollama    — Ollama (http://localhost:11434), по умолчанию;
+#   lmstudio  — LM Studio (http://localhost:1234);
+#   openai    — свой OpenAI-совместимый шлюз через LMS_AI_ENDPOINT.
+# Адаптер у всех один: POST {endpoint}/chat/completions. Vision умеют модели
+# qwen3-vl, qwen2.5vl, gemma3, minicpm-v, llava — фото уходят как data-url.
+def _openai_provider(
+    label, endpoint, *, model="", uploads=("image",), keyless=False, json_mode=False, hint=""
+):
+    return {
+        "kind": "openai",
+        "label": label,
+        "model": model,
+        "endpoint": endpoint,
+        "uploads": tuple(uploads),
+        "keyless": keyless,
+        "json_mode": json_mode,
+        "hint": hint,
+    }
+
+
+PROVIDERS = {
+    "ollama": _openai_provider(
+        "Ollama (локальная модель)",
+        "http://localhost:11434/v1",
+        model="qwen3-vl:8b",
+        keyless=True,
+        hint=(
+            "Модель работает на вашем сервере: ollama pull qwen3-vl:8b. "
+            "Для фото нужна vision-модель (qwen3-vl, qwen2.5vl, gemma3, minicpm-v); "
+            "для слабых машин — gemma3:4b или moondream."
+        ),
+    ),
+    "lmstudio": _openai_provider(
+        "LM Studio (локальная модель)",
+        "http://localhost:1234/v1",
+        keyless=True,
+        hint=(
+            "В LM Studio запустите сервер (Developer → Start Server) и загрузите "
+            "vision-модель (Qwen3-VL, Gemma, MiniCPM-V). Идентификатор модели "
+            "скопируйте в LMS_AI_MODEL."
+        ),
+    ),
+    "openai": _openai_provider(
+        "Свой OpenAI-совместимый шлюз",
+        "",
+        keyless=False,
+        json_mode=True,
+        hint="Задайте LMS_AI_ENDPOINT — подойдёт любой шлюз с /chat/completions.",
+    ),
+}
+
+DEFAULT_PROVIDER = "ollama"
+UPLOAD_KINDS = ("image",)
+UPLOAD_KIND_LABELS = {
+    "image": "фото и картинки",
+    "pdf": "PDF",
+    "video": "видео",
+    "audio": "аудио",
+    "other": "файлы такого формата",
+}
+# Модели прошлых версий: если в .env осталось значение зарубежного провайдера,
+# берём модель выбранного, иначе Ollama попытается скачать чужое имя.
+KNOWN_MODELS = {"gemini-2.0-flash", "GigaChat-2", "gpt://<folder_id>/yandexgpt-5.1"}
+
+
 # ── Настройки и режим ──────────────────────────────────────────────────────
 def _setting(name, default):
     return getattr(settings, name, default)
@@ -120,11 +199,98 @@ def ai_api_key():
     return str(_setting("LMS_AI_API_KEY", "") or "").strip()
 
 
+def ai_provider():
+    name = str(_setting("LMS_AI_PROVIDER", DEFAULT_PROVIDER) or "").strip().lower()
+    return name or DEFAULT_PROVIDER
+
+
+def provider_spec(name=None):
+    """Описание провайдера: адаптер, подпись, модель и адрес по умолчанию.
+
+    Незнакомое имя не ошибка: такой провайдер считается OpenAI-совместимым,
+    поэтому новый шлюз можно подключить одной переменной окружения.
+    """
+    key = (name or ai_provider()).strip().lower() or DEFAULT_PROVIDER
+    spec = dict(PROVIDERS.get(key) or _openai_provider(f"{key} (OpenAI-совместимый)", ""))
+    spec["key"] = key
+    spec["uploads"] = tuple(spec.get("uploads") or ())
+    return spec
+
+
+def _resolve_default(configured, spec, field, known):
+    value = str(configured or "").strip()
+    if not value:
+        return spec[field]
+    if value in known and value != spec[field]:
+        logger.warning("ai_settings_mismatch provider=%s field=%s", spec["key"], field)
+        return spec[field]
+    return value
+
+
+def ai_model(name=None):
+    """Модель: значение из окружения, иначе — модель провайдера по умолчанию."""
+    spec = provider_spec(name)
+    configured = _resolve_default(
+        _setting("LMS_AI_MODEL", ""),
+        spec,
+        "model",
+        {item["model"] for item in PROVIDERS.values() if item.get("model")} | KNOWN_MODELS,
+    )
+    if not configured:
+        return spec["model"]
+    return configured
+
+
+def ai_endpoint(name=None):
+    """Базовый адрес API: переопределяется переменной ``LMS_AI_ENDPOINT``."""
+    spec = provider_spec(name)
+    configured = _resolve_default(
+        _setting("LMS_AI_ENDPOINT", ""),
+        spec,
+        "endpoint",
+        {item["endpoint"] for item in PROVIDERS.values() if item.get("endpoint")},
+    )
+    return configured.rstrip("/") or spec["endpoint"].rstrip("/")
+
+
+def provider_uploads(spec=None):
+    """Какие файлы провайдер читает сам. ``LMS_AI_UPLOAD_KINDS`` переопределяет."""
+    spec = spec or provider_spec()
+    configured = str(_setting("LMS_AI_UPLOAD_KINDS", "") or "").strip().lower()
+    if not configured:
+        return spec["uploads"]
+    if configured in {"none", "-", "0"}:
+        return ()
+    kinds = tuple(
+        kind for kind in (item.strip() for item in configured.split(",")) if kind in UPLOAD_KINDS
+    )
+    if not kinds:  # опечатка в списке не должна незаметно отключать вложения
+        logger.warning("ai_upload_kinds_unknown")
+        return spec["uploads"]
+    return kinds
+
+
+def provider_hint(spec=None):
+    return (spec or provider_spec()).get("hint") or ""
+
+
+def ai_local():
+    """Локальная модель: ключ не нужен, включение — явным LMS_AI_LOCAL=1.
+
+    Без флага помощник остаётся офлайн: иначе каждая страница ждала бы ответа
+    от localhost, которого может и не быть.
+    """
+    spec = provider_spec()
+    return bool(_setting("LMS_AI_LOCAL", False)) and bool(spec.get("keyless"))
+
+
 def ai_mode():
     """Режим помощника: off, offline или online."""
     if not ai_enabled():
         return "off"
-    return "online" if ai_api_key() else "offline"
+    if ai_api_key() or ai_local():
+        return "online"
+    return "offline"
 
 
 def ai_mode_label(mode=None):
@@ -132,10 +298,27 @@ def ai_mode_label(mode=None):
     if mode == "off":
         return "ИИ-помощник выключен администратором"
     if mode == "online":
-        provider = _setting("LMS_AI_PROVIDER", "gemini")
-        model = _setting("LMS_AI_MODEL", "gemini-2.0-flash")
-        return f"ИИ подключён: {provider} · {model}"
-    return "Офлайн-разбор: ключа нет, работаем без сети"
+        spec = provider_spec()
+        suffix = " · локально, без ключа" if ai_local() and not ai_api_key() else ""
+        return f"ИИ подключён: {spec['label']} · {ai_model(spec['key'])}{suffix}"
+    if ai_enabled() and provider_spec().get("keyless"):
+        return "Офлайн-разбор: локальная модель не включена (LMS_AI_LOCAL=1)"
+    return "Офлайн-разбор: модель не подключена, работаем без сети"
+
+
+def unsupported_upload_note(filename, spec=None):
+    """Честно объясняем, чего выбранный провайдер не умеет с этим файлом."""
+    kind = upload_kind(filename)
+    if kind == "other":
+        return "Такой формат не разбирается — вставьте текст вручную."
+    if kind in {"text", "docx", "xlsx"}:
+        return ""
+    label = UPLOAD_KIND_LABELS.get(kind, "этот формат")
+    spec = spec or provider_spec()
+    return (
+        f"{spec['label']} не читает {label}: текст из документа разберём офлайн, "
+        f"а для фото нужна vision-модель (qwen3-vl, qwen2.5vl, gemma3, minicpm-v)."
+    )
 
 
 def max_upload_bytes():
@@ -187,9 +370,9 @@ def offline_notes(filename):
     """Чего офлайн-режим сделать не может — показываем честно."""
     kind = upload_kind(filename)
     if kind == "image":
-        return "Офлайн-режим не распознаёт текст на картинках — нужен ключ ИИ."
+        return "Офлайн-режим не распознаёт текст на картинках — включите локальную модель (LMS_AI_LOCAL=1)."
     if kind in {"video", "audio"}:
-        return "Офлайн-режим не смотрит видео и не слушает аудио — нужен ключ ИИ."
+        return "Офлайн-режим не смотрит видео и не слушает аудио — включите локальную модель (LMS_AI_LOCAL=1)."
     if kind == "other":
         return "Такой формат офлайн не разбирается — вставьте текст вручную."
     return ""
@@ -579,85 +762,178 @@ def build_prompt(text, *, prompt="", target="mixed", filename="", kind="text"):
     return "\n\n".join(parts)
 
 
-def _inline_part(filename, blob):
-    kind = upload_kind(filename)
-    if kind == "image":
-        mime = {
-            ".png": "image/png",
-            ".webp": "image/webp",
-            ".gif": "image/gif",
-            ".bmp": "image/bmp",
-        }.get(extension_of(filename), "image/jpeg")
-    elif kind == "pdf":
-        mime = "application/pdf"
-    elif kind == "video":
-        mime = {"…mov": "video/quicktime", ".webm": "video/webm"}.get(
-            extension_of(filename), "video/mp4"
-        )
-    elif kind == "audio":
-        mime = {
-            ".mp3": "audio/mpeg",
-            ".wav": "audio/wav",
-            ".ogg": "audio/ogg",
-            ".opus": "audio/opus",
-            ".flac": "audio/flac",
-        }.get(extension_of(filename), "audio/mp4")
-    else:
+def _image_part(blob, mime):
+    """Картинка для vision-модели: base64 в data-url (Ollama и LM Studio так умеют)."""
+    return base64.b64encode(blob).decode("ascii"), mime
+
+
+def _image_mime(filename):
+    return {
+        ".png": "image/png",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+        ".bmp": "image/bmp",
+    }.get(extension_of(filename), "image/jpeg")
+
+
+def _ssl_context():
+    """Контекст TLS для запросов к модели.
+
+    Локальные Ollama и LM Studio работают по http и сертификата не требуют.
+    Для своего шлюза с внутренним УЦ укажите ``LMS_AI_CA_BUNDLE``;
+    ``LMS_AI_VERIFY_SSL=0`` отключает проверку целиком — крайняя мера.
+    """
+    if not bool(_setting("LMS_AI_VERIFY_SSL", True)):
+        logger.warning("ai_tls_verification_disabled")
+        return ssl._create_unverified_context()  # nosec B323 - осознанный выбор администратора
+    bundle = str(_setting("LMS_AI_CA_BUNDLE", "") or "").strip()
+    if not bundle:
         return None
-    return {"inline_data": {"mime_type": mime, "data": base64.b64encode(blob).decode("ascii")}}
-
-
-def _gemini_material(parts):
-    model = _setting("LMS_AI_MODEL", "gemini-2.0-flash")
-    endpoint = _setting(
-        "LMS_AI_ENDPOINT",
-        "https://generativelanguage.googleapis.com/v1beta/models",
-    )
-    url = f"{endpoint}/{model}:generateContent?key={ai_api_key()}"
-    if not url.startswith(("https://", "http://")):
-        raise AiError("Адрес провайдера ИИ настроен неверно — нужен http(s).")
-    body = json.dumps(
-        {
-            "contents": [{"role": "user", "parts": parts}],
-            "generationConfig": {"temperature": 0.2, "responseMimeType": "application/json"},
-        }
-    ).encode("utf-8")
-    request = urllib.request.Request(
-        url,
-        data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    timeout = int(_setting("LMS_AI_TIMEOUT", 60))
     try:
-        # Схема адреса проверена выше; endpoint задаётся администратором в настройках.
-        with urllib.request.urlopen(request, timeout=timeout) as response:  # nosec B310
-            payload = json.loads(response.read().decode("utf-8"))
+        return ssl.create_default_context(cafile=bundle)
+    except (OSError, ssl.SSLError) as exc:
+        raise AiError(
+            f"Не удалось прочитать сертификат из LMS_AI_CA_BUNDLE ({bundle}): {exc}"
+        ) from exc
+
+
+def _http_json(request, *, provider="", timeout=None):
+    """Один HTTP-запрос через urllib: JSON-ответ или понятная ошибка."""
+    timeout = timeout or int(_setting("LMS_AI_TIMEOUT", 60))
+    context = _ssl_context()
+    try:
+        # Схема адреса проверена в ai_endpoint; endpoint задаёт администратор.
+        with urllib.request.urlopen(request, timeout=timeout, context=context) as response:  # nosec B310
+            raw = response.read()
     except urllib.error.HTTPError as exc:
-        detail = ""
         try:
             detail = exc.read().decode("utf-8", errors="ignore")[:300]
         except Exception:  # pragma: no cover - защита от нечитаемого тела ответа
             detail = ""
-        logger.warning("ai_http_error status=%s", exc.code)
+        logger.warning("ai_http_error provider=%s status=%s", provider or "?", exc.code)
         if exc.code in {401, 403}:
-            raise AiError("Ключ ИИ отклонён провайдером — проверьте LMS_AI_API_KEY.") from exc
-        if exc.code == 429:
-            raise AiError("Лимит запросов бесплатного тарифа исчерпан. Попробуйте позже.") from exc
-        raise AiError(f"Провайдер ИИ вернул ошибку {exc.code}. {detail}") from exc
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        raise AiError("Не удалось связаться с ИИ — сработал офлайн-разбор.") from exc
+            raise AiError("Модель отклонила ключ — проверьте LMS_AI_API_KEY.") from exc
+        if exc.code == 404:
+            raise AiError(
+                f"Модель «{ai_model()}» не найдена. Проверьте имя модели "
+                "(для Ollama: ollama list) — оно должно совпадать с LMS_AI_MODEL."
+            ) from exc
+        if exc.code in {400, 422}:
+            raise AiError(
+                "Модель отклонила запрос — обычно это значит, что она не понимает "
+                "изображения или не поддерживает JSON-ответ (LMS_AI_JSON_MODE=0)."
+                f" Ответ: {detail}"
+            ) from exc
+        raise AiError(f"Модель вернула ошибку {exc.code}. {detail}") from exc
+    except urllib.error.URLError as exc:
+        reason = getattr(exc, "reason", None)
+        if isinstance(reason, ssl.SSLCertVerificationError) or "CERTIFICATE_VERIFY_FAILED" in str(
+            reason
+        ):
+            logger.warning("ai_tls_error provider=%s", provider or "?")
+            raise AiError(
+                "TLS-сертификат модели не удалось проверить: для своего шлюза задайте "
+                "LMS_AI_CA_BUNDLE или отключите проверку через LMS_AI_VERIFY_SSL=0."
+            ) from exc
+        raise AiError(
+            f"Нет связи с моделью по адресу {ai_endpoint() or 'не задан'}. "
+            "Запущен ли Ollama или LM Studio и тот ли адрес в LMS_AI_ENDPOINT? "
+            "Материал разобран офлайн."
+        ) from exc
+    except (TimeoutError, OSError) as exc:
+        raise AiError(
+            "Модель не ответила за отведённое время — увеличьте LMS_AI_TIMEOUT "
+            "или возьмите модель поменьше. Материал разобран офлайн."
+        ) from exc
+    try:
+        return json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise AiError("Модель вернула не JSON — попробуйте ещё раз.") from exc
 
+
+def _json_from_text(raw):
+    """Ответ модели → JSON материала: снимаем ```-обёртки и текст вокруг объекта."""
+    text = re.sub(r"^```(?:json)?|```$", "", str(raw or "").strip(), flags=re.MULTILINE).strip()
+    if not text:
+        raise AiError("Модель вернула пустой ответ — попробуйте ещё раз.")
+    if not text.startswith("{"):
+        start, end = text.find("{"), text.rfind("}")
+        if start > -1 and end > start:
+            text = text[start : end + 1]
     try:
-        chunks = payload["candidates"][0]["content"]["parts"]
-        raw = "".join(part.get("text", "") for part in chunks)
-    except (KeyError, IndexError, TypeError) as exc:
-        raise AiError("ИИ вернул пустой ответ — попробуйте ещё раз.") from exc
-    raw = re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
-    try:
-        return json.loads(raw)
+        return json.loads(text)
     except json.JSONDecodeError as exc:
-        raise AiError("Не удалось разобрать ответ ИИ — попробуйте ещё раз.") from exc
+        raise AiError(
+            "Не удалось разобрать ответ модели: возможно, она вернула текст вместо JSON. "
+            "Попробуйте модель побольше или повторите запрос."
+        ) from exc
+
+
+def _chat_text(payload):
+    """Текст ответа из формата OpenAI (``choices[0].message.content``)."""
+    try:
+        content = payload["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError) as exc:
+        raise AiError("Модель вернула пустой ответ — попробуйте ещё раз.") from exc
+    if isinstance(content, list):  # некоторые локальные серверы отдают список частей
+        content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
+    return content
+
+
+# ── Адаптер локальной модели ──────────────────────────────────────────────
+def _json_mode(spec):
+    """response_format=json_object: по умолчанию выключен, локальные модели его не любят."""
+    configured = _setting("LMS_AI_JSON_MODE", None)
+    if configured is None:
+        return bool(spec.get("json_mode"))
+    return bool(configured)
+
+
+def _provider_material(spec, prompt_text, *, filename="", blob=b""):
+    """Отправить материал локальной модели (Ollama, LM Studio, свой шлюз).
+
+    Единый транспорт: ``POST {endpoint}/chat/completions``. Фото уходит
+    data-url в content, как того ждут vision-модели; остальные файлы
+    (DOCX, XLSX, PDF, TXT) к этому моменту уже превращены в текст.
+    """
+    endpoint = ai_endpoint()
+    if not endpoint:
+        raise AiError(
+            "Задайте LMS_AI_ENDPOINT — адрес OpenAI-совместимого сервера модели "
+            "(например, http://localhost:11434/v1)."
+        )
+    if not endpoint.startswith(("http://", "https://")):
+        raise AiError("Адрес модели настроен неверно — нужен http(s).")
+    model = ai_model()
+    if not model:
+        raise AiError(
+            "Не выбрана модель: укажите LMS_AI_MODEL (для LM Studio — идентификатор "
+            "загруженной модели, для Ollama — имя из `ollama list`)."
+        )
+    content = prompt_text
+    if blob:
+        data, mime = _image_part(blob, _image_mime(filename))
+        content = [
+            {"type": "text", "text": prompt_text},
+            {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{data}"}},
+        ]
+    body = {
+        "model": model,
+        "messages": [{"role": "user", "content": content}],
+        "temperature": 0.2,
+    }
+    if _json_mode(spec):
+        body["response_format"] = {"type": "json_object"}
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    if ai_api_key():  # локальные Ollama и LM Studio ключа не требуют
+        headers["Authorization"] = f"Bearer {ai_api_key()}"
+    request = urllib.request.Request(
+        f"{endpoint}/chat/completions",
+        data=json.dumps(body).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    return _json_from_text(_chat_text(_http_json(request, provider=spec["label"])))
 
 
 # ── Нормализация и валидация ──────────────────────────────────────────────
@@ -883,24 +1159,43 @@ def build_material(
 
     meta = {"mode": mode, "kind": kind, "filename": filename, "notes": notes}
     if mode == "online":
-        parts = [
-            {"text": build_prompt(text, prompt=prompt, target=target, filename=filename, kind=kind)}
-        ]
-        inline = _inline_part(filename, blob) if blob else None
-        if inline and len(blob) <= max_upload_bytes():
-            parts.append(inline)
-        try:
-            payload = _gemini_material(parts)
-            material = normalise(payload, source=filename or "Материал ИИ-помощника")
-            meta["result"] = "online"
-            return material, meta
-        except AiError as exc:
-            meta["notes"].append(f"{exc} Материал разобран офлайн.")
+        spec = provider_spec()
+        meta["provider"] = spec["key"]
+        meta["provider_label"] = spec["label"]
+        attachable = bool(blob) and kind in provider_uploads(spec)
+        if blob and not attachable:
+            notes.append(unsupported_upload_note(filename, spec))
+        if text or prompt.strip() or attachable:
+            try:
+                payload = _provider_material(
+                    spec,
+                    build_prompt(text, prompt=prompt, target=target, filename=filename, kind=kind),
+                    filename=filename if attachable else "",
+                    blob=blob if attachable else b"",
+                )
+                material = normalise(payload, source=filename or "Материал ИИ-помощника")
+                meta["result"] = "online"
+                return material, meta
+            except AiError as exc:
+                meta["notes"].append(f"{exc} Материал разобран офлайн.")
+        else:
+            notes.append(
+                "Онлайн-разбор недоступен: этот файл провайдер не читает, "
+                "а текста в нём нет — вставьте текст вручную."
+            )
+    elif blob:
+        note = offline_notes(filename)
+        if note:
+            notes.append(note)
 
     if not text:
         text = prompt.strip()
     if not text:
-        raise AiError("Офлайн-режим не смог прочитать файл — вставьте текст вручную.")
+        hints = " ".join(note for note in notes if note)
+        raise AiError(
+            "Офлайн-режим не смог прочитать файл — вставьте текст вручную."
+            + (f" {hints}" if hints else "")
+        )
     material = normalise(
         parse_text(text, source=(filename.rsplit(".", 1)[0] if filename else "") or "Материал"),
         source=filename or "Материал ИИ-помощника",
@@ -1047,11 +1342,17 @@ __all__ = [
     "AiError",
     "AI_CEFR_LEVELS",
     "AI_QUESTION_KINDS",
+    "DEFAULT_PROVIDER",
+    "PROVIDERS",
     "TARGETS",
     "UPLOAD_EXTENSIONS",
+    "UPLOAD_KINDS",
     "ai_enabled",
+    "ai_endpoint",
     "ai_mode",
     "ai_mode_label",
+    "ai_model",
+    "ai_provider",
     "build_material",
     "build_prompt",
     "extension_of",
@@ -1063,5 +1364,9 @@ __all__ = [
     "normalise",
     "offline_notes",
     "parse_text",
+    "provider_hint",
+    "provider_spec",
+    "provider_uploads",
+    "unsupported_upload_note",
     "upload_kind",
 ]

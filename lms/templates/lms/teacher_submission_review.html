@@ -7,7 +7,7 @@
 {% block content %}
 <nav aria-label="Хлебные крошки">
     <ol class="crumbs">
-        <li><a href="{% url 'teacher_review_queue' %}{% querystring %}">Проверка</a></li>
+        <li><a href="{% url 'teacher_review_queue' %}{% querystring %}">{% t "Проверка" %}</a></li>
         <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_student_detail' submission.student_id %}">{{ submission.student.get_full_name|default:submission.student.username }}</a></li>
         <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span>{{ submission.assignment.topic.title }}</span></li>
         <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">Попытка {{ submission.version }}</span></li>
@@ -30,7 +30,7 @@
         {% if nav.prev %}<a class="btn btn-secondary btn-sm" href="{% url 'teacher_submission_review' nav.prev %}{% querystring %}" data-nav-prev>{% icon "chevron-left" %}K</a>{% endif %}
         <span class="position">{% if nav.position %}{{ nav.position }}{% else %}—{% endif %}</span>
         {% if nav.next %}<a class="btn btn-secondary btn-sm" href="{% url 'teacher_submission_review' nav.next %}{% querystring %}" data-nav-next>J {% icon "chevron-right" %}</a>{% endif %}
-        <a class="btn btn-ghost btn-sm" href="{% url 'teacher_review_queue' %}{% querystring %}">{% icon "list" %}К очереди</a>
+        <a class="btn btn-ghost btn-sm" href="{% url 'teacher_review_queue' %}{% querystring %}">{% icon "list" %}{% t "К очереди" %}</a>
     </span>
 </div>
 
@@ -39,7 +39,7 @@
         {% if not is_latest %}
             <div class="alert alert-warning" role="alert">
                 {% icon "alert" %}
-                <span>Это историческая попытка {{ submission.version }}. Изменение проверки закрыто — решение сохраняется только для последней попытки. <a href="{% url 'teacher_submission_review' latest.pk %}">Открыть последнюю попытку</a>.</span>
+                <span>Это историческая попытка {{ submission.version }}. Изменение проверки закрыто — решение сохраняется только для последней попытки. <a href="{% url 'teacher_submission_review' latest.pk %}">{% t "Открыть последнюю попытку" %}</a>.</span>
             </div>
         {% endif %}
         {% if conflict %}
@@ -68,7 +68,7 @@
                     {% elif submission.assignment.material_file.name|media_kind == 'audio' %}
                         <audio controls preload="none" src="{% url 'media_preview' submission.assignment.material_file.name %}"></audio>
                     {% endif %}
-                    <a class="btn btn-secondary btn-sm" href="{{ submission.assignment.material_file.url }}">{% icon "download" %}Скачать материалы</a>
+                    <a class="btn btn-secondary btn-sm" href="{{ submission.assignment.material_file.url }}">{% icon "download" %}{% t "Скачать материалы" %}</a>
                 </div>
             {% endif %}
             <p class="small mb-0" style="margin-top:12px">
@@ -99,7 +99,7 @@
                     {% elif submission.file_answer.name|media_kind == 'audio' %}
                         <audio controls preload="metadata" src="{% url 'media_preview' submission.file_answer.name %}"></audio>
                     {% endif %}
-                    <a class="btn btn-secondary btn-sm" href="{{ submission.file_answer.url }}">{% icon "download" %}Скачать файл ответа</a>
+                    <a class="btn btn-secondary btn-sm" href="{{ submission.file_answer.url }}">{% icon "download" %}{% t "Скачать файл ответа" %}</a>
                 </div>
             {% endif %}
         </section>
@@ -187,8 +187,8 @@
                         </ul>
                     {% endif %}
                     <div class="col" style="margin-top:16px">
-                        <button class="btn btn-block" type="submit" name="next" value="1">{% icon "arrow-right" %}Сохранить и к следующей</button>
-                        <button class="btn btn-secondary btn-block" type="submit">Сохранить проверку</button>
+                        <button class="btn btn-block" type="submit" name="next" value="1">{% icon "arrow-right" %}{% t "Сохранить и к следующей" %}</button>
+                        <button class="btn btn-secondary btn-block" type="submit">{% t "Сохранить проверку" %}</button>
                     </div>
                     <p class="tiny muted mb-0 center"><kbd>Ctrl</kbd>+<kbd>↵</kbd> — сохранить и перейти к следующей работе</p>
                 </form>
@@ -198,7 +198,7 @@
                     <p class="mb-0"><strong>{{ feedback.get_decision_display }}</strong>{% if feedback.grade != None %} · {{ feedback.grade }} из {{ submission.max_points_snapshot }}{% endif %}</p>
                     {{ feedback.comment|linebreaks }}
                 {% endif %}
-                <a class="btn btn-block" href="{% url 'teacher_submission_review' latest.pk %}">Открыть последнюю попытку</a>
+                <a class="btn btn-block" href="{% url 'teacher_submission_review' latest.pk %}">{% t "Открыть последнюю попытку" %}</a>
             {% endif %}
         </section>
 
@@ -211,10 +211,10 @@
             {% endif %}
             <p class="tiny muted">Максимум баллов этой попытки: <strong class="tnum">{{ submission.max_points_snapshot }}</strong></p>
             <div class="row" style="margin-top:8px">
-                <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_student_detail' submission.student_id %}">{% icon "user" %}Карточка ученика</a>
+                <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_student_detail' submission.student_id %}">{% icon "user" %}{% t "Карточка ученика" %}</a>
             </div>
             <div class="row" style="margin-top:8px">
-                <a class="btn btn-ghost btn-sm btn-block" href="{% url 'teacher_review_queue' %}{% querystring assignment=submission.assignment_id %}">{% icon "filter" %}Работы этого задания</a>
+                <a class="btn btn-ghost btn-sm btn-block" href="{% url 'teacher_review_queue' %}{% querystring assignment=submission.assignment_id %}">{% icon "filter" %}{% t "Работы этого задания" %}</a>
             </div>
         </section>
     </div>
