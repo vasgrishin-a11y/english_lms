@@ -27,12 +27,14 @@
                 <fieldset class="form-section">
                     <legend>{% icon "sparkles" %}Библиотека шаблонов</legend>
                     <p class="help-text">Выберите готовый набор по теме и уровню: название и описание подставятся в форму, а карточки создадутся автоматически при сохранении. Всё можно отредактировать.</p>
+                    {% include "lms/parts/level_filter.html" with levels=preset_levels %}
                     {% for topic in preset_topics %}
+                    <div class="preset-group" data-preset-group>
                         <h3 class="preset-topic">{{ topic.label }}</h3>
                         <div class="preset-grid" role="group" aria-label="Шаблоны: {{ topic.label }}">
                             {% for preset in presets %}
                                 {% if preset.topic == topic.id %}
-                                    <button type="button" class="preset-card" data-preset="{{ preset.id }}"{% if preset.id == active_preset %} aria-pressed="true"{% endif %}>
+                                    <button type="button" class="preset-card" data-preset="{{ preset.id }}" data-level="{{ preset.level }}"{% if preset.id == active_preset %} aria-pressed="true"{% endif %}>
                                         <span class="preset-icon">{% icon preset.icon "icon" %}</span>
                                         <span class="preset-text">
                                             <span class="preset-label">{{ preset.label }}</span>
@@ -46,6 +48,7 @@
                                 {% endif %}
                             {% endfor %}
                         </div>
+                    </div>
                     {% endfor %}
                     <p class="tiny muted mb-0" data-preset-hint aria-live="polite"></p>
                     <noscript>

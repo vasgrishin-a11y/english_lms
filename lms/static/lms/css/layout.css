@@ -57,56 +57,6 @@
 /* Верхнее меню убрано: единственная навигация — боковая панель слева.
    Центр шапки занимает сцена «Лиса на опушке» (см. .fox-scene ниже). */
 
-.nav-link {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--sp-2);
-    padding: 7px 13px;
-    font-size: var(--fs-14);
-    font-weight: 600;
-    color: var(--text-muted);
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: var(--r-md);
-    text-decoration: none;
-    white-space: nowrap;
-    transition:
-        color var(--dur-2) var(--ease),
-        background var(--dur-2) var(--ease);
-}
-
-.nav-link:hover {
-    color: var(--text);
-    background: var(--canvas-alt);
-}
-
-.nav-link[aria-current="page"],
-.nav-link.is-active {
-    color: var(--accent-900);
-    background: var(--accent-tint);
-    border-color: var(--accent-200);
-}
-
-.nav-link .icon {
-    width: 16px;
-    height: 16px;
-}
-
-.nav-count {
-    padding: 0 6px;
-    font-size: var(--fs-11);
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-    color: var(--warning-ink);
-    background: var(--warning-bg);
-    border-radius: var(--r-pill);
-}
-
-.nav-link[aria-current="page"] .nav-count {
-    color: var(--on-accent);
-    background: var(--accent-600);
-}
-
 .topbar-side {
     display: flex;
     align-items: center;
@@ -491,6 +441,13 @@
     border-color: var(--danger-border);
 }
 
+/* Строка квизлета в списке заданий: перивинкл-точка вместо статусной. */
+.task-deck .task-dot {
+    color: var(--info-ink);
+    background: var(--info-bg);
+    border-color: var(--info-border);
+}
+
 .task-main {
     flex: 1 1 auto;
     min-width: 0;
@@ -744,12 +701,6 @@
     .topbar-side .name,
     .topbar-side .btn-secondary {
         display: none;
-    }
-    .nav-link .label {
-        display: none;
-    }
-    .nav-link {
-        padding: 7px 10px;
     }
     .hero {
         padding: var(--sp-5);

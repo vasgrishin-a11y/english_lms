@@ -111,18 +111,23 @@
                     {% regroup block_group.list by topic as topic_groups %}
                     {% for topic_group in topic_groups %}
                         {% with topic=topic_group.list.0.topic %}
+                        {% with topic_decks=decks_by_topic|get_item:topic.pk %}
                             <div class="panel" style="margin-bottom:12px">
                                 <div class="row row-between">
                                     <h3 class="mb-0">{% icon "book" %} {{ topic.title }}</h3>
-                                    <span class="tiny muted tnum">{{ topic_group.list|length }}</span>
+                                    <span class="tiny muted tnum">{{ topic_group.list|length }}{% if topic_decks %} + {{ topic_decks|length }} квиз.{% endif %}</span>
                                 </div>
                                 {% if topic.description %}<p class="muted small">{{ topic.description }}</p>{% endif %}
                                 <ul class="task-list">
                                     {% for assignment in topic_group.list %}
                                         {% include "lms/parts/task_item.html" with assignment=assignment state=assignment.state %}
                                     {% endfor %}
+                                    {% for deck in topic_decks %}
+                                        {% include "lms/parts/deck_task_item.html" with deck=deck %}
+                                    {% endfor %}
                                 </ul>
                             </div>
+                        {% endwith %}
                         {% endwith %}
                     {% endfor %}
                 </section>

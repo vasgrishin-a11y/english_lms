@@ -1,0 +1,7 @@
+{# Фильтр шаблонов квизлетов по уровню (JS deckLevelFilter). Вход: levels. #}
+<div class="level-filter" data-level-filter role="group" aria-label="Фильтр по уровню">
+    <button type="button" class="chip" data-level-filter-value="" aria-pressed="true">Все уровни</button>
+    {% for level in levels %}
+        <button type="button" class="chip" data-level-filter-value="{{ level }}" aria-pressed="false">{{ level }}</button>
+    {% endfor %}
+</div>

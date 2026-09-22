@@ -1820,6 +1820,14 @@ table .grade-col {
     margin-top: var(--sp-1);
 }
 
+/* Фильтр библиотеки шаблонов по уровню: чипсы, без JS всё видно. */
+.level-filter {
+    display: flex;
+    gap: var(--sp-2);
+    flex-wrap: wrap;
+    margin-bottom: var(--sp-3);
+}
+
 /* Строки выбора шаблона на странице карточек: просмотр + импорт. */
 .preset-pick-list {
     display: flex;
@@ -2189,6 +2197,29 @@ table .grade-col {
     text-transform: uppercase;
     color: var(--text-muted);
 }
+
+/* Тематические акценты обложки: бейдж инициалов + кромка плашки.
+   Белый текст на тёмном бейдже держит AA (проверено: 5.8–9.5:1). */
+.cover-theme-travel .cover-initials { background: #1e6e68; }
+.cover-theme-travel .cover-plate { border-left: 4px solid #63c3bc; }
+.cover-theme-movie .cover-initials { background: #4a3f6b; }
+.cover-theme-movie .cover-plate { border-left: 4px solid #9a8fc4; }
+.cover-theme-business .cover-initials { background: #3d4b5c; }
+.cover-theme-business .cover-plate { border-left: 4px solid #8fa3b8; }
+.cover-theme-exam .cover-initials { background: #7a3b2e; }
+.cover-theme-exam .cover-plate { border-left: 4px solid #d08a7a; }
+.cover-theme-ielts .cover-initials { background: #3f5a47; }
+.cover-theme-ielts .cover-plate { border-left: 4px solid #a6c3aa; }
+.cover-theme-it .cover-initials { background: #2f4a7a; }
+.cover-theme-it .cover-plate { border-left: 4px solid #7f9cd4; }
+.cover-theme-kids .cover-initials { background: #8a5a2b; }
+.cover-theme-kids .cover-plate { border-left: 4px solid #d9a75f; }
+.cover-theme-teens .cover-initials { background: #5c4d8a; }
+.cover-theme-teens .cover-plate { border-left: 4px solid #a394d4; }
+.cover-theme-happy .cover-initials { background: #7a5c10; }
+.cover-theme-happy .cover-plate { border-left: 4px solid #d9b95f; }
+.cover-theme-grammar .cover-initials { background: #2f6b45; }
+.cover-theme-grammar .cover-plate { border-left: 4px solid #8fc0a0; }
 
 .class-cover img {
     width: 100%;

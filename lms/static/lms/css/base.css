@@ -271,6 +271,11 @@ video {
     display: none !important;
 }
 
+/* Скрытие через атрибут (фильтры без перезагрузки): перебивает grid/flex. */
+[hidden] {
+    display: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
     html {
         scroll-behavior: auto;

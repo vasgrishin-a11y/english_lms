@@ -1,0 +1,15 @@
+{% load lms_tags %}
+{# Строка квизлета в списке заданий темы: ведёт в тренажёр. Вход: deck. #}
+<li class="task task-deck">
+    <span class="task-dot" aria-hidden="true">{% icon "cards" %}</span>
+    <span class="task-main">
+        <a class="task-title" href="{% url 'trainer_session' deck.pk %}">{{ deck.title }}</a>
+        <span class="task-meta">
+            <span class="tag">{% icon "cards" "icon icon-sm" %}квизлет</span>
+            <span class="tnum">{{ deck.card_total }} карт.</span>
+        </span>
+    </span>
+    <span class="task-side">
+        <a class="btn btn-secondary btn-sm" href="{% url 'trainer_session' deck.pk %}">{% icon "play" %}Тренировать</a>
+    </span>
+</li>

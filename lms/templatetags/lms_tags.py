@@ -390,6 +390,17 @@ def deck_cards_map(presets):
 
 
 @register.filter
+def get_item(mapping, key):
+    """Безопасный доступ к словарю в шаблоне: квизлеты темы, счётчики."""
+    if not mapping:
+        return None
+    try:
+        return mapping.get(key)
+    except AttributeError:
+        return None
+
+
+@register.filter
 def percent_of(value, maximum):
     try:
         value = float(value)

@@ -64,12 +64,14 @@
                 <h2 class="card-title" id="deck-presets-title">{% icon "sparkles" %}Библиотека шаблонов</h2>
             </div>
             <p class="help-text">Готовые наборы по темам и уровням. «Подставить в импорт» — заполнить поле массового импорта для просмотра и правок, «Добавить сразу» — создать карточки немедленно.</p>
+            {% include "lms/parts/level_filter.html" with levels=preset_levels %}
             {% for topic in preset_topics %}
+            <div class="preset-group" data-preset-group>
                 <h3 class="preset-topic">{{ topic.label }}</h3>
                 <ul class="preset-pick-list">
                     {% for preset in presets %}
                         {% if preset.topic == topic.id %}
-                            <li class="preset-pick">
+                            <li class="preset-pick" data-level="{{ preset.level }}">
                                 <span class="preset-icon">{% icon preset.icon "icon" %}</span>
                                 <span class="preset-text">
                                     <span class="preset-label">{{ preset.label }}</span>
@@ -91,6 +93,7 @@
                         {% endif %}
                     {% endfor %}
                 </ul>
+            </div>
             {% endfor %}
             <p class="tiny muted mb-0" data-deck-cards-hint aria-live="polite"></p>
             {{ presets|deck_cards_map|json_script:"deck-preset-cards" }}

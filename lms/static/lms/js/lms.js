@@ -707,6 +707,41 @@
     );
   }
 
+  function deckLevelFilter() {
+    Array.prototype.forEach.call(
+      document.querySelectorAll("[data-level-filter]"),
+      function (bar) {
+        var scope = bar.closest("fieldset, section") || document;
+        var chips = bar.querySelectorAll("[data-level-filter-value]");
+        function apply(level) {
+          Array.prototype.forEach.call(chips, function (chip) {
+            chip.setAttribute(
+              "aria-pressed",
+              chip.getAttribute("data-level-filter-value") === level ? "true" : "false"
+            );
+          });
+          Array.prototype.forEach.call(
+            scope.querySelectorAll("[data-level]"),
+            function (item) {
+              item.hidden = !!level && item.getAttribute("data-level") !== level;
+            }
+          );
+          Array.prototype.forEach.call(
+            scope.querySelectorAll("[data-preset-group]"),
+            function (group) {
+              group.hidden = group.querySelectorAll("[data-level]:not([hidden])").length === 0;
+            }
+          );
+        }
+        Array.prototype.forEach.call(chips, function (chip) {
+          chip.addEventListener("click", function () {
+            apply(chip.getAttribute("data-level-filter-value") || "");
+          });
+        });
+      }
+    );
+  }
+
   ready(function () {
     autohideAlerts();
     confirmForms();
@@ -720,5 +755,6 @@
     quizTiles();
     navToggle();
     deckPresetFill();
+    deckLevelFilter();
   });
 })();
