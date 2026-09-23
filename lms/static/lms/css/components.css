@@ -777,11 +777,17 @@ th.numeric {
 
 .form-actions {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: flex-end;
     gap: var(--sp-3);
     padding-top: var(--sp-4);
     border-top: 1px solid var(--border);
+}
+
+/* У файлового инпута в Chrome фиксированная ширина: не даём ей распирать форму. */
+input[type="file"] {
+    max-width: 100%;
 }
 
 .btn-primary {
