@@ -1,0 +1,167 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}Правка задания с ИИ — English LMS{% endblock %}
+{% block workspace_class %}workspace-wide{% endblock %}
+
+{% block content %}
+<nav aria-label="Хлебные крошки">
+    <ol class="crumbs">
+        <li><a href="{% url 'teacher_home' %}">{% t "Консоль" %}</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_curriculum' %}">{% t "Карта курса" %}</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_assignment_form' assignment.pk %}">{{ assignment.title }}</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">{% t "Правка с ИИ" %}</span></li>
+    </ol>
+</nav>
+
+<div class="content-head">
+    <div>
+        <h1>{% icon "sparkles" %}{% t "Правка задания с ИИ" %}</h1>
+        <p class="page-note">Опишите, что изменить, — помощник перепишет задание и покажет новую версию. Применяете её только вы: ничего не меняется без кнопки «Применить правки».</p>
+    </div>
+    <span class="badge badge-wrap {% if mode == 'online' %}badge-turquoise{% else %}badge-outline{% endif %}">{{ mode_label }}</span>
+</div>
+
+{% if mode != 'online' %}
+    <section class="card">
+        <div class="empty">
+            <div class="empty-icon">{% icon "sparkles" "icon icon-xl" %}</div>
+            <h2>Правка с ИИ недоступна</h2>
+            <p>Переписать готовое задание может только подключённая модель: офлайн-разбор умеет лишь собирать новые материалы с нуля. {% if mode == 'off' %}Включите помощника переменной <code>LMS_AI_ENABLED=1</code> и{% else %}{% endif %}подключите локальную модель (<code>LMS_AI_LOCAL=1</code>) или задайте <code>LMS_AI_API_KEY</code>.</p>
+            {% if mode != 'off' and provider_hint %}<p class="small muted">{{ provider.label }}: {{ provider_hint }}</p>{% endif %}
+            <p><a class="btn btn-secondary" href="{% url 'teacher_assignment_form' assignment.pk %}">{% icon "pencil" %}{% t "Открыть задание" %}</a></p>
+        </div>
+    </section>
+{% else %}
+    <div class="split">
+        <div class="split-main">
+            <section class="card" aria-labelledby="ai-current-title">
+                <div class="card-head">
+                    <h2 class="card-title" id="ai-current-title">{% icon "file-text" %}Сейчас в задании</h2>
+                    <span class="pill is-active turquoise">{% icon assignment.assignment_type|type_icon "icon icon-sm" %}{{ assignment.get_assignment_type_display }}</span>
+                </div>
+                <p class="strong mb-0">{{ assignment.title }}</p>
+                <div class="col small" style="gap:8px;margin-top:8px">{{ assignment.description|linebreaks }}</div>
+                <div class="filter-pills" style="margin-top:12px">
+                    {% if assignment.is_quiz %}<span class="pill">Вопросов: {{ question_count }}</span>{% endif %}
+                    {% if assignment.is_flashcards %}<span class="pill">Карточек: {{ card_count }}</span>{% endif %}
+                    {% if not assignment.is_quiz and not assignment.is_flashcards %}<span class="pill">{{ assignment.max_points }} баллов</span>{% endif %}
+                    {% if assignment.material_file %}<span class="pill">{% icon "file-text" "icon icon-sm" %}Вложение сохранится</span>{% endif %}
+                    {% if assignment.status == 'published' %}<span class="pill">Опубликовано — статус не изменится</span>{% else %}<span class="pill">Черновик</span>{% endif %}
+                </div>
+                {% if submissions_count %}
+                    <div class="alert alert-warning" role="alert" style="margin-top:12px">
+                        {% icon "alert" %}
+                        <span>По этому заданию уже есть сдач: {{ submissions_count }}. Если применить версию с новыми вопросами или карточками, старые пункты исчезнут — выставленные оценки останутся в истории как есть.</span>
+                    </div>
+                {% endif %}
+            </section>
+
+            <section class="card" aria-labelledby="ai-instruction-title">
+                <div class="card-head"><h2 class="card-title" id="ai-instruction-title">{% icon "pencil" %}Что изменить</h2></div>
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    <div class="form-field">
+                        <label for="id_instruction">Правка для помощника</label>
+                        <textarea id="id_instruction" name="instruction" rows="3" maxlength="4000" placeholder="Например: сделай вопросы на уровень сложнее, добавь два вопроса про Past Simple, перепиши условие короче, переведи примеры на тему Travel">{{ instruction }}</textarea>
+                        <div class="help-text" id="id_instruction_helptext">
+                            {% if assignment.is_quiz %}Помощник вернёт тест целиком: название, условие и все вопросы.
+                            {% elif assignment.is_flashcards %}Помощник вернёт тренажёр целиком: название, условие и все карточки.
+                            {% else %}Тип задания не меняется: помощник перепишет название и условие.{% endif %}
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn" type="submit">{% icon "sparkles" %}{% if revision %}{% t "Сгенерировать заново" %}{% else %}{% t "Подготовить версию" %}{% endif %}</button>
+                        {% if revision %}
+                            <button class="btn btn-ghost" type="submit" name="reset" value="1">{% icon "refresh" %}{% t "Сбросить версию" %}</button>
+                        {% endif %}
+                        <a class="btn btn-secondary" href="{% url 'teacher_assignment_form' assignment.pk %}">{% t "Назад к заданию" %}</a>
+                    </div>
+                </form>
+            </section>
+
+            {% if revision %}
+                <section class="card" aria-labelledby="ai-revision-title">
+                    <div class="card-head">
+                        <h2 class="card-title" id="ai-revision-title">{% icon "sparkles" %}Версия, подготовленная ИИ</h2>
+                        <span class="badge badge-turquoise">ещё не применена</span>
+                    </div>
+                    <p class="strong mb-0">{{ revision.title }}</p>
+                    <div class="col small" style="gap:8px;margin-top:8px">{{ revision.description|linebreaks }}</div>
+                    <div class="filter-pills" style="margin:12px 0">
+                        {% if revision.questions %}<span class="pill">Вопросов: {{ revision.questions|length }}</span>{% endif %}
+                        {% if revision.cards %}<span class="pill">Карточек: {{ revision.cards|length }}</span>{% endif %}
+                        {% if not assignment.is_quiz and not assignment.is_flashcards %}<span class="pill">{{ revision.max_points }} баллов</span>{% endif %}
+                    </div>
+
+                    {% if revision.questions %}
+                        <ol class="col" style="gap:12px;margin:0 0 16px;padding-left:22px">
+                            {% for question in revision.questions %}
+                                <li>
+                                    <p class="mb-0">{{ question.text }} <span class="tiny muted tnum">{{ question.points }} б.</span></p>
+                                    {% if question.choices %}
+                                        <ul class="tiny muted" style="margin-top:4px">
+                                            {% for choice in question.choices %}
+                                                <li>{% if choice.correct %}<strong>✓ {{ choice.text }}</strong>{% else %}{{ choice.text }}{% endif %}{% if choice.match_text %} — {{ choice.match_text }}{% endif %}</li>
+                                            {% endfor %}
+                                        </ul>
+                                    {% endif %}
+                                    {% if question.explanation %}<p class="tiny muted mb-0">Пояснение: {{ question.explanation }}</p>{% endif %}
+                                </li>
+                            {% endfor %}
+                        </ol>
+                    {% endif %}
+
+                    {% if revision.cards %}
+                        <ul class="card-grid" style="margin-bottom:16px">
+                            {% for card in revision.cards %}
+                                <li>
+                                    <div class="panel" style="height:100%;display:flex;flex-direction:column;gap:6px">
+                                        <strong style="font-size:var(--fs-18)">{{ card.front }}</strong>
+                                        <span class="small">{{ card.back }}</span>
+                                        {% if card.example %}<span class="tiny muted">«{{ card.example }}»</span>{% endif %}
+                                    </div>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% endif %}
+
+                    <div class="alert alert-warning" role="alert">
+                        {% icon "alert" %}
+                        <span>При применении текущие {% if assignment.is_quiz %}вопросы и варианты ответов{% elif assignment.is_flashcards %}карточки{% else %}название и условие{% endif %} будут заменены версией выше. Отменить замену нельзя.</span>
+                    </div>
+                    <form method="post" action="{% url 'teacher_assignment_ai_apply' assignment.pk %}">
+                        {% csrf_token %}
+                        <div class="form-actions">
+                            <button class="btn" type="submit">{% icon "check" %}{% t "Применить правки" %}</button>
+                            <a class="btn btn-secondary" href="{% url 'teacher_assignment_preview' assignment.pk %}">{% icon "eye" %}{% t "Текущая версия глазами ученика" %}</a>
+                        </div>
+                    </form>
+                </section>
+            {% endif %}
+        </div>
+
+        <aside class="split-side" tabindex="0" aria-label="Как работает правка с ИИ">
+            <section class="card card-pad-sm">
+                <p class="rail-title">Как это работает</p>
+                <ol class="small muted" style="padding-left:18px">
+                    <li>Помощник видит текущее задание целиком и вашу правку.</li>
+                    <li>Он возвращает новую версию целиком — сравните её с текущей.</li>
+                    <li>Кнопка «Применить правки» заменяет содержимое; вложение, дедлайн, группа и статус публикации сохраняются.</li>
+                    <li>Не понравилась версия — уточните правку и сгенерируйте заново.</li>
+                </ol>
+                <p class="tiny muted mb-0">Приватность: текст задания уходит только локальной модели на своём сервере. В журнал попадают лишь счётчики замен.</p>
+            </section>
+            <section class="card card-pad-sm">
+                <p class="rail-title">Примеры правок</p>
+                <ul class="small muted" style="padding-left:18px">
+                    <li>«Сделай вопросы на уровень C1 и добавь пояснения»</li>
+                    <li>«Сократи условие до трёх предложений»</li>
+                    <li>«Добавь 5 карточек про аэропорт»</li>
+                    <li>«Замени половину вопросов на вписывание ответа»</li>
+                </ul>
+            </section>
+        </aside>
+    </div>
+{% endif %}
+{% endblock %}

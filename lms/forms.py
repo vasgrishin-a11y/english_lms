@@ -430,6 +430,15 @@ class AssignmentForm(forms.ModelForm):
             profile__role=Profile.Role.STUDENT, is_active=True
         ).order_by("last_name", "first_name", "username")
 
+        # Материалы можно прикрепить к заданию любого типа
+        self.fields["material_file"].widget.attrs["accept"] = ",".join(
+            f".{ext}" for ext in sorted(ALLOWED_FILE_EXTENSIONS)
+        )
+        self.fields["material_file"].help_text = (
+            f"Один файл до {settings.LMS_MAX_FILE_BYTES // (1024 * 1024)} MiB: "
+            "документ, картинка, аудио или архив. Ученик увидит его на странице задания."
+        )
+
         # Улучшаем выпадающий список тем: показываем Блок - Тема
         self.fields["topic"].queryset = (
             Topic.objects.select_related("block")

@@ -1347,6 +1347,187 @@ def _import_cards(topic, topic_data, created):
     return total
 
 
+# ── Правка существующего задания ──────────────────────────────────────────
+REVISION_SCHEMA = """Верни строго JSON без пояснений в формате:
+{"title": "Название задания",
+ "description": "Условие для ученика: что сделать, объём, критерии",
+ "max_points": 10, "skills": ["grammar|vocabulary|listening|speaking|writing|reading"],
+ "questions": [{"kind": "mcq|multi|gap|match|order|sort|spell|text|voice", "text": "вопрос",
+    "points": 1, "explanation": "",
+    "choices": [{"text": "вариант", "correct": true, "match_text": ""}]}],
+ "cards": [{"front": "слово", "back": "перевод", "example": "пример"}]}
+Правила: верни задание ЦЕЛИКОМ, уже с правкой — не описывай отличия; сохраняй язык
+задания и уровень учеников; для mcq/order ровно один верный вариант, для multi — от
+двух; для match/sort в choices пары text ↔ match_text; для gap/spell принимаемые
+ответы как верные варианты; text и voice — без choices."""
+
+
+def assignment_payload(assignment):
+    """Текущее содержимое задания как JSON-словарь — контекст для модели."""
+    payload = {
+        "type": assignment.assignment_type,
+        "title": assignment.title,
+        "description": assignment.description,
+        "max_points": assignment.max_points,
+        "skills": list(assignment.skills.order_by("order", "name").values_list("slug", flat=True)),
+    }
+    if assignment.is_quiz:
+        payload["questions"] = [
+            {
+                "kind": question.kind,
+                "text": question.text,
+                "points": question.points,
+                "explanation": question.explanation,
+                "choices": [
+                    {
+                        "text": choice.text,
+                        "correct": choice.is_correct,
+                        "match_text": choice.match_text,
+                    }
+                    for choice in question.choices.all()
+                ],
+            }
+            for question in assignment.questions.prefetch_related("choices").order_by("order", "pk")
+        ]
+    if assignment.is_flashcards:
+        payload["cards"] = [
+            {"front": card.front, "back": card.back, "example": card.example}
+            for card in assignment.cards.all().order_by("order", "pk")
+        ]
+    return payload
+
+
+def build_revision_prompt(assignment, instruction):
+    """Промпт правки: текущая версия задания + что изменить + схема ответа."""
+    payload = assignment_payload(assignment)
+    assignment_type = payload["type"]
+    caps = limits()
+    parts = [
+        "Ты помогаешь преподавателю обновить готовое задание курса английского языка.",
+        f"Правка преподавателя: {instruction.strip()}",
+        "Текущая версия задания (JSON):\n" + json.dumps(payload, ensure_ascii=False, indent=1),
+    ]
+    if assignment_type == Assignment.Type.QUIZ:
+        parts.append(
+            "Это тест: верни полный список questions с учётом правки "
+            f"(не больше {caps['questions']}), cards верни пустым списком."
+        )
+    elif assignment_type == Assignment.Type.FLASHCARDS:
+        parts.append(
+            "Это тренажёр карточек: верни полный список cards с учётом правки "
+            f"(не больше {caps['cards']}), questions верни пустым списком."
+        )
+    else:
+        parts.append(
+            "Тип задания менять нельзя: правь только title и description, "
+            "questions и cards верни пустыми списками."
+        )
+    parts.append(REVISION_SCHEMA)
+    return "\n\n".join(parts)
+
+
+def revise_assignment(assignment, instruction):
+    """Попросить модель переписать задание. Возвращает ``(revision, meta)``."""
+    mode = ai_mode()
+    if mode == "off":
+        raise AiError("ИИ-помощник выключен администратором (LMS_AI_ENABLED=0).")
+    if mode != "online":
+        raise AiError(
+            "Правка с ИИ требует работающей модели: офлайн-разбор не умеет "
+            "переписывать готовое задание. Подключите локальную модель "
+            "(LMS_AI_LOCAL=1) или задайте ключ LMS_AI_API_KEY и попробуйте снова."
+        )
+    instruction = (instruction or "").strip()[: limits()["text_chars"]]
+    if not instruction:
+        raise AiError("Опишите, что изменить: например, «сделай вопросы сложнее».")
+    spec = provider_spec()
+    payload = _provider_material(spec, build_revision_prompt(assignment, instruction))
+    revision = normalise_revision(payload, assignment_type=assignment.assignment_type)
+    meta = {
+        "mode": mode,
+        "provider": spec["key"],
+        "provider_label": spec["label"],
+        "result": "online",
+    }
+    return revision, meta
+
+
+def normalise_revision(payload, *, assignment_type):
+    """Ответ модели → безопасная правка задания того же типа, что и исходное."""
+    if not isinstance(payload, dict):
+        raise AiError("Модель вернула не JSON-объект задания — попробуйте ещё раз.")
+    revision = _normalise_assignment({**payload, "type": assignment_type}, limits())
+    if revision is None:
+        raise AiError("В ответе модели нет названия или условия — попробуйте ещё раз.")
+    revision["type"] = assignment_type  # вопросы не превращают задание в тест: тип фиксирован
+    if assignment_type == Assignment.Type.QUIZ:
+        if not revision["questions"]:
+            raise AiError("Модель не вернула вопросов теста — попробуйте ещё раз.")
+    else:
+        revision["questions"] = []
+    if assignment_type == Assignment.Type.FLASHCARDS:
+        cards = []
+        for card in payload.get("cards") or []:
+            if len(cards) >= limits()["cards"] or not isinstance(card, dict):
+                break
+            front = _clean(card.get("front"), 200)
+            back = _clean(card.get("back"), 500)
+            if not front or not back:
+                continue
+            cards.append(
+                {"front": front, "back": back, "example": _clean(card.get("example"), 500)}
+            )
+        if len(cards) < 2:
+            raise AiError(
+                "Модель вернула слишком мало карточек (нужно хотя бы две) — попробуйте ещё раз."
+            )
+        revision["cards"] = cards
+    else:
+        revision["cards"] = []
+    return revision
+
+
+@transaction.atomic
+def apply_revision(assignment, revision):
+    """Заменить содержимое задания версией ИИ. Статус, дедлайн, вложение сохраняются."""
+    summary = {"questions": 0, "cards": 0}
+    assignment.title = revision["title"][:200]
+    assignment.description = revision["description"]
+    if assignment.is_quiz:
+        assignment.questions.all().delete()
+        _create_questions(assignment, revision["questions"])
+        assignment.max_points = assignment.total_question_points
+        summary["questions"] = len(revision["questions"])
+    elif assignment.is_flashcards:
+        assignment.cards.all().delete()
+        Flashcard.objects.bulk_create(
+            [
+                Flashcard(
+                    assignment=assignment,
+                    front=card["front"],
+                    back=card["back"],
+                    example=card["example"],
+                    order=position,
+                )
+                for position, card in enumerate(revision["cards"], start=1)
+            ]
+        )
+        summary["cards"] = len(revision["cards"])
+    else:
+        assignment.max_points = max(1, min(1000, revision["max_points"]))
+    skills = list(Skill.objects.filter(slug__in=revision.get("skills") or []))
+    if skills:
+        assignment.skills.set(skills)
+    assignment.save(update_fields=["title", "description", "max_points", "updated_at"])
+    logger.info(
+        "ai_revision_applied assignment=%s questions=%s cards=%s",
+        assignment.pk,
+        summary["questions"],
+        summary["cards"],
+    )
+    return summary
+
+
 __all__ = [
     "AiError",
     "AI_CEFR_LEVELS",
@@ -1362,8 +1543,11 @@ __all__ = [
     "ai_mode_label",
     "ai_model",
     "ai_provider",
+    "apply_revision",
+    "assignment_payload",
     "build_material",
     "build_prompt",
+    "build_revision_prompt",
     "extension_of",
     "extract_text",
     "import_material",
@@ -1371,11 +1555,13 @@ __all__ = [
     "material_summary",
     "max_upload_bytes",
     "normalise",
+    "normalise_revision",
     "offline_notes",
     "parse_text",
     "provider_hint",
     "provider_spec",
     "provider_uploads",
+    "revise_assignment",
     "unsupported_upload_note",
     "upload_kind",
 ]

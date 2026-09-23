@@ -1,5 +1,6 @@
 """Доработки интерфейса: навыки, форма, поиск, меню, дашборд, язык, сцена."""
 
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
 from lms.models import Assignment, Group, Skill
@@ -111,6 +112,59 @@ class AssignmentSkillsTests(LMSCase):
         )
         self.assertContains(edit, "quiz-editor")
         self.assertContains(edit, "Новый вопрос")
+
+
+class AssignmentMaterialsTests(LMSCase):
+    """Материалы (вложение) доступны для задания любого типа."""
+
+    def test_materials_section_is_not_hidden_by_type(self):
+        new_page = self.teacher_client.get(reverse("teacher_assignment_new")).content.decode()
+        self.assertIn("material_file", new_page)
+        self.assertNotIn('data-show-types="file audio mixed"', new_page)
+        self.assignment.assignment_type = Assignment.Type.QUIZ
+        self.assignment.save()
+        edit_page = self.teacher_client.get(
+            reverse("teacher_assignment_form", args=[self.assignment.pk])
+        ).content.decode()
+        self.assertNotIn('data-show-types="file audio mixed"', edit_page)
+
+    def test_teacher_can_attach_materials_to_any_assignment_type(self):
+        for assignment_type in (
+            Assignment.Type.TEXT,
+            Assignment.Type.FILE,
+            Assignment.Type.AUDIO,
+            Assignment.Type.MIXED,
+            Assignment.Type.QUIZ,
+            Assignment.Type.FLASHCARDS,
+        ):
+            assignment = Assignment.objects.create(
+                topic=self.topic,
+                title=f"Materials {assignment_type}",
+                description="Open the attachment first.",
+                assignment_type=assignment_type,
+            )
+            response = self.teacher_client.post(
+                reverse("teacher_assignment_form", args=[assignment.pk]),
+                {
+                    "topic": self.topic.pk,
+                    "title": assignment.title,
+                    "description": assignment.description,
+                    "assignment_type": assignment_type,
+                    "max_points": 100,
+                    "status": Assignment.Publication.PUBLISHED,
+                    "order": 0,
+                    "is_active": "on",
+                    "material_file": SimpleUploadedFile(
+                        "notes.txt", b"Attachment body", "text/plain"
+                    ),
+                },
+            )
+            if response.status_code == 200:
+                self.fail(response.context["form"].errors.as_text())
+            assignment.refresh_from_db()
+            self.assertTrue(assignment.material_file, f"тип {assignment_type}")
+            page = self.student_client.get(f"/assignments/{assignment.pk}/")
+            self.assertContains(page, "Материалы урока")
 
 
 class SuggestSearchTests(LMSCase):

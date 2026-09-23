@@ -7,18 +7,19 @@
 import logging
 
 from django.contrib import messages
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods, require_POST
 
 from . import ai
 from .decorators import teacher_required
 from .forms import AIMaterialForm
-from .models import Topic
+from .models import Assignment, Topic
 
 logger = logging.getLogger("lms.ai")
 
 SESSION_MATERIAL = "ai_material"
 SESSION_META = "ai_meta"
+SESSION_REVISION = "ai_revision"
 
 
 def _clear_session(request):
@@ -123,3 +124,88 @@ def ai_import(request):
         message += f" Повторов пропущено: {created['skipped']}."
     messages.success(request, f"{message} Проверьте черновики и опубликуйте, когда готовы.")
     return redirect("teacher_curriculum")
+
+
+@teacher_required
+@require_http_methods(["GET", "POST"])
+def assignment_ai(request, pk):
+    """Правка готового задания с ИИ: инструкция → версия-предложение к применению."""
+    assignment = get_object_or_404(Assignment.objects.select_related("topic__block"), pk=pk)
+    mode = ai.ai_mode()
+    stored = request.session.get(SESSION_REVISION)
+    if stored and stored.get("assignment") != assignment.pk:
+        stored = None
+    revision = stored.get("revision") if stored else None
+    instruction = stored.get("instruction", "") if stored else ""
+
+    if request.method == "POST":
+        if "reset" in request.POST:
+            request.session.pop(SESSION_REVISION, None)
+            messages.info(request, "Версия ИИ сброшена — задание не менялось.")
+            return redirect("teacher_assignment_ai", pk=assignment.pk)
+        instruction = request.POST.get("instruction", "").strip()[:4000]
+        if mode != "online":
+            messages.error(
+                request,
+                "Правка с ИИ доступна, когда подключена модель. Сейчас работает только "
+                "офлайн-разбор новых материалов — измените задание вручную.",
+            )
+        elif not instruction:
+            messages.error(request, "Опишите, что изменить: например, «сделай вопросы сложнее».")
+        else:
+            try:
+                revision, _meta = ai.revise_assignment(assignment, instruction)
+            except ai.AiError as exc:
+                messages.error(request, str(exc))
+                revision = None
+            else:
+                request.session[SESSION_REVISION] = {
+                    "assignment": assignment.pk,
+                    "instruction": instruction,
+                    "revision": revision,
+                }
+                messages.success(
+                    request, "ИИ подготовил новую версию — проверьте её и примените внизу."
+                )
+
+    return render(
+        request,
+        "lms/teacher_assignment_ai.html",
+        {
+            "assignment": assignment,
+            "mode": mode,
+            "mode_label": ai.ai_mode_label(mode),
+            "provider": ai.provider_spec(),
+            "provider_hint": ai.provider_hint(),
+            "revision": revision,
+            "instruction": instruction,
+            "question_count": assignment.questions.count() if assignment.is_quiz else 0,
+            "card_count": assignment.cards.count() if assignment.is_flashcards else 0,
+            "submissions_count": assignment.submissions.count(),
+            "workspace": "curriculum",
+        },
+    )
+
+
+@teacher_required
+@require_POST
+def assignment_ai_apply(request, pk):
+    """Применить версию из предпросмотра: заменить содержимое задания."""
+    assignment = get_object_or_404(Assignment, pk=pk)
+    stored = request.session.get(SESSION_REVISION)
+    if not stored or stored.get("assignment") != assignment.pk:
+        messages.error(request, "Нет подготовленной версии — сгенерируйте её заново.")
+        return redirect("teacher_assignment_ai", pk=pk)
+    try:
+        summary = ai.apply_revision(assignment, stored["revision"])
+    except ai.AiError as exc:
+        messages.error(request, str(exc))
+        return redirect("teacher_assignment_ai", pk=pk)
+    request.session.pop(SESSION_REVISION, None)
+    parts = [f"Задание обновлено по версии ИИ: {assignment.title}."]
+    if summary["questions"]:
+        parts.append(f"Вопросов теперь: {summary['questions']}.")
+    if summary["cards"]:
+        parts.append(f"Карточек теперь: {summary['cards']}.")
+    messages.success(request, " ".join(parts))
+    return redirect("teacher_assignment_form", pk=pk)

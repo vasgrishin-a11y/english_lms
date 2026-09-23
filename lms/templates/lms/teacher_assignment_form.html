@@ -187,8 +187,9 @@
                     </div>
                 </div>
 
-                <div class="form-section" data-show-types="file audio mixed">
-                    <h2 class="section-title">{% icon "send" %}Материалы</h2>
+                <div class="form-section">
+                    <h2 class="section-title">{% icon "upload" %}Материалы</h2>
+                    <p class="help-text">Файл, картинка или аудио по теме — ученик увидит их на странице задания любого типа. Необязательно.</p>
                     <p class="help-text" data-show-types="audio">Для аудио ученик прикрепит запись. Можно дать образец произношения.</p>
                     <div class="form-field{% if form.material_file.errors %} field-error{% endif %}">
                         <label for="{{ form.material_file.id_for_label }}">{{ form.material_file.label }}</label>
@@ -223,6 +224,9 @@
 
                 <div class="form-actions">
                     <button class="btn" type="submit">{% icon "save" %}{% t "Сохранить" %}</button>
+                    {% if assignment %}
+                        <a class="btn btn-ghost" href="{% url 'teacher_assignment_ai' assignment.pk %}">{% icon "sparkles" %}{% t "Править с ИИ" %}</a>
+                    {% endif %}
                     {% if not assignment %}
                         <noscript><button class="btn btn-secondary" type="submit" name="_save_questions" value="1">{% icon "list" %}{% t "Сохранить тест и перейти к вопросам" %}</button></noscript>
                     {% elif assignment.is_quiz %}

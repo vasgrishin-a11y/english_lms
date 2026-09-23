@@ -111,6 +111,11 @@ urlpatterns = [
         views_teacher.block_publish,
         name="teacher_block_publish",
     ),
+    path(
+        "teacher/curriculum/blocks/<int:pk>/assignments/publish/",
+        views_teacher.block_assignments_publish,
+        name="teacher_block_assignments_publish",
+    ),
     path("teacher/curriculum/topics/new/", views_teacher.topic_form, name="teacher_topic_new"),
     path(
         "teacher/curriculum/topics/<int:pk>/", views_teacher.topic_form, name="teacher_topic_edit"
@@ -131,6 +136,11 @@ urlpatterns = [
         name="teacher_topic_publish",
     ),
     path(
+        "teacher/curriculum/topics/<int:pk>/assignments/publish/",
+        views_teacher.topic_assignments_publish,
+        name="teacher_topic_assignments_publish",
+    ),
+    path(
         "teacher/curriculum/assignments/new/",
         views_teacher.assignment_form,
         name="teacher_assignment_new",
@@ -149,6 +159,26 @@ urlpatterns = [
         "teacher/curriculum/assignments/<int:pk>/publish/",
         views_teacher.assignment_publish,
         name="teacher_assignment_publish",
+    ),
+    path(
+        "teacher/curriculum/assignments/<int:pk>/rename/",
+        views_teacher.assignment_rename,
+        name="teacher_assignment_rename",
+    ),
+    path(
+        "teacher/curriculum/assignments/<int:pk>/move/",
+        views_teacher.assignment_move,
+        name="teacher_assignment_move",
+    ),
+    path(
+        "teacher/curriculum/assignments/<int:pk>/ai/",
+        views_ai.assignment_ai,
+        name="teacher_assignment_ai",
+    ),
+    path(
+        "teacher/curriculum/assignments/<int:pk>/ai/apply/",
+        views_ai.assignment_ai_apply,
+        name="teacher_assignment_ai_apply",
     ),
     path(
         "teacher/curriculum/assignments/<int:pk>/delete/",
