@@ -20,6 +20,7 @@
     </div>
     <div class="row">
         <a class="btn btn-secondary" href="{% url 'teacher_assignment_preview' assignment.pk %}?answers=1">{% icon "eye" %}{% t "Предпросмотр с ответами" %}</a>
+        <a class="btn btn-secondary" href="{% url 'teacher_item_results' assignment.pk %}">{% icon "target" %}{% t "Результаты по пунктам" %}</a>
         <a class="btn btn-ghost" href="{% url 'teacher_assignment_form' assignment.pk %}">{% icon "pencil" %}{% t "Настройки задания" %}</a>
     </div>
 </div>

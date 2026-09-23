@@ -205,3 +205,110 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
             .events.filter(action="reviewed")
             .exists()
         )
+
+
+@skipUnless(
+    os.getenv("RUN_BROWSER_TESTS") == "1", "Opt-in Playwright suite; runs in browser CI job."
+)
+class BrowserItemFlowTests(StaticLiveServerTestCase):
+    """«Принять» → ✓/✗ без перезагрузки и запись с (поддельного) микрофона с лимитом."""
+
+    def test_items_check_and_voice_recording(self):
+        from playwright.sync_api import expect, sync_playwright
+
+        from lms.models import Choice, Question, QuestionResponse
+
+        password = "BrowserTestingPassword!542"
+        student = get_user_model().objects.create_user("item_student", password=password)
+        block = Block.objects.create(name="Items block", slug="items")
+        topic = Topic.objects.create(block=block, title="Topic", slug="topic")
+        quiz = Assignment.objects.create(
+            topic=topic,
+            title="Item lesson",
+            description="Answer each item.",
+            assignment_type=Assignment.Type.QUIZ,
+            max_points=6,
+        )
+        gap = Question.objects.create(
+            assignment=quiz, kind=Question.Kind.GAP, text="She ___ here.", points=2, order=1
+        )
+        Choice.objects.create(question=gap, text="lives", is_correct=True)
+        voice = Question.objects.create(
+            assignment=quiz,
+            kind=Question.Kind.VOICE,
+            text="Say hello.",
+            points=4,
+            order=2,
+            recording_limit_seconds=10,
+        )
+        axe_path = Path(__file__).resolve().parents[2] / "node_modules/axe-core/axe.min.js"
+        with sync_playwright() as playwright:
+            # Поддельный микрофон Chromium: разрешение выдаётся без диалога, звук — тон.
+            args = ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"]
+            options = {"headless": True, "args": args}
+            if os.getenv("BROWSER_EXECUTABLE"):
+                options["executable_path"] = os.environ["BROWSER_EXECUTABLE"]
+                options["args"] = args + json.loads(os.getenv("BROWSER_ARGS", "[]"))
+            browser = playwright.chromium.launch(**options)
+            context = browser.new_context(viewport={"width": 1280, "height": 900})
+            context.grant_permissions(["microphone"])
+            page = context.new_page()
+            page.set_default_timeout(20000)
+            try:
+                page.goto(self.live_server_url + "/accounts/login/")
+                page.get_by_label("Имя пользователя", exact=True).fill("item_student")
+                page.get_by_label("Пароль", exact=True).fill(password)
+                page.get_by_role("button", name="Войти", exact=True).click()
+                page.wait_for_url("**/my/")
+                page.goto(self.live_server_url + f"/assignments/{quiz.pk}/")
+                if axe_path.is_file():
+                    page.add_script_tag(path=str(axe_path))
+                    violations = page.evaluate(
+                        "async () => (await axe.run(document)).violations.map(v => v.id)"
+                    )
+                    self.assertEqual(violations, [], "quiz items")
+
+                item = page.locator(f"#q-{gap.pk}")
+                item.locator("input[type=text]").fill("live")
+                item.get_by_role("button", name="Принять").click()
+                item = page.locator(f"#q-{gap.pk}")
+                expect(item).to_contain_text("Осталось попыток: 2")
+                item.locator("input[type=text]").fill("lives")
+                item.get_by_role("button", name="Принять").click()
+                expect(page.locator(f"#q-{gap.pk}")).to_contain_text("Верно")
+                expect(page.locator("#quiz-progress")).to_contain_text("Выполнено 1 из 2")
+
+                recorder = page.locator(f"#q-{voice.pk} [data-recorder]")
+                expect(recorder).to_have_attribute("data-limit", "10")
+                recorder.get_by_role("button", name="Начать запись").click()
+                expect(recorder).to_have_class(re.compile("is-recording"))
+                page.wait_for_timeout(1500)
+                recorder.get_by_role("button", name="Остановить").click()
+                expect(recorder.locator("[data-recorder-take]")).to_be_visible()
+                expect(recorder.locator("[data-recorder-status]")).to_contain_text("Запись готова")
+                # Удалить и записать заново — без ограничения на число записей.
+                recorder.get_by_role("button", name="Удалить запись").click()
+                expect(recorder.locator("[data-recorder-take]")).to_be_hidden()
+                recorder.get_by_role("button", name="Начать запись").click()
+                page.wait_for_timeout(1200)
+                recorder.get_by_role("button", name="Остановить").click()
+                expect(recorder.locator("[data-recorder-take]")).to_be_visible()
+                # Лимит 10 секунд: запись останавливается сама, с предупреждением заранее.
+                recorder.get_by_role("button", name="Удалить запись").click()
+                recorder.get_by_role("button", name="Начать запись").click()
+                expect(recorder).to_have_class(re.compile("is-ending"), timeout=4000)
+                expect(recorder.locator("[data-recorder-take]")).to_be_visible(timeout=15000)
+                expect(recorder).not_to_have_class(re.compile("is-recording"))
+                page.locator(f"#q-{voice.pk}").get_by_role("button", name="Принять").click()
+                expect(page.locator(f"#q-{voice.pk}")).to_contain_text("Ответ принят")
+                expect(page.locator("#quiz-progress")).to_contain_text("Отправить преподавателю")
+            finally:
+                context.close()
+                browser.close()
+        response = QuestionResponse.objects.get(student=student, question=voice)
+        self.assertTrue(response.file_answer.name.endswith(".wav"))
+        with response.file_answer.open("rb") as handle:
+            header = handle.read(44)
+        self.assertEqual(header[:4], b"RIFF")
+        self.assertEqual(int.from_bytes(header[24:28], "little"), 16000, "WAV 16 кГц")
+        self.assertEqual(int.from_bytes(header[22:24], "little"), 1, "моно")

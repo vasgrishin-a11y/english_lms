@@ -63,9 +63,11 @@ from .models import (
     Group,
     Profile,
     Question,
+    QuestionResponse,
     Submission,
     Topic,
 )
+from .quiz_items import build_items, progress_of
 from .services import ConflictError, review_submission
 from .skills import skills_for_type, type_skill_payload
 from .views import _add_validation_errors
@@ -296,9 +298,38 @@ def review_detail(request, pk):
     is_latest = latest.pk == submission.pk
     feedback = getattr(submission, "feedback", None)
     quiz = getattr(submission, "quiz_attempt", None)
-    form = ReviewForm(
-        request.POST if request.method == "POST" else None, submission=submission, feedback=feedback
+    questions = (
+        list(submission.assignment.questions.prefetch_related("choices").order_by("order", "pk"))
+        if submission.assignment.is_quiz
+        else []
     )
+    responses = {
+        item.question_id: item
+        for item in QuestionResponse.objects.filter(submission=submission).select_related(
+            "question"
+        )
+    }
+    items = build_items(
+        submission.assignment,
+        questions,
+        responses,
+        closed_round=True,
+        legacy=quiz.answers if quiz else None,
+    )
+    manual_responses = []
+    for item in items:
+        if item["manual"] and item["response"] is not None:
+            item["response"].number = item["number"]
+            manual_responses.append(item["response"])
+    form = ReviewForm(
+        request.POST if request.method == "POST" else None,
+        submission=submission,
+        feedback=feedback,
+        manual_responses=manual_responses if is_latest else (),
+    )
+    for item in items:
+        if item["manual"] and item["response"] is not None and is_latest:
+            item["points_field"] = form.item_field(item["response"].pk)
     status = 200
     if request.method == "POST" and form.is_valid():
         try:
@@ -346,11 +377,9 @@ def review_detail(request, pk):
                 "next": queue_ids[1] if queue_ids else None,
                 "position": position,
             },
-            "questions": list(
-                submission.assignment.questions.prefetch_related("choices").order_by("order", "pk")
-            )
-            if submission.assignment.is_quiz
-            else [],
+            "questions": questions,
+            "items": items,
+            "items_progress": progress_of(items) if items else None,
             "workspace": "review",
         },
         status=status,
@@ -851,6 +880,10 @@ def assignment_duplicate(request, pk):
         material_file=source.material_file,
         deadline=source.deadline,
         max_points=source.max_points,
+        max_tries=source.max_tries,
+        allow_retake=source.allow_retake,
+        exam_mode=source.exam_mode,
+        recording_limit_seconds=source.recording_limit_seconds,
         order=source.order + 1,
         is_active=source.is_active,
         status=Assignment.Publication.DRAFT,
@@ -865,6 +898,7 @@ def assignment_duplicate(request, pk):
             explanation=question.explanation,
             points=question.points,
             order=question.order,
+            recording_limit_seconds=question.recording_limit_seconds,
         )
         Choice.objects.bulk_create(
             [
@@ -993,6 +1027,131 @@ def questions(request, pk):
         else "lms/teacher_questions.html"
     )
     return render(request, template, context)
+
+
+def _item_results_data(assignment):
+    """Последняя попытка каждого ученика по пунктам + статистика по столбцам."""
+    items = list(assignment.questions.order_by("order", "pk"))
+    latest = {}
+    for submission in (
+        Submission.objects.filter(assignment=assignment)
+        .select_related("student", "feedback")
+        .order_by("student_id", "-version")
+    ):
+        latest.setdefault(submission.student_id, submission)
+    responses = {}
+    for response in QuestionResponse.objects.filter(
+        submission__in=[submission.pk for submission in latest.values()]
+    ):
+        responses[(response.submission_id, response.question_id)] = response
+    rows = []
+    stats = {item.pk: {"correct": 0, "answered": 0, "first": 0} for item in items}
+    for submission in sorted(
+        latest.values(),
+        key=lambda entry: (entry.student.get_full_name() or entry.student.username).lower(),
+    ):
+        cells = []
+        for item in items:
+            response = responses.get((submission.pk, item.pk))
+            cells.append(response)
+            if response is None or item.is_manual:
+                continue
+            stats[item.pk]["answered"] += 1
+            if response.state == QuestionResponse.State.CORRECT:
+                stats[item.pk]["correct"] += 1
+                if response.tries_used == 1:
+                    stats[item.pk]["first"] += 1
+        rows.append({"submission": submission, "cells": cells})
+    columns = []
+    for number, item in enumerate(items, start=1):
+        stat = stats[item.pk]
+        rate = round(100 * stat["correct"] / stat["answered"]) if stat["answered"] else None
+        columns.append({"number": number, "question": item, "rate": rate, **stat})
+    return columns, rows
+
+
+def _item_cell_text(question, response):
+    """Ячейка XLSX: баллы и отметка, понятные без легенды."""
+    if response is None:
+        return ""
+    if question.is_manual:
+        if response.teacher_points is None:
+            return "ждёт проверки"
+        return f"{response.teacher_points}/{question.points}"
+    if response.state == QuestionResponse.State.CORRECT:
+        tries = response.tries_used
+        return f"✓ {response.points}/{question.points}" + (
+            f" (попытка {tries})" if tries > 1 else ""
+        )
+    if response.state == QuestionResponse.State.FAILED:
+        return f"✗ {response.points}/{question.points}"
+    return ""
+
+
+@teacher_required
+@require_GET
+def item_results(request, pk):
+    """Матрица «ученик × пункт» по последним прохождениям задания.
+
+    В ячейке — ✓ (с какой попытки), ✗ или отметка ручной проверки; сверху —
+    доля верных по каждому пункту, чтобы сразу видеть трудные места.
+    """
+    assignment = get_object_or_404(Assignment.objects.select_related("topic__block"), pk=pk)
+    columns, rows = _item_results_data(assignment)
+    return render(
+        request,
+        "lms/teacher_item_results.html",
+        {
+            "assignment": assignment,
+            "columns": columns,
+            "rows": rows,
+            "workspace": "curriculum",
+        },
+    )
+
+
+@teacher_required
+@require_GET
+def item_results_export(request, pk):
+    """Та же матрица в XLSX: строка на ученика, столбец на пункт, внизу — доля верных."""
+    assignment = get_object_or_404(Assignment, pk=pk)
+    columns, rows = _item_results_data(assignment)
+    header = ["Ученик"]
+    for column in columns:
+        text = " ".join(str(column["question"].text).split())
+        header.append(f"{column['number']}. {text[:60]}")
+    header += ["Итог", "Максимум", "Статус"]
+    table = [header]
+    for row in rows:
+        submission = row["submission"]
+        feedback = getattr(submission, "feedback", None)
+        grade = feedback.grade if feedback and feedback.grade is not None else ""
+        table.append(
+            [
+                submission.student.get_full_name() or submission.student.username,
+                *[
+                    _item_cell_text(column["question"], cell)
+                    for column, cell in zip(columns, row["cells"], strict=True)
+                ],
+                grade,
+                submission.max_points_snapshot,
+                submission.get_status_display(),
+            ]
+        )
+    table.append(
+        [
+            "Доля верных, %",
+            *[column["rate"] if column["rate"] is not None else "" for column in columns],
+            "",
+            "",
+            "",
+        ]
+    )
+    payload = xlsx.build_xlsx(table, sheet_name="По пунктам")
+    response = HttpResponse(payload, content_type=xlsx.CONTENT_TYPE)
+    response["Content-Disposition"] = f'attachment; filename="items-{assignment.pk}.xlsx"'
+    response["Content-Length"] = str(len(payload))
+    return response
 
 
 def _sync_quiz_points(assignment):

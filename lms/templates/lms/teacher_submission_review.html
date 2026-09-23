@@ -86,7 +86,9 @@
                     {% if submission.is_late %}<span class="badge badge-needs_revision">после дедлайна</span>{% endif %}
                 </span>
             </div>
-            {% if submission.text_answer %}
+            {% if quiz %}
+                <p class="small muted mb-0">Ответы по пунктам — ниже, в разделе «Проверка по пунктам».</p>
+            {% elif submission.text_answer %}
                 <div class="answer-body" id="answer-text">{{ submission.text_answer }}</div>
             {% else %}
                 <p class="muted">Текстовый ответ не отправлен.</p>
@@ -105,30 +107,7 @@
         </section>
 
         {% if quiz %}
-            <section class="card">
-                <div class="card-head">
-                    <h2 class="card-title">{% icon "target" %}Автопроверка теста</h2>
-                    <span class="grade-pill tnum {{ quiz.score|grade_class:quiz.max_score }}">{{ quiz.score }}<small>/{{ quiz.max_score }}</small></span>
-                </div>
-                <p class="muted small">Верных ответов: {{ quiz.correct_count }} из {{ quiz.total_count }}. Балл выставлен автоматически; вы можете изменить его и добавить комментарий.</p>
-                <ol class="col" style="padding:0;list-style:none;margin:0">
-                    {% for question in questions %}
-                        {% with detail=quiz.answers|dictkey:question.pk %}
-                            <li class="panel" style="margin-bottom:8px">
-                                <div class="row row-tight">
-                                    {% if detail.correct %}<span class="badge badge-checked">{% icon "check" "icon icon-sm" %}Верно</span>
-                                    {% elif detail.partially %}<span class="badge badge-submitted">{% icon "percent" "icon icon-sm" %}Частично</span>
-                                    {% else %}<span class="badge badge-needs_revision">{% icon "x" "icon icon-sm" %}Ошибка</span>{% endif %}
-                                    <span class="grow strong">{{ forloop.counter }}. {{ question.text }}</span>
-                                    <span class="tiny muted tnum">{{ detail.points }}/{{ question.points }} б.</span>
-                                </div>
-                                {% if detail.expected %}<p class="small mb-0" style="margin-top:6px"><span class="muted">Правильный ответ:</span> {{ detail.expected }}</p>{% endif %}
-                                {% if question.explanation %}<p class="tiny muted mb-0" style="margin-top:4px">{% icon "lightbulb" "icon icon-sm" %} {{ question.explanation }}</p>{% endif %}
-                            </li>
-                        {% endwith %}
-                    {% endfor %}
-                </ol>
-            </section>
+            {% include "lms/parts/review_items.html" %}
         {% endif %}
 
         <section class="card">
@@ -162,7 +141,7 @@
                 <h2 class="card-title">{% icon "save" %}Решение</h2>
             </div>
             {% if is_latest %}
-                <form method="post" data-review-form>
+                <form method="post" data-review-form id="review-form">
                     {% csrf_token %}
                     <input type="hidden" name="snippet_used" id="id_snippet_used" value="">
                     <div class="score-presets" style="margin-bottom:12px" data-grade-presets>

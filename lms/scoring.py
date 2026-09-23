@@ -109,6 +109,90 @@ def score_question(question, answer):
     }
 
 
+def answer_parts(question, given):
+    """Какие части составного ответа верны — для подсветки после неудачной попытки.
+
+    Возвращает словарь ``{"rows": {choice_pk: bool}}`` для соответствия и
+    сортировки, ``{"positions": [bool, ...]}`` для порядка слов и
+    ``{"hits": n, "extra": m, "total": k}`` для выбора нескольких вариантов.
+    Для вопросов «всё или ничего» частей нет — пустой словарь.
+    """
+    choices = list(question.choices.all())
+    if question.kind == "match":
+        mapping = given if isinstance(given, dict) else {}
+        return {
+            "rows": {
+                str(c.pk): mapping.get(str(c.pk)) == str(c.pk) for c in choices if c.match_text
+            }
+        }
+    if question.kind == "sort":
+        mapping = given if isinstance(given, dict) else {}
+        return {
+            "rows": {
+                str(c.pk): mapping.get(str(c.pk)) == c.match_text for c in choices if c.match_text
+            }
+        }
+    if question.kind == "order":
+        order = list(given or [])
+        return {
+            "positions": [
+                index < len(order) and order[index] == str(choice.pk)
+                for index, choice in enumerate(choices)
+            ]
+        }
+    if question.kind == "multi":
+        correct = {str(c.pk) for c in choices if c.is_correct}
+        selected = {str(value) for value in (given or [])}
+        return {
+            "hits": len(selected & correct),
+            "extra": len(selected - correct),
+            "total": len(correct),
+        }
+    return {}
+
+
+def describe_answer(question, given):
+    """Ответ ученика словами — для истории попыток у преподавателя и ученика."""
+    choices = {str(c.pk): c for c in question.choices.all()}
+    if question.kind == "mcq":
+        choice = choices.get(str(given or ""))
+        return choice.text if choice else "—"
+    if question.kind == "multi":
+        texts = [choices[str(pk)].text for pk in (given or []) if str(pk) in choices]
+        return ", ".join(texts) or "—"
+    if question.kind == "match":
+        mapping = given if isinstance(given, dict) else {}
+        pairs = []
+        for pk, choice in choices.items():
+            if not choice.match_text:
+                continue
+            picked = choices.get(str(mapping.get(pk, "")))
+            pairs.append(f"{choice.text} → {picked.match_text if picked else '—'}")
+        return "; ".join(pairs) or "—"
+    if question.kind == "sort":
+        mapping = given if isinstance(given, dict) else {}
+        pairs = [
+            f"{choice.text} → {mapping.get(pk) or '—'}"
+            for pk, choice in choices.items()
+            if choice.match_text
+        ]
+        return "; ".join(pairs) or "—"
+    if question.kind == "order":
+        words = [choices[str(pk)].text for pk in (given or []) if str(pk) in choices]
+        return " ".join(words) or "—"
+    text = " ".join(str(given or "").split())
+    return text[:500] or "—"
+
+
+def is_blank_answer(question, given):
+    """Пустой ответ не расходует попытку: ученик просто забыл заполнить пункт."""
+    if question.kind in ("match", "sort"):
+        return not any(str(value).strip() for value in (given or {}).values())
+    if question.kind in ("multi", "order"):
+        return not [value for value in (given or []) if str(value).strip()]
+    return not str(given or "").strip()
+
+
 def score_quiz(questions, answers):
     """Полный результат теста: баллы, максимум, число верных ответов и разбор."""
     details = {}
@@ -142,5 +226,8 @@ def answers_summary(questions, result):
         detail = result["details"].get(str(question.pk), {})
         mark = "✓" if detail.get("correct") else "~" if detail.get("partially") else "✗"
         prompt = " ".join(str(question.text).split())[:120]
+        if getattr(question, "is_manual", False):
+            lines.append(f"{index}. [?] {prompt} — проверяет преподаватель, из {question.points}")
+            continue
         lines.append(f"{index}. [{mark}] {prompt} — {detail.get('points', 0)}/{question.points}")
     return "\n".join(lines)[:20000]

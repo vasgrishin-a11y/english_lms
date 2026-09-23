@@ -22,7 +22,13 @@ from .models import (
     Topic,
 )
 from .skills import apply_default_skills
-from .validators import ALLOWED_FILE_EXTENSIONS, AUDIO_EXTENSIONS, validate_answer, validate_upload
+from .validators import (
+    ALLOWED_FILE_EXTENSIONS,
+    AUDIO_EXTENSIONS,
+    validate_answer,
+    validate_recording_limit,
+    validate_upload,
+)
 
 User = get_user_model()
 
@@ -69,9 +75,15 @@ class SubmissionForm(forms.Form):
                     ),
                 }
             )
-            self.fields[
-                "file_answer"
-            ].help_text = f"До {settings.LMS_MAX_FILE_BYTES // (1024 * 1024)} MiB. Отправка создаёт новую попытку; старый ответ сохранится в истории."
+            limit = (
+                f" Аудио — не длиннее {assignment.recording_limit_display}."
+                if assignment.recording_limit_seconds
+                else ""
+            )
+            self.fields["file_answer"].help_text = (
+                f"До {settings.LMS_MAX_FILE_BYTES // (1024 * 1024)} MiB.{limit} "
+                "Отправка создаёт новую попытку; старый ответ сохранится в истории."
+            )
             if assignment.assignment_type != Assignment.Type.MIXED:
                 self.fields["text_answer"].label = "Комментарий (необязательно)"
 
@@ -86,6 +98,12 @@ class SubmissionForm(forms.Form):
         except ValidationError as exc:
             for field, errors in exc.message_dict.items():
                 self.add_error(field if field in self.fields else None, errors)
+        upload = data.get("file_answer")
+        if upload and hasattr(upload, "size") and "file_answer" in self.fields:
+            try:
+                validate_recording_limit(upload, self.assignment.recording_limit_seconds)
+            except ValidationError as exc:
+                self.add_error("file_answer", exc)
         return data
 
 
@@ -103,9 +121,25 @@ class ReviewForm(forms.Form):
         choices=Feedback._meta.get_field("decision").choices, label="Решение"
     )
 
-    def __init__(self, *args, submission, feedback=None, **kwargs):
+    def __init__(self, *args, submission, feedback=None, manual_responses=(), **kwargs):
         super().__init__(*args, **kwargs)
         maximum = submission.max_points_snapshot
+        self.item_fields = []
+        for response in manual_responses:
+            name = f"item_{response.pk}"
+            self.fields[name] = forms.IntegerField(
+                required=False,
+                min_value=0,
+                max_value=response.question.points,
+                label=f"Пункт {getattr(response, 'number', '')}: баллы",
+                help_text=f"из {response.question.points}",
+                initial=response.teacher_points,
+                # Поле стоит рядом с ответом ученика, но отправляется общей формой решения.
+                widget=forms.NumberInput(
+                    attrs={"form": "review-form", "data-item-points": response.question.points}
+                ),
+            )
+            self.item_fields.append((name, response.pk))
         # Build the field with its validator; assigning .max_value later is insufficient.
         self.fields["grade"] = forms.IntegerField(
             required=False,
@@ -126,9 +160,28 @@ class ReviewForm(forms.Form):
 
     def clean(self):
         data = super().clean()
-        if data.get("decision") == Submission.Status.CHECKED and data.get("grade") is None:
-            self.add_error("grade", "Для завершения проверки укажите балл.")
+        item_points = {pk: data.pop(name, None) for name, pk in self.item_fields}
+        data["item_points"] = item_points
+        items_complete = bool(item_points) and all(v is not None for v in item_points.values())
+        if (
+            data.get("decision") == Submission.Status.CHECKED
+            and data.get("grade") is None
+            and not items_complete
+        ):
+            self.add_error(
+                "grade",
+                "Для завершения проверки укажите балл"
+                + (" или оцените все пункты со свободным ответом." if item_points else "."),
+            )
         return data
+
+    def visible_fields(self):
+        """Поля пунктов рисуются рядом с ответами, а не в общей колонке решения."""
+        item_names = {name for name, _ in self.item_fields}
+        return [field for field in super().visible_fields() if field.name not in item_names]
+
+    def item_field(self, response_pk):
+        return self[f"item_{response_pk}"]
 
 
 # ── Консоль преподавателя: курс, тесты, карточки, банк комментариев ──────────
@@ -208,6 +261,65 @@ class TopicForm(SluglessModelForm):
         return {"block": block} if block else None
 
 
+class DurationLimitWidget(forms.MultiWidget):
+    """Число + «сек / мин» в одной строке."""
+
+    template_name = "lms/widgets/duration_limit.html"
+
+    def __init__(self, attrs=None):
+        number = forms.NumberInput(
+            attrs={
+                "min": 1,
+                "max": 600,
+                "step": 1,
+                "inputmode": "numeric",
+                "class": "duration-value",
+            }
+        )
+        unit = forms.Select(
+            choices=[("sec", "секунд"), ("min", "минут")], attrs={"class": "duration-unit"}
+        )
+        super().__init__([number, unit], attrs)
+
+    def decompress(self, value):
+        if not value:
+            return [None, "min"]
+        value = int(value)
+        if value % 60 == 0:
+            return [value // 60, "min"]
+        return [value, "sec"]
+
+
+class DurationLimitField(forms.MultiValueField):
+    """Лимит записи: преподаватель вводит секунды или минуты, в БД — секунды."""
+
+    widget = DurationLimitWidget
+
+    def __init__(self, *, min_seconds=10, max_seconds=600, **kwargs):
+        self.min_seconds = min_seconds
+        self.max_seconds = max_seconds
+        fields = (
+            forms.IntegerField(min_value=1, max_value=max_seconds, required=False),
+            forms.ChoiceField(choices=[("sec", "секунд"), ("min", "минут")], required=False),
+        )
+        kwargs.setdefault("require_all_fields", False)
+        super().__init__(fields, **kwargs)
+
+    def compress(self, data_list):
+        if not data_list or data_list[0] in (None, ""):
+            return None
+        value, unit = data_list[0], data_list[1] or "sec"
+        seconds = int(value) * (60 if unit == "min" else 1)
+        if seconds < self.min_seconds:
+            raise forms.ValidationError(f"Минимальный лимит — {self.min_seconds} секунд.")
+        if seconds > self.max_seconds:
+            raise forms.ValidationError(
+                f"Максимальный лимит — {self.max_seconds // 60} минут "
+                "(больше не помещается в лимит размера файла)."
+            )
+        return seconds
+
+
 class AssignmentForm(forms.ModelForm):
     assigned_students = forms.ModelMultipleChoiceField(
         queryset=None,
@@ -228,6 +340,10 @@ class AssignmentForm(forms.ModelForm):
             "assignment_type",
             "skills",
             "max_points",
+            "max_tries",
+            "allow_retake",
+            "exam_mode",
+            "recording_limit_seconds",
             "deadline",
             "publish_at",
             "status",
@@ -254,8 +370,26 @@ class AssignmentForm(forms.ModelForm):
             "status": forms.Select(attrs={"class": "form-select"}),
         }
 
+    recording_limit_seconds = DurationLimitField(
+        required=False,
+        label="Лимит времени на запись",
+        help_text="От 10 секунд до 10 минут. Пусто — без лимита. Запись остановится сама.",
+    )
+
+    def clean_max_tries(self):
+        value = self.cleaned_data.get("max_tries")
+        if value is None:
+            return self.instance.max_tries or 3
+        return value
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["max_tries"].widget.attrs.update({"min": 1, "max": 5})
+        self.fields["max_tries"].required = False
+        self.fields["max_tries"].help_text = (
+            "Для пунктов с правильным ответом: после каждого «Принять» ученик видит ✓ или ✗. "
+            "Для выбора из двух вариантов разумно ставить 1."
+        )
         self.fields["deadline"].input_formats = DATETIME_FORMATS
         self.fields["publish_at"].input_formats = DATETIME_FORMATS
         self.fields["skills"].queryset = Skill.objects.all().order_by("order", "name")
@@ -320,20 +454,38 @@ class AssignmentForm(forms.ModelForm):
 
 class QuestionForm(forms.ModelForm):
     choices_text = forms.CharField(
-        label="Варианты ответа",
+        label="Правильный ответ и варианты",
+        required=False,
         widget=forms.Textarea(attrs={"rows": 6}),
         help_text=(
             "По одному варианту на строку. Правильный ответ отметьте звёздочкой в начале строки: "
-            "*London. Для «соответствия» и «сортировки» пишите пары через вертикальную черту: "
-            "to book | бронировать (для сортировки справа — название колонки). "
+            "*London. Для «вписать ответ» — все допустимые варианты, по одному на строку "
+            "(don't / do not). Для «соответствия» и «сортировки» пишите пары через вертикальную "
+            "черту: to book | бронировать (для сортировки справа — название колонки). "
             "Для «предложения из слов» перечислите слова в правильном порядке, по одному на строку. "
-            "Для «слова из букв» впишите принимаемые варианты написания."
+            "Для свободного и голосового ответа поле не нужно — такие пункты проверяете вы."
+        ),
+    )
+    recording_limit_seconds = DurationLimitField(
+        required=False,
+        label="Лимит времени на ответ голосом",
+        help_text=(
+            "Только для голосового ответа. От 10 секунд до 10 минут; "
+            f"по умолчанию — {Question.DEFAULT_VOICE_LIMIT} секунд."
         ),
     )
 
     class Meta:
         model = Question
-        fields = ["kind", "text", "choices_text", "points", "explanation", "order"]
+        fields = [
+            "kind",
+            "text",
+            "choices_text",
+            "recording_limit_seconds",
+            "points",
+            "explanation",
+            "order",
+        ]
         widgets = {
             "text": forms.Textarea(
                 attrs={"rows": 3, "placeholder": "Вопрос или предложение с пропуском"}
@@ -364,6 +516,12 @@ class QuestionForm(forms.ModelForm):
         kind = self.data.get("kind") or self.instance.kind
         lines = [line.strip() for line in raw.splitlines() if line.strip()]
         parsed = []
+        if kind in Question.MANUAL_KINDS:
+            return []
+        if not lines:
+            raise forms.ValidationError(
+                "Укажите правильный ответ — без него пункт нельзя проверить автоматически."
+            )
         if kind in (Question.Kind.MATCH, Question.Kind.SORT):
             label = "соответствия" if kind == Question.Kind.MATCH else "сортировки"
             for line in lines:
@@ -394,9 +552,15 @@ class QuestionForm(forms.ModelForm):
                 )
         elif kind in (Question.Kind.GAP, Question.Kind.SPELL):
             for line in lines:
-                parsed.append(
-                    {"text": line.lstrip("*").strip()[:500], "match_text": "", "correct": True}
-                )
+                for variant in line.split(" / ") if kind == Question.Kind.GAP else [line]:
+                    if variant.strip().lstrip("*").strip():
+                        parsed.append(
+                            {
+                                "text": variant.lstrip("*").strip()[:500],
+                                "match_text": "",
+                                "correct": True,
+                            }
+                        )
         else:
             for line in lines:
                 correct = line.startswith("*")
@@ -410,6 +574,13 @@ class QuestionForm(forms.ModelForm):
         if len(parsed) > 40:
             raise forms.ValidationError("Слишком много вариантов: максимум 40.")
         return parsed
+
+    def clean(self):
+        data = super().clean()
+        kind = data.get("kind")
+        if kind != Question.Kind.VOICE:
+            data["recording_limit_seconds"] = None
+        return data
 
     def save_choices(self, question):
         question.choices.all().delete()

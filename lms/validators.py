@@ -142,6 +142,45 @@ def validate_upload(file):
         ) from exc
 
 
+#: Запас на округление кодеков и задержку остановки записи в браузере.
+RECORDING_TOLERANCE_SECONDS = 2
+
+
+def audio_duration(file):
+    """Длительность аудиофайла в секундах или None, если её не удалось прочитать."""
+    if not file:
+        return None
+    try:
+        file.open("rb")
+        position = file.tell()
+        try:
+            file.seek(0)
+            audio = mutagen.File(fileobj=file)
+        finally:
+            file.seek(position)
+    except (OSError, ValueError, EOFError, mutagen.MutagenError):
+        return None
+    if audio is None or not getattr(audio, "info", None):
+        return None
+    return float(audio.info.length or 0)
+
+
+def validate_recording_limit(file, limit_seconds):
+    """Аудио длиннее лимита преподавателя отклоняется на сервере, а не только в браузере."""
+    if not file or not limit_seconds:
+        return
+    if Path(file.name).suffix.lower().lstrip(".") not in AUDIO_EXTENSIONS:
+        return
+    duration = audio_duration(file)
+    if duration is not None and duration > limit_seconds + RECORDING_TOLERANCE_SECONDS:
+        from .models import format_duration
+
+        raise ValidationError(
+            f"Запись длиннее лимита: {format_duration(round(duration))} при лимите "
+            f"{format_duration(limit_seconds)}. Сократите ответ и запишите заново."
+        )
+
+
 def validate_answer(assignment_type, text, file):
     errors = {}
     if assignment_type in {"text", "mixed"} and not text.strip():

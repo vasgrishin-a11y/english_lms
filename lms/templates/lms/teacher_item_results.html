@@ -1,0 +1,73 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}Результаты по пунктам — {{ assignment.title }} — English LMS{% endblock %}
+{% block workspace_class %}workspace-plain{% endblock %}
+
+{% block content %}
+<nav aria-label="Хлебные крошки">
+    <ol class="crumbs">
+        <li><a href="{% url 'teacher_curriculum' %}">{% t "Карта курса" %}</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_questions' assignment.pk %}">{{ assignment.title }}</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">Результаты по пунктам</span></li>
+    </ol>
+</nav>
+
+<div class="content-head">
+    <div>
+        <h1>Результаты по пунктам</h1>
+        <p class="page-note">Последняя попытка каждого ученика. {% icon "check" "icon icon-sm" %} — верно (цифра — с какой попытки), {% icon "x" "icon icon-sm" %} — попытки закончились, {% icon "pencil" "icon icon-sm" %} — свободный ответ, оцените его в проверке. Нажмите на имя, чтобы открыть работу.</p>
+    </div>
+    <div class="row">
+        {% if rows %}<a class="btn btn-secondary" href="{% url 'teacher_item_results_export' assignment.pk %}">{% icon "download" %}{% t "Выгрузить XLSX" %}</a>{% endif %}
+        <a class="btn btn-ghost" href="{% url 'teacher_questions' assignment.pk %}">{% icon "list" %}{% t "Вопросы" %}</a>
+    </div>
+</div>
+
+<section class="card">
+    {% if not rows %}
+        <div class="empty">
+            <div class="empty-icon">{% icon "target" "icon icon-xl" %}</div>
+            <h3>Пока никто не завершил задание</h3>
+            <p>Здесь появится таблица, когда ученики закончат пункты.</p>
+        </div>
+    {% else %}
+        <div class="table-scroll" role="region" tabindex="0" aria-label="Результаты учеников по пунктам, прокручивается по горизонтали">
+            <table class="results-matrix">
+                <caption class="sr-only">Ученики по строкам, пункты задания по столбцам</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Ученик</th>
+                        {% for column in columns %}
+                            <th scope="col" class="tnum" title="{{ column.question.text|truncatechars:120 }}">
+                                {{ column.number }}
+                                <span class="results-rate{% if column.rate != None and column.rate < 50 %} is-hard{% endif %}">{% if column.rate != None %}{{ column.rate }}%{% else %}—{% endif %}</span>
+                            </th>
+                        {% endfor %}
+                        <th scope="col">Балл</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                        {% with submission=row.submission %}
+                        <tr>
+                            <th scope="row"><a href="{% url 'teacher_submission_review' submission.pk %}">{{ submission.student.get_full_name|default:submission.student.username }}</a></th>
+                            {% for cell in row.cells %}
+                                <td class="results-cell">
+                                    {% if cell == None %}<span class="muted" title="Нет ответа">·</span>
+                                    {% elif cell.state == 'correct' %}<span class="try-ok" title="Верно с {{ cell.tries_used }}-й попытки">{% icon "check" "icon icon-sm" %}{% if cell.tries_used > 1 %}<sup>{{ cell.tries_used }}</sup>{% endif %}</span>
+                                    {% elif cell.state == 'failed' %}<span class="try-bad" title="Не решено">{% icon "x" "icon icon-sm" %}</span>
+                                    {% elif cell.teacher_points != None %}<span class="tnum" title="Оценено вручную">{{ cell.teacher_points }}</span>
+                                    {% else %}<span class="muted" title="Ждёт проверки">{% icon "pencil" "icon icon-sm" %}</span>{% endif %}
+                                </td>
+                            {% endfor %}
+                            <td class="tnum">{% if submission.feedback and submission.feedback.grade != None %}{{ submission.feedback.grade }}/{{ submission.max_points_snapshot }}{% else %}<span class="badge badge-submitted">Ждёт</span>{% endif %}</td>
+                        </tr>
+                        {% endwith %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% load lms_tags %}
+{# Запись с микрофона. Параметры: input_id, input_name, limit (секунды или пусто), limit_label, external_input (поле файла рисует сама форма). #}
+<div class="recorder" data-recorder data-input="{{ input_id }}"{% if limit %} data-limit="{{ limit }}"{% endif %}>
+    <div class="recorder-head">
+        <p class="strong mb-0">{% icon "mic" %} Запись ответа</p>
+        {% if limit %}<span class="pill-note">{% icon "timer" "icon icon-sm" %} Лимит: {{ limit_label }}</span>{% endif %}
+    </div>
+    <div class="recorder-stage">
+        <button type="button" class="btn btn-secondary" data-recorder-toggle>{% icon "mic" %}<span>Начать запись</span></button>
+        <button type="button" class="btn btn-danger hidden" data-recorder-stop>{% icon "stop" %}<span>Остановить</span></button>
+        <span class="recorder-clock tnum" data-recorder-clock aria-hidden="true">0:00{% if limit %} / {{ limit|mmss }}{% endif %}</span>
+        <span class="recorder-dot hidden" data-recorder-dot aria-hidden="true"></span>
+    </div>
+    {% if limit %}<div class="progress recorder-meter" aria-hidden="true"><span data-recorder-meter style="width:0%"></span></div>{% endif %}
+    <p class="tiny muted mb-0" data-recorder-status role="status" aria-live="polite">Нажмите «Начать запись» и разрешите доступ к микрофону.{% if limit %} Запись остановится сама через {{ limit_label }}.{% endif %}</p>
+    <div class="recorder-take hidden" data-recorder-take>
+        <audio controls preload="metadata" data-recorder-preview></audio>
+        <button type="button" class="btn btn-ghost btn-sm" data-recorder-discard>{% icon "trash" %}Удалить запись</button>
+    </div>
+    <p class="tiny recorder-error mb-0" data-recorder-error role="alert"></p>
+    {% if not external_input %}
+        <details class="recorder-upload">
+            <summary class="tiny">Нет микрофона? Загрузите аудиофайл</summary>
+            <label class="sr-only" for="{{ input_id }}">Аудиофайл ответа</label>
+            <input type="file" id="{{ input_id }}" name="{{ input_name }}" accept=".mp3,.wav,.m4a,.ogg,.aac,audio/*">
+            <p class="tiny muted mb-0">MP3, WAV, M4A, OGG или AAC{% if limit %}, не длиннее {{ limit_label }}{% endif %}.</p>
+        </details>
+    {% endif %}
+</div>

@@ -737,14 +737,15 @@ PROMPT_SCHEMA = """Верни строго JSON без пояснений в ф�
      "assignments": [{"type": "text|file|audio|mixed|quiz", "title": "Название",
         "description": "Условие для ученика: что сделать, объём, критерии",
         "max_points": 10, "skills": ["grammar|vocabulary|listening|speaking|writing|reading"],
-        "questions": [{"kind": "mcq|multi|gap|match|order|sort|spell", "text": "вопрос",
+        "questions": [{"kind": "mcq|multi|gap|match|order|sort|spell|text|voice", "text": "вопрос",
             "points": 1, "explanation": "",
             "choices": [{"text": "вариант", "correct": true, "match_text": ""}]}]}],
      "cards": [{"title": "Карточки: тема", "description": "",
         "cards": [{"front": "слово", "back": "перевод", "example": "пример"}]}]}]}]}
 Правила: для mcq/order ровно один верный вариант; для multi — от двух; для match/sort
 в choices используй пары text ↔ match_text; для gap/spell приведи принимаемые ответы
-как верные варианты; questions и cards не выдумывай, если их нет в материале."""
+как верные варианты; text (свободный письменный ответ) и voice (устный ответ) — без choices;
+questions и cards не выдумывай, если их нет в материале."""
 
 TARGET_PROMPTS = {
     "mixed": "Собери из материала блок курса с темами, заданиями, тестом и карточками.",
@@ -1069,7 +1070,9 @@ def _normalise_assignment(item, caps):
                 choices[0]["correct"] = True
             else:
                 continue
-        if not choices and kind not in {Question.Kind.GAP, Question.Kind.SPELL}:
+        if kind in Question.MANUAL_KINDS:
+            choices = []
+        elif not choices and kind not in {Question.Kind.GAP, Question.Kind.SPELL}:
             continue
         try:
             points = int(question.get("points", 1))
