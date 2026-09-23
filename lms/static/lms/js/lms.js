@@ -1441,6 +1441,248 @@
     });
   }
 
+  /* ── Карта курса: быстрые действия на доске ─────────────
+   * Переименование, статус и порядок перетаскиванием работают без
+   * перезагрузки. Без JS остаются обычные формы: кнопки ↑/↓ для порядка,
+   * кнопка статуса и полная форма задания.
+   */
+  function curriculumBoard() {
+    var boardEl = document.querySelector("[data-curriculum-board]");
+    if (!boardEl) return;
+
+    function postForm(url, params) {
+      return fetch(url, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "X-CSRFToken": csrfToken(),
+          "X-Requested-With": "XMLHttpRequest",
+          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
+        },
+        body: new URLSearchParams(params).toString()
+      }).then(function (response) {
+        return response.json().then(function (data) {
+          if (!response.ok || !data || !data.ok) {
+            throw new Error((data && data.error) || "Ошибка " + response.status);
+          }
+          return data;
+        });
+      });
+    }
+
+    // Статус «черновик ⟷ опубликовано» без перезагрузки.
+    Array.prototype.forEach.call(boardEl.querySelectorAll("form[data-board-toggle]"), function (form) {
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+        var button = form.querySelector('button[type="submit"]');
+        if (button) button.disabled = true;
+        postForm(form.action, new FormData(form))
+          .then(function (data) {
+            var published = !!data.published;
+            var row = form.closest("[data-assignment-row]");
+            var badge = row && row.querySelector("[data-status-badge]");
+            if (badge) {
+              badge.textContent = published ? "опубликовано" : "черновик";
+              badge.classList.toggle("badge-checked", published);
+              badge.classList.toggle("badge-draft", !published);
+            }
+            var input = form.querySelector('input[name="publish"]');
+            if (input) input.value = published ? "0" : "1";
+            var label = form.querySelector("[data-toggle-label]");
+            var nextLabel = published
+              ? form.getAttribute("data-label-unpublish")
+              : form.getAttribute("data-label-publish");
+            if (label && nextLabel) label.textContent = nextLabel;
+            if (button && nextLabel) button.setAttribute("title", nextLabel);
+          })
+          .catch(function () {
+            form.submit(); // резервный путь: обычная отправка с перезагрузкой
+          })
+          .finally(function () {
+            if (button) button.disabled = false;
+          });
+      });
+    });
+
+    // Переименование по карандашу рядом с названием.
+    Array.prototype.forEach.call(boardEl.querySelectorAll("[data-rename]"), function (button) {
+      button.addEventListener("click", function () {
+        var row = button.closest("[data-assignment-row]");
+        var titleEl = row && row.querySelector("[data-title]");
+        if (!titleEl || row.querySelector("[data-rename-input]")) return;
+        var current = titleEl.textContent.trim();
+        var input = document.createElement("input");
+        input.type = "text";
+        input.value = current;
+        input.maxLength = 200;
+        input.className = "inline-rename-input";
+        input.setAttribute("data-rename-input", "1");
+        input.setAttribute("aria-label", button.getAttribute("title") || "Новое название задания");
+        titleEl.hidden = true;
+        titleEl.parentNode.insertBefore(input, titleEl.nextSibling);
+        input.focus();
+        input.select();
+        var finished = false;
+        var finish = function (save) {
+          if (finished) return;
+          finished = true;
+          var value = input.value.trim();
+          input.remove();
+          titleEl.hidden = false;
+          if (!save || !value || value === current) return;
+          var params = new FormData();
+          params.set("title", value);
+          postForm(button.getAttribute("data-rename-url"), params)
+            .then(function (data) {
+              titleEl.textContent = data.title || value;
+            })
+            .catch(function (error) {
+              window.alert(error.message || "Не удалось переименовать задание");
+            });
+        };
+        input.addEventListener("keydown", function (event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            finish(true);
+          }
+          if (event.key === "Escape") {
+            event.preventDefault();
+            finish(false);
+          }
+        });
+        input.addEventListener("blur", function () {
+          finish(true);
+        });
+      });
+    });
+
+    // Перетаскивание: задания — внутри темы и между темами, темы — внутри блока.
+    var drag = null;
+
+    function rowOf(node) {
+      return node && node.closest ? node.closest("[data-assignment-row]") : null;
+    }
+
+    function panelOf(node) {
+      return node && node.closest ? node.closest("[data-topic-panel]") : null;
+    }
+
+    function clearMarkers() {
+      Array.prototype.forEach.call(
+        boardEl.querySelectorAll(".drop-above, .drop-below"),
+        function (el) {
+          el.classList.remove("drop-above", "drop-below");
+        }
+      );
+    }
+
+    function isBelowMiddle(event, el) {
+      var rect = el.getBoundingClientRect();
+      return event.clientY - rect.top >= rect.height / 2;
+    }
+
+    Array.prototype.forEach.call(boardEl.querySelectorAll("[data-dnd-handle]"), function (handle) {
+      handle.addEventListener("dragstart", function (event) {
+        var kind = handle.getAttribute("data-dnd-handle");
+        var el = kind === "assignment" ? rowOf(handle) : panelOf(handle);
+        if (!el || !el.getAttribute("data-move-url")) {
+          event.preventDefault();
+          return;
+        }
+        drag = { kind: kind, el: el };
+        el.classList.add("is-dragging");
+        if (event.dataTransfer) {
+          event.dataTransfer.effectAllowed = "move";
+          try {
+            event.dataTransfer.setData("text/plain", "move");
+          } catch (ignore) {
+            /* Firefox настолько же обязателен, насколько нет */
+          }
+        }
+      });
+      handle.addEventListener("dragend", function () {
+        clearMarkers();
+        if (drag && drag.el) drag.el.classList.remove("is-dragging");
+        drag = null;
+      });
+    });
+
+    boardEl.addEventListener("dragover", function (event) {
+      if (!drag) return;
+      clearMarkers();
+      if (drag.kind === "assignment") {
+        var row = rowOf(event.target);
+        var panel = panelOf(event.target);
+        if ((!row && !panel) || row === drag.el) return;
+        event.preventDefault();
+        if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+        if (row) row.classList.add(isBelowMiddle(event, row) ? "drop-below" : "drop-above");
+      } else {
+        var target = panelOf(event.target);
+        if (!target || target === drag.el || target.parentNode !== drag.el.parentNode) return;
+        event.preventDefault();
+        if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+        target.classList.add(isBelowMiddle(event, target) ? "drop-below" : "drop-above");
+      }
+    });
+
+    boardEl.addEventListener("drop", function (event) {
+      if (!drag) return;
+      clearMarkers();
+      if (drag.kind === "assignment") {
+        var row = rowOf(event.target);
+        var panel = panelOf(event.target);
+        if ((!row && !panel) || row === drag.el) return;
+        var list = null;
+        var beforeRow = null;
+        if (row) {
+          list = row.parentNode;
+          beforeRow = isBelowMiddle(event, row) ? row.nextElementSibling : row;
+          if (beforeRow === drag.el) return;
+        } else {
+          list = panel.querySelector("[data-topic-list]");
+        }
+        if (!list || !list.getAttribute("data-topic-list")) return;
+        event.preventDefault();
+        if (!beforeRow && list === drag.el.parentNode && list.lastElementChild === drag.el) {
+          return; // уже стоит последним в своей теме
+        }
+        var sameTopic = drag.el.parentNode === list;
+        list.insertBefore(drag.el, beforeRow);
+        var params = new FormData();
+        params.set("topic", list.getAttribute("data-topic-list"));
+        params.set("before", beforeRow ? beforeRow.getAttribute("data-assignment-row") : "");
+        postForm(drag.el.getAttribute("data-move-url"), params)
+          .then(function () {
+            if (!sameTopic) window.location.reload(); // счётчики тем — с сервера
+          })
+          .catch(function (error) {
+            window.alert(error.message || "Не удалось переместить задание");
+            window.location.reload();
+          });
+      } else {
+        var target = panelOf(event.target);
+        if (!target || target === drag.el || target.parentNode !== drag.el.parentNode) return;
+        event.preventDefault();
+        var beforePanel = isBelowMiddle(event, target) ? target.nextElementSibling : target;
+        if (beforePanel === drag.el) return;
+        if (!beforePanel && target.parentNode.lastElementChild === drag.el) return;
+        var topicParams = new FormData();
+        topicParams.set(
+          "before",
+          beforePanel && beforePanel.getAttribute("data-topic-panel")
+            ? beforePanel.getAttribute("data-topic-panel")
+            : ""
+        );
+        target.parentNode.insertBefore(drag.el, beforePanel);
+        postForm(drag.el.getAttribute("data-move-url"), topicParams).catch(function (error) {
+          window.alert(error.message || "Не удалось переместить тему");
+          window.location.reload();
+        });
+      }
+    });
+  }
+
   ready(function () {
     autohideAlerts();
     confirmForms();
@@ -1464,5 +1706,6 @@
     typeahead();
     uploadDropzones();
     descriptionEditors();
+    curriculumBoard();
   });
 })();

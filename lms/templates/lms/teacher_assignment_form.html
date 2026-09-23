@@ -224,6 +224,9 @@
 
                 <div class="form-actions">
                     <button class="btn" type="submit">{% icon "save" %}{% t "Сохранить" %}</button>
+                    {% if assignment %}
+                        <a class="btn btn-ghost" href="{% url 'teacher_assignment_ai' assignment.pk %}">{% icon "sparkles" %}{% t "Править с ИИ" %}</a>
+                    {% endif %}
                     {% if not assignment %}
                         <noscript><button class="btn btn-secondary" type="submit" name="_save_questions" value="1">{% icon "list" %}{% t "Сохранить тест и перейти к вопросам" %}</button></noscript>
                     {% elif assignment.is_quiz %}

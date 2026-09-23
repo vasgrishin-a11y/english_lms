@@ -19,7 +19,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Avg, Count, F, Max, ProtectedError, Q
-from django.http import Http404, HttpResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -443,6 +443,78 @@ def curriculum(request):
     )
 
 
+def _wants_json(request):
+    """Быстрые действия доски отвечают JSON'ом, когда их вызывает lms.js."""
+    return request.headers.get("X-Requested-With") == "XMLHttpRequest"
+
+
+def _renumber(items, *, force_pks=()):
+    """Перенумеровать список в его текущей последовательности шагом 1."""
+    for position, item in enumerate(items, start=1):
+        if item.order != position or item.pk in force_pks:
+            item.order = position
+            item.save(update_fields=["order", "updated_at"])
+
+
+def _place_assignment(assignment, target_topic, before):
+    """Поставить задание на точное место на доске (перетаскивание).
+
+    ``target_topic`` — тема-приёмник (может совпадать с текущей), ``before`` —
+    задание, перед которым вставить; ``None`` ставит задание в конец темы.
+    """
+    moved_across = target_topic.pk != assignment.topic_id
+    with transaction.atomic():
+        source = [
+            item
+            for item in assignment.topic.assignments.order_by("order", "pk")
+            if item.pk != assignment.pk
+        ]
+        siblings = (
+            list(target_topic.assignments.order_by("order", "pk")) if moved_across else source
+        )
+        index = len(siblings)
+        if before is not None:
+            index = next(
+                (position for position, item in enumerate(siblings) if item.pk == before.pk),
+                len(siblings),
+            )
+        siblings.insert(index, assignment)
+        if moved_across:
+            assignment.topic = target_topic
+            assignment.save(update_fields=["topic", "updated_at"])
+        _renumber(siblings, force_pks={assignment.pk})
+        if moved_across:
+            _renumber(source)
+    return index
+
+
+def _place_topic(topic, before):
+    """Поставить тему на точное место внутри её блока (перетаскивание)."""
+    siblings = [item for item in topic.block.topics.order_by("order", "pk") if item.pk != topic.pk]
+    index = len(siblings)
+    if before is not None:
+        index = next(
+            (position for position, item in enumerate(siblings) if item.pk == before.pk),
+            len(siblings),
+        )
+    siblings.insert(index, topic)
+    with transaction.atomic():
+        _renumber(siblings, force_pks={topic.pk})
+    return index
+
+
+def _quick_outcome(request, done, success, failure):
+    """Ответ быстрого действия: JSON для fetch, сообщение+редирект без JS."""
+    if _wants_json(request):
+        payload = {"ok": done} if done else {"ok": False, "error": failure}
+        return JsonResponse(payload, status=200 if done else 400)
+    if done:
+        messages.success(request, success)
+    else:
+        messages.info(request, failure)
+    return redirect(request.POST.get("next") or "teacher_curriculum")
+
+
 def _reorder(siblings, obj, direction):
     """Поменять объект местами с соседом по порядку.
 
@@ -793,13 +865,21 @@ def topic_delete(request, pk):
 @teacher_required
 @require_POST
 def topic_move(request, pk):
-    """Переместить тему внутри блока."""
+    """Переместить тему внутри блока: точное место (перетаскивание) или шаг ↑/↓."""
     topic = get_object_or_404(Topic.objects.select_related("block"), pk=pk)
-    if _reorder(Topic.objects.filter(block=topic.block), topic, request.POST.get("direction")):
-        messages.success(request, f"Порядок темы изменён: {topic.title}")
-    else:
-        messages.info(request, "Крайняя тема в блоке: перемещать некуда.")
-    return redirect("teacher_curriculum")
+    if "before" in request.POST:
+        before = None
+        if request.POST.get("before"):
+            before = get_object_or_404(Topic, pk=request.POST["before"], block=topic.block)
+        _place_topic(topic, before)
+        return _quick_outcome(request, True, f"Порядок темы изменён: {topic.title}", "")
+    done = _reorder(Topic.objects.filter(block=topic.block), topic, request.POST.get("direction"))
+    return _quick_outcome(
+        request,
+        done,
+        f"Порядок темы изменён: {topic.title}",
+        "Крайняя тема в блоке: перемещать некуда.",
+    )
 
 
 @teacher_required
@@ -918,6 +998,54 @@ def assignment_duplicate(request, pk):
 
 @teacher_required
 @require_POST
+def assignment_rename(request, pk):
+    """Быстрое переименование прямо на доске курса."""
+    assignment = get_object_or_404(Assignment, pk=pk)
+    title = request.POST.get("title", "").strip()[:200]
+    if not title:
+        if _wants_json(request):
+            return JsonResponse(
+                {"ok": False, "error": "Название не может быть пустым."}, status=400
+            )
+        messages.error(request, "Название задания не может быть пустым.")
+        return redirect(request.POST.get("next") or "teacher_curriculum")
+    assignment.title = title
+    assignment.save(update_fields=["title", "updated_at"])
+    if _wants_json(request):
+        return JsonResponse({"ok": True, "title": assignment.title})
+    messages.success(request, f"Задание переименовано: {assignment.title}")
+    return redirect(request.POST.get("next") or "teacher_curriculum")
+
+
+@teacher_required
+@require_POST
+def assignment_move(request, pk):
+    """Порядок задания на доске: точное место (перетаскивание) или шаг ↑/↓."""
+    assignment = get_object_or_404(Assignment.objects.select_related("topic"), pk=pk)
+    if "before" in request.POST or "topic" in request.POST:
+        target_topic = assignment.topic
+        if request.POST.get("topic"):
+            target_topic = get_object_or_404(Topic, pk=request.POST["topic"])
+        before = None
+        if request.POST.get("before"):
+            before = get_object_or_404(
+                Assignment.objects.exclude(pk=assignment.pk),
+                pk=request.POST["before"],
+                topic=target_topic,
+            )
+        _place_assignment(assignment, target_topic, before)
+        return _quick_outcome(request, True, f"Задание перемещено: {assignment.title}", "")
+    done = _reorder(assignment.topic.assignments.all(), assignment, request.POST.get("direction"))
+    return _quick_outcome(
+        request,
+        done,
+        f"Порядок задания изменён: {assignment.title}",
+        "Крайнее задание в теме: перемещать некуда.",
+    )
+
+
+@teacher_required
+@require_POST
 def assignment_publish(request, pk):
     assignment = get_object_or_404(Assignment, pk=pk)
     publish = request.POST.get("publish") == "1"
@@ -927,6 +1055,8 @@ def assignment_publish(request, pk):
     if publish and assignment.publish_at and assignment.publish_at > timezone.now():
         assignment.publish_at = None
     assignment.save(update_fields=["status", "publish_at", "updated_at"])
+    if _wants_json(request):
+        return JsonResponse({"ok": True, "status": assignment.status, "published": publish})
     messages.success(
         request,
         f"Задание опубликовано: {assignment.title}"
@@ -934,6 +1064,45 @@ def assignment_publish(request, pk):
         else f"Задание возвращено в черновики: {assignment.title}",
     )
     return redirect(request.POST.get("next") or "teacher_curriculum")
+
+
+def _bulk_publish_assignments(request, queryset, scope_label):
+    """Опубликовать или вернуть в черновики все задания области разом."""
+    publish = request.POST.get("publish") == "1"
+    new_status = Assignment.Publication.PUBLISHED if publish else Assignment.Publication.DRAFT
+    pending = queryset.exclude(status=new_status)
+    count = pending.count()
+    if not count:
+        messages.info(request, f"Менять нечего: все задания {scope_label} уже в нужном статусе.")
+        return redirect(request.POST.get("next") or "teacher_curriculum")
+    if publish:
+        pending.filter(publish_at__gt=timezone.now()).update(publish_at=None)
+    pending.update(status=new_status, updated_at=timezone.now())
+    messages.success(
+        request,
+        f"Опубликовано заданий {scope_label}: {count}."
+        if publish
+        else f"Заданий {scope_label} переведено в черновики: {count}.",
+    )
+    return redirect(request.POST.get("next") or "teacher_curriculum")
+
+
+@teacher_required
+@require_POST
+def topic_assignments_publish(request, pk):
+    """Скопом: статус всех заданий темы."""
+    topic = get_object_or_404(Topic.objects.select_related("block"), pk=pk)
+    return _bulk_publish_assignments(request, topic.assignments.all(), f"темы «{topic.title}»")
+
+
+@teacher_required
+@require_POST
+def block_assignments_publish(request, pk):
+    """Скопом: статус всех заданий блока (все его темы разом)."""
+    block = get_object_or_404(Block, pk=pk)
+    return _bulk_publish_assignments(
+        request, Assignment.objects.filter(topic__block=block), f"блока «{block.name}»"
+    )
 
 
 @teacher_required

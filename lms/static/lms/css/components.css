@@ -3703,3 +3703,80 @@ tr.row-bad td:first-child {
 .quiz-items .item-note {
     scroll-margin-top: calc(var(--topbar-h) + 150px);
 }
+
+/* ── Карта курса: быстрые действия на доске ─────────────────────────── */
+.row-grip {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    flex: 0 0 auto;
+}
+
+.grip-buttons {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.btn-grip {
+    padding: 2px 4px;
+    line-height: 1;
+    min-height: 0;
+}
+
+.drag-handle {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px;
+    border-radius: var(--r-sm);
+    color: var(--text-subtle);
+    cursor: grab;
+    touch-action: none;
+}
+
+.drag-handle:hover,
+.drag-handle:focus-visible {
+    color: var(--accent-600);
+    background: var(--surface-sunken);
+}
+
+.drag-handle:active {
+    cursor: grabbing;
+}
+
+[data-assignment-row].is-dragging > .row-item,
+.topic-panel.is-dragging {
+    opacity: 0.45;
+}
+
+[data-assignment-row].drop-above > .row-item {
+    box-shadow: 0 -3px 0 0 var(--accent-500);
+}
+
+[data-assignment-row].drop-below > .row-item {
+    box-shadow: 0 3px 0 0 var(--accent-500);
+}
+
+.topic-panel.drop-above {
+    box-shadow: 0 -4px 0 0 var(--accent-500);
+}
+
+.topic-panel.drop-below {
+    box-shadow: 0 4px 0 0 var(--accent-500);
+}
+
+.inline-rename-input {
+    font: inherit;
+    padding: 4px 8px;
+    border: 1px solid var(--accent-400);
+    border-radius: var(--r-sm);
+    width: min(460px, 100%);
+    background: var(--surface);
+    color: inherit;
+}
+
+.inline-rename-input:focus-visible {
+    outline: none;
+    box-shadow: var(--ring);
+    border-color: var(--accent-500);
+}

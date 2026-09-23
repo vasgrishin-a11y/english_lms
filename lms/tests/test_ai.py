@@ -18,7 +18,7 @@ from django.test import SimpleTestCase, override_settings
 from django.urls import reverse
 
 from lms import ai
-from lms.models import Assignment, Block, Flashcard, Question, Topic
+from lms.models import Assignment, Block, Choice, Flashcard, Question, Topic
 
 from .base import LMSCase
 
@@ -836,3 +836,200 @@ class AiCheckCommandTests(SimpleTestCase):
         ):
             call_command("ai_check", "--live", stdout=output)
         self.assertIn("без HTTPS", output.getvalue())
+
+
+ONLINE = override_settings(
+    LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="ollama", LMS_AI_LOCAL=True
+)
+
+REVISION_QUIZ = {
+    "title": "Revised quiz",
+    "description": "New conditions.",
+    "max_points": 4,
+    "skills": ["grammar"],
+    "questions": [
+        {
+            "kind": "mcq",
+            "text": "Q1?",
+            "points": 2,
+            "choices": [
+                {"text": "yes", "correct": True},
+                {"text": "no", "correct": False},
+            ],
+        },
+        {
+            "kind": "gap",
+            "text": "Fill ___ in.",
+            "points": 2,
+            "choices": [{"text": "it", "correct": True}],
+        },
+    ],
+    "cards": [],
+}
+
+REVISION_CARDS = {
+    "title": "New cards",
+    "description": "New words.",
+    "max_points": 0,
+    "skills": [],
+    "questions": [],
+    "cards": [{"front": f"word{i}", "back": f"слово{i}", "example": ""} for i in range(1, 4)],
+}
+
+
+class AssignmentRevisionTests(LMSCase):
+    """Правка существующего задания с ИИ: генерация, предпросмотр, применение."""
+
+    def make_quiz(self):
+        quiz = Assignment.objects.create(
+            topic=self.topic,
+            title="Old quiz",
+            description="Old.",
+            assignment_type=Assignment.Type.QUIZ,
+            max_points=1,
+            status=Assignment.Publication.PUBLISHED,
+        )
+        question = Question.objects.create(
+            assignment=quiz, kind=Question.Kind.MCQ, text="Old Q?", points=1, order=1
+        )
+        Choice.objects.create(question=question, text="yes", is_correct=True, order=1)
+        Choice.objects.create(question=question, text="no", is_correct=False, order=2)
+        return quiz
+
+    def ai_url(self, assignment):
+        return reverse("teacher_assignment_ai", args=[assignment.pk])
+
+    def apply_url(self, assignment):
+        return reverse("teacher_assignment_ai_apply", args=[assignment.pk])
+
+    def test_offline_mode_explains_unavailability(self):
+        response = self.teacher_client.get(self.ai_url(self.assignment))
+        self.assertContains(response, "Правка с ИИ недоступна")
+
+    def test_offline_mode_rejects_generation(self):
+        response = self.teacher_client.post(
+            self.ai_url(self.assignment), {"instruction": "сделай сложнее"}
+        )
+        self.assertContains(response, "Правка с ИИ доступна")
+        self.assignment.refresh_from_db()
+        self.assertEqual(self.assignment.title, "Past tense")
+
+    def test_assignment_form_links_to_ai_page(self):
+        response = self.teacher_client.get(
+            reverse("teacher_assignment_form", args=[self.assignment.pk])
+        )
+        self.assertContains(response, self.ai_url(self.assignment))
+
+    @ONLINE
+    def test_generate_and_apply_quiz(self):
+        quiz = self.make_quiz()
+        with patch("lms.ai._provider_material", return_value=REVISION_QUIZ):
+            response = self.teacher_client.post(
+                self.ai_url(quiz), {"instruction": "Сделай сложнее"}
+            )
+        self.assertContains(response, "Revised quiz")
+        self.assertContains(response, "ещё не применена")
+        quiz.refresh_from_db()
+        self.assertEqual(quiz.title, "Old quiz")  # пока только предпросмотр
+
+        response = self.teacher_client.post(self.apply_url(quiz))
+        self.assertRedirects(
+            response,
+            reverse("teacher_assignment_form", args=[quiz.pk]),
+            fetch_redirect_response=False,
+        )
+        quiz.refresh_from_db()
+        self.assertEqual(quiz.title, "Revised quiz")
+        self.assertEqual(quiz.description, "New conditions.")
+        self.assertEqual(quiz.max_points, 4)  # сумма баллов новых вопросов
+        self.assertEqual(quiz.questions.count(), 2)
+        self.assertFalse(quiz.questions.filter(text="Old Q?").exists())
+        self.assertEqual(quiz.status, Assignment.Publication.PUBLISHED)  # статус сохранён
+
+    @ONLINE
+    def test_prompt_contains_instruction_and_current_content(self):
+        quiz = self.make_quiz()
+        captured = {}
+
+        def fake(_spec, prompt_text, **_kwargs):
+            captured["prompt"] = prompt_text
+            return REVISION_QUIZ
+
+        with patch("lms.ai._provider_material", side_effect=fake):
+            self.teacher_client.post(
+                self.ai_url(quiz), {"instruction": "Добавь вопрос про Past Simple"}
+            )
+        self.assertIn("Добавь вопрос про Past Simple", captured["prompt"])
+        self.assertIn("Old Q?", captured["prompt"])
+        self.assertIn("Old quiz", captured["prompt"])
+
+    @ONLINE
+    def test_empty_instruction_is_rejected(self):
+        response = self.teacher_client.post(self.ai_url(self.assignment), {"instruction": "   "})
+        self.assertContains(response, "Опишите, что изменить")
+
+    @ONLINE
+    def test_apply_without_proposal(self):
+        response = self.teacher_client.post(self.apply_url(self.assignment), follow=True)
+        self.assertContains(response, "Нет подготовленной версии")
+
+    @ONLINE
+    def test_revision_replaces_flashcards(self):
+        trainer = self.card_assignment()
+        Flashcard.objects.create(assignment=trainer, front="cat", back="кот", order=1)
+        Flashcard.objects.create(assignment=trainer, front="dog", back="пёс", order=2)
+        with patch("lms.ai._provider_material", return_value=REVISION_CARDS):
+            self.teacher_client.post(self.ai_url(trainer), {"instruction": "Обнови слова"})
+            self.teacher_client.post(self.apply_url(trainer))
+        trainer.refresh_from_db()
+        self.assertEqual(trainer.title, "New cards")
+        self.assertEqual(trainer.cards.count(), 3)
+        self.assertFalse(trainer.cards.filter(front="cat").exists())
+
+    @ONLINE
+    def test_revision_for_text_assignment_ignores_questions(self):
+        payload = dict(REVISION_QUIZ, title="Revised text", max_points=25)
+        with patch("lms.ai._provider_material", return_value=payload):
+            self.teacher_client.post(self.ai_url(self.assignment), {"instruction": "Перепиши"})
+            self.teacher_client.post(self.apply_url(self.assignment))
+        self.assignment.refresh_from_db()
+        self.assertEqual(self.assignment.title, "Revised text")
+        self.assertEqual(self.assignment.max_points, 25)
+        self.assertEqual(self.assignment.assignment_type, Assignment.Type.TEXT)
+        self.assertEqual(self.assignment.questions.count(), 0)  # вопросы вне типа отброшены
+
+    @ONLINE
+    def test_existing_submissions_show_warning(self):
+        self.submit()  # сдача по self.assignment
+        response = self.teacher_client.get(self.ai_url(self.assignment))
+        self.assertContains(response, "уже есть сдач")
+
+    def test_revision_page_requires_teacher(self):
+        response = self.student_client.get(self.ai_url(self.assignment))
+        self.assertRedirects(
+            response,
+            reverse("student_assignments"),
+            fetch_redirect_response=False,
+        )
+
+
+class NormaliseRevisionTests(SimpleTestCase):
+    def test_forces_original_type_and_drops_questions_for_text(self):
+        revision = ai.normalise_revision(REVISION_QUIZ, assignment_type=Assignment.Type.TEXT)
+        self.assertEqual(revision["type"], Assignment.Type.TEXT)
+        self.assertEqual(revision["questions"], [])
+        self.assertEqual(revision["cards"], [])
+
+    def test_quiz_requires_questions(self):
+        payload = dict(REVISION_QUIZ, questions=[])
+        with self.assertRaisesMessage(ai.AiError, "не вернула вопросов"):
+            ai.normalise_revision(payload, assignment_type=Assignment.Type.QUIZ)
+
+    def test_flashcards_require_two_cards(self):
+        payload = dict(REVISION_CARDS, cards=[{"front": "a", "back": "б", "example": ""}])
+        with self.assertRaisesMessage(ai.AiError, "карточек"):
+            ai.normalise_revision(payload, assignment_type=Assignment.Type.FLASHCARDS)
+
+    def test_missing_title_is_an_error(self):
+        with self.assertRaisesMessage(ai.AiError, "названия или условия"):
+            ai.normalise_revision({"description": "only"}, assignment_type=Assignment.Type.TEXT)
