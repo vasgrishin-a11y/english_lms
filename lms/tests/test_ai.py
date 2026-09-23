@@ -493,6 +493,26 @@ class ProviderSettingsTests(SimpleTestCase):
             self.assertEqual(ai.ai_model(), "qwen/qwen3-vl-8b")
             self.assertEqual(ai.ai_endpoint(), "http://localhost:1234/v1")
 
+    def test_own_gateway_keeps_model_and_endpoint_from_settings(self):
+        # Свой шлюз не имеет значений по умолчанию: имя модели и адрес из окружения
+        # не должны отбрасываться, даже если они совпадают с именами других провайдеров.
+        with override_settings(
+            LMS_AI_PROVIDER="my-gateway",
+            LMS_AI_ENDPOINT="http://10.0.0.5:11434/v1",
+            LMS_AI_MODEL="qwen3-vl:8b",
+            LMS_AI_API_KEY="secret",
+        ):
+            self.assertEqual(ai.ai_model(), "qwen3-vl:8b")
+            self.assertEqual(ai.ai_endpoint(), "http://10.0.0.5:11434/v1")
+
+    def test_own_gateway_keeps_a_known_endpoint(self):
+        with override_settings(
+            LMS_AI_PROVIDER="my-gateway",
+            LMS_AI_ENDPOINT="http://localhost:11434/v1",
+            LMS_AI_MODEL="my-model",
+        ):
+            self.assertEqual(ai.ai_endpoint(), "http://localhost:11434/v1")
+
     def test_upload_kinds_are_overridable_and_typos_fall_back(self):
         with override_settings(LMS_AI_UPLOAD_KINDS="image"):
             self.assertEqual(ai.provider_uploads(), ("image",))
