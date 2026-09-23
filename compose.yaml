@@ -29,6 +29,9 @@ services:
       DJANGO_MEDIA_ROOT: /app/var/media
     ports:
       - '127.0.0.1:8000:8000'
+    extra_hosts:
+      # Дотянуться до Ollama/LM Studio, запущенной на хосте: host.docker.internal
+      - 'host.docker.internal:host-gateway'
     volumes:
       - private-media:/app/var/media
     depends_on:

@@ -218,10 +218,16 @@ def provider_spec(name=None):
 
 
 def _resolve_default(configured, spec, field, known):
+    """Значение из окружения с защитой от имён удалённых провайдеров.
+
+    Подмена происходит, только если у выбранного провайдера есть своё значение
+    этого поля: иначе (свой шлюз без значений по умолчанию) имя модели или адрес
+    из окружения остались бы пустыми, и помощник уходил бы в офлайн-режим.
+    """
     value = str(configured or "").strip()
     if not value:
         return spec[field]
-    if value in known and value != spec[field]:
+    if spec[field] and value in known and value != spec[field]:
         logger.warning("ai_settings_mismatch provider=%s field=%s", spec["key"], field)
         return spec[field]
     return value
