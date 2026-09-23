@@ -19,7 +19,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET
 
 from .decorators import get_user_role
-from .models import Assignment, Profile, Submission
+from .models import Assignment, Profile, QuestionResponse, Submission
 from .search import student_suggest, teacher_suggest
 
 logger = logging.getLogger(__name__)
@@ -88,6 +88,7 @@ def _resolve_private_file(request, name):
     teacher = get_user_role(request.user) == Profile.Role.TEACHER
     materials = Assignment.objects.filter(material_file=name)
     attempts = Submission.objects.filter(file_answer=name)
+    items = QuestionResponse.objects.filter(file_answer=name)
     if not teacher:
         visible = Assignment.objects.visible()
         materials = materials.filter(pk__in=visible)
@@ -95,9 +96,13 @@ def _resolve_private_file(request, name):
             student=request.user,
             assignment__in=visible,
         )
-    material = materials.first()
-    attempt = None if material else attempts.first()
-    return material.material_file if material else attempt.file_answer if attempt else None
+        items = items.filter(student=request.user, assignment__in=visible)
+    for queryset, field in ((materials, "material_file"), (attempts, "file_answer")):
+        found = queryset.first()
+        if found:
+            return getattr(found, field)
+    item = items.first()
+    return item.file_answer if item else None
 
 
 def _signature_matches(name, file):

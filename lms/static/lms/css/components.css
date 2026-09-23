@@ -3240,3 +3240,466 @@ table .grade-col {
 .editor-note {
     margin: 0;
 }
+
+/* ── Пошаговая проверка пунктов: «Принять» → ✓ / ✗ ─────────── */
+.quiz-items {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-4);
+    margin-top: var(--sp-4);
+}
+
+.quiz-items .ex + .ex {
+    margin-top: 0;
+}
+
+.item {
+    border-left: 4px solid var(--border);
+    scroll-margin-top: calc(var(--topbar-h) + var(--sp-4));
+}
+
+.item-correct {
+    border-color: var(--success-border);
+    border-left-color: var(--success-ink);
+}
+
+.item-failed,
+.item-wrong {
+    border-color: var(--danger-border);
+    border-left-color: var(--danger-ink);
+}
+
+.item-answered {
+    border-left-color: var(--info-ink);
+}
+
+.item-correct .ex-num {
+    color: var(--on-accent);
+    background: var(--success-ink);
+}
+
+.item-failed .ex-num {
+    color: var(--on-accent);
+    background: var(--danger-ink);
+}
+
+.item-answered .ex-num {
+    color: var(--info-ink);
+    background: var(--info-bg);
+}
+
+.item-mark {
+    flex: 0 0 auto;
+    align-self: center;
+}
+
+.mark {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+}
+
+.mark .icon {
+    width: 22px;
+    height: 22px;
+    stroke-width: 3;
+}
+
+.mark-ok {
+    color: var(--on-accent);
+    background: var(--success-ink);
+}
+
+.mark-bad {
+    color: var(--on-accent);
+    background: var(--danger-ink);
+}
+
+.mark-soft {
+    color: var(--danger-ink);
+    background: var(--danger-bg);
+}
+
+.item-feedback:empty {
+    display: none;
+}
+
+.item-note {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-3);
+    margin-bottom: var(--sp-3);
+    font-size: var(--fs-14);
+    border-radius: var(--r-md);
+    outline: none;
+}
+
+.item-note-ok {
+    color: var(--success-ink);
+    background: var(--success-bg);
+}
+
+.item-note-bad {
+    color: var(--danger-ink);
+    background: var(--danger-bg);
+}
+
+.item-note-warn {
+    color: var(--warning-ink);
+    background: var(--warning-bg);
+}
+
+.item-note-info {
+    color: var(--info-ink);
+    background: var(--info-bg);
+}
+
+.item-expected strong {
+    color: var(--success-ink);
+}
+
+.item-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-3);
+    margin-top: var(--sp-4);
+}
+
+.item-wrong .item-actions .btn {
+    --btn-bg: var(--danger-ink);
+}
+
+.opt-tried {
+    border-style: dashed;
+    color: var(--text-muted);
+}
+
+.opt-tried > span:nth-of-type(2) {
+    text-decoration: line-through;
+}
+
+.opt-tried-note {
+    margin-left: auto;
+    color: var(--danger-ink);
+}
+
+tr.row-ok td:first-child {
+    box-shadow: inset 3px 0 0 var(--success-ink);
+}
+
+tr.row-bad td {
+    background: var(--danger-bg);
+}
+
+tr.row-bad td:first-child {
+    box-shadow: inset 3px 0 0 var(--danger-ink);
+}
+
+.item-tries summary {
+    cursor: pointer;
+    color: var(--text-muted);
+}
+
+.item-tries ol {
+    margin: var(--sp-2) 0 0;
+    padding-left: var(--sp-5);
+}
+
+.is-wrong {
+    color: var(--danger-ink);
+}
+
+.item.is-flash {
+    box-shadow: 0 0 0 4px var(--ring);
+}
+
+@keyframes item-shake {
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+    25% {
+        transform: translateX(-4px);
+    }
+    75% {
+        transform: translateX(4px);
+    }
+}
+
+.item-wrong .item-mark {
+    animation: item-shake var(--dur-3) var(--ease) 1;
+}
+
+/* Прогресс прохода — липкая плашка над пунктами. */
+.quiz-progress {
+    position: sticky;
+    top: calc(var(--topbar-h) + var(--sp-2));
+    z-index: var(--z-sticky);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    padding: var(--sp-4);
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-1);
+}
+
+.quiz-progress.is-done {
+    position: static;
+    background: var(--success-bg);
+    border-color: var(--success-border);
+}
+
+.quiz-progress-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2);
+}
+
+.quiz-progress-head .tiny {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-3);
+}
+
+.quiz-stat {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.quiz-stat-ok {
+    color: var(--success-ink);
+}
+
+.quiz-stat-bad {
+    color: var(--danger-ink);
+}
+
+.quiz-finish {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    padding-top: var(--sp-3);
+    border-top: 1px solid var(--border-subtle);
+}
+
+/* Разбор у преподавателя: попытки ученика по пункту. */
+.review-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-4);
+    margin-bottom: var(--sp-3);
+    font-size: var(--fs-13);
+}
+
+.review-items {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.review-item {
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-subtle);
+    border-left: 4px solid var(--border);
+    border-radius: var(--r-md);
+}
+
+.review-item-correct {
+    border-left-color: var(--success-ink);
+}
+
+.review-item-failed {
+    border-left-color: var(--danger-ink);
+}
+
+.review-item-answered,
+.review-item-open,
+.review-item-new {
+    border-left-color: var(--info-ink);
+}
+
+.try-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: var(--sp-2) 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--fs-13);
+}
+
+.try-list li {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-2);
+}
+
+.try-mark {
+    font-weight: 700;
+}
+
+.try-ok {
+    color: var(--success-ink);
+}
+
+.try-bad {
+    color: var(--danger-ink);
+}
+
+.try-bad > span:last-child {
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+}
+
+.item-points {
+    margin: var(--sp-3) 0 0;
+}
+
+.item-points input {
+    width: 88px;
+}
+
+/* ── Запись с микрофона ──────────────────────────────────── */
+.recorder {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    padding: var(--sp-4);
+    margin-bottom: var(--sp-4);
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--r-md);
+}
+
+.recorder-head,
+.recorder-stage,
+.recorder-take {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-3);
+}
+
+.recorder-head {
+    justify-content: space-between;
+}
+
+.recorder-clock {
+    font-size: var(--fs-18);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.recorder.is-recording {
+    border-color: var(--danger-border);
+    background: var(--danger-bg);
+}
+
+.recorder.is-ending .recorder-clock {
+    color: var(--danger-ink);
+}
+
+.recorder-dot {
+    width: 12px;
+    height: 12px;
+    background: var(--danger-ink);
+    border-radius: 50%;
+    animation: recorder-pulse 1s var(--ease) infinite;
+}
+
+@keyframes recorder-pulse {
+    50% {
+        opacity: 0.25;
+    }
+}
+
+.recorder-meter > span {
+    background: var(--danger-ink);
+}
+
+.recorder-take audio {
+    max-width: 100%;
+}
+
+.recorder-error {
+    color: var(--danger-ink);
+}
+
+.recorder-error:empty {
+    display: none;
+}
+
+.recorder-upload summary {
+    cursor: pointer;
+    color: var(--link);
+}
+
+.recorder-upload input[type="file"] {
+    margin-top: var(--sp-2);
+    max-width: 100%;
+}
+
+.duration-input {
+    display: flex;
+    gap: var(--sp-2);
+}
+
+.duration-input .duration-value {
+    width: 96px;
+}
+
+.duration-input .duration-unit {
+    width: auto;
+}
+
+/* Матрица «ученик × пункт». */
+.results-matrix th,
+.results-matrix td {
+    text-align: center;
+    white-space: nowrap;
+}
+
+.results-matrix th[scope="row"],
+.results-matrix thead th:first-child {
+    text-align: left;
+}
+
+.results-rate {
+    display: block;
+    font-size: var(--fs-12);
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+.results-rate.is-hard {
+    color: var(--danger-ink);
+}
+
+.results-cell sup {
+    font-size: var(--fs-12);
+}
+
+/* Липкая плашка прогресса не должна закрывать пункт, к которому прокрутили. */
+.quiz-items .item,
+.quiz-items [data-recorder],
+.quiz-items .item-note {
+    scroll-margin-top: calc(var(--topbar-h) + 150px);
+}

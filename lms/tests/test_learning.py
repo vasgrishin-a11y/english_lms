@@ -273,8 +273,9 @@ class QuizFlowTests(LMSCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.context["questions"]), 4)
         self.assertContains(response, "Tenses quiz")
-        self.assertContains(response, "Отправить и проверить")
-        self.assertNotContains(response, "Результат автопроверки")
+        self.assertContains(response, "data-item-form", count=4)
+        self.assertContains(response, "Выполнено 0 из 4")
+        self.assertNotContains(response, "Задание завершено")
 
     def test_perfect_quiz_is_checked_automatically(self):
         response = self.student_client.post(self.quiz_url, self.answers())
@@ -288,8 +289,8 @@ class QuizFlowTests(LMSCase):
         self.assertEqual(attempt.feedback.grade, 10)
         self.assertIsNone(attempt.feedback.teacher)
         page = self.student_client.get(self.quiz_url)
-        self.assertContains(page, "Результат автопроверки")
-        self.assertContains(page, "Верных ответов: 4 из 4")
+        self.assertContains(page, "Задание завершено")
+        self.assertContains(page, "верно 4 из 4")
 
     def test_partial_scoring(self):
         self.student_client.post(
@@ -312,6 +313,8 @@ class QuizFlowTests(LMSCase):
         self.assertIn("Баллы: 10 из 10", attempt.text_answer)
 
     def test_retake_creates_new_version(self):
+        self.quiz.allow_retake = True
+        self.quiz.save()
         self.student_client.post(self.quiz_url, self.answers())
         second = self.student_client.post(self.quiz_url, self.answers(single=False, version=1))
         self.assertRedirects(second, self.quiz_url)
@@ -330,6 +333,12 @@ class QuizFlowTests(LMSCase):
         self.student_client.post(self.quiz_url, self.answers())
         response = self.student_client.post(self.quiz_url, self.answers())
         self.assertEqual(response.status_code, 409)
+
+    def test_finished_quiz_without_retake_is_closed(self):
+        self.student_client.post(self.quiz_url, self.answers())
+        response = self.student_client.post(self.quiz_url, self.answers(version=1))
+        self.assertEqual(response.status_code, 409)
+        self.assertContains(response, "повторное прохождение выключено", status_code=409)
         self.assertEqual(
             Submission.objects.filter(student=self.student, assignment=self.quiz).count(), 1
         )
@@ -349,6 +358,8 @@ class QuizFlowTests(LMSCase):
         self.assertEqual(Submission.objects.filter(assignment=empty).count(), 0)
 
     def test_rate_limit_returns_retry_after(self):
+        self.quiz.allow_retake = True
+        self.quiz.save()
         self.student_client.post(self.quiz_url, self.answers())
         with override_settings(LMS_SUBMISSIONS_PER_HOUR=1):
             response = self.student_client.post(self.quiz_url, self.answers(version=1))

@@ -5,7 +5,7 @@ from django.db import transaction
 from django.db.models.signals import post_delete, pre_save
 from django.dispatch import receiver
 
-from .models import Assignment, Submission
+from .models import Assignment, QuestionResponse, Submission
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +16,7 @@ def delete_unreferenced_file(name, using="default"):
     if (
         Assignment.objects.using(using).filter(material_file=name).exists()
         or Submission.objects.using(using).filter(file_answer=name).exists()
+        or QuestionResponse.objects.using(using).filter(file_answer=name).exists()
     ):
         return
     try:
@@ -27,6 +28,7 @@ def delete_unreferenced_file(name, using="default"):
 
 @receiver(post_delete, sender=Assignment)
 @receiver(post_delete, sender=Submission)
+@receiver(post_delete, sender=QuestionResponse)
 def cleanup_deleted_file(sender, instance, using, **kwargs):
     name = instance.material_file.name if sender is Assignment else instance.file_answer.name
     if name:

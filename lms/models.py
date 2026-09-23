@@ -29,6 +29,36 @@ def submission_upload_to(instance, filename):
     return f"submissions/{instance.assignment_id}/user_{instance.student_id}/{uuid.uuid4().hex}{_safe_extension(filename)}"
 
 
+def response_upload_to(instance, filename):
+    """Голосовые ответы на пункты лежат рядом со сдачами ученика — та же зона доступа."""
+    return (
+        f"submissions/{instance.assignment_id}/user_{instance.student_id}/items/"
+        f"{uuid.uuid4().hex}{_safe_extension(filename)}"
+    )
+
+
+#: Лимит длительности записи с микрофона: от 10 секунд до 10 минут.
+#: Верхняя граница держит WAV 16 кГц моно (~1,9 МБ/мин) в лимите файла 20 MiB.
+RECORDING_LIMIT_MIN_SECONDS = 10
+RECORDING_LIMIT_MAX_SECONDS = 600
+recording_limit_validators = [
+    MinValueValidator(RECORDING_LIMIT_MIN_SECONDS),
+    MaxValueValidator(RECORDING_LIMIT_MAX_SECONDS),
+]
+
+
+def format_duration(seconds):
+    """120 → «2 мин», 90 → «1 мин 30 с», 45 → «45 с»."""
+    if not seconds:
+        return ""
+    minutes, rest = divmod(int(seconds), 60)
+    if minutes and rest:
+        return f"{minutes} мин {rest} с"
+    if minutes:
+        return f"{minutes} мин"
+    return f"{rest} с"
+
+
 class Profile(models.Model):
     class Role(models.TextChoices):
         STUDENT = "student", "Ученик"
@@ -315,6 +345,24 @@ class Assignment(models.Model):
         validators=[MinValueValidator(0), MaxValueValidator(1000)],
         verbose_name="Максимум баллов",
     )
+    max_tries = models.PositiveSmallIntegerField(
+        default=3,
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        verbose_name="Попыток на пункт",
+        help_text="Сколько раз ученик может ответить на пункт с автопроверкой.",
+    )
+    allow_retake = models.BooleanField(
+        default=False,
+        verbose_name="Можно пройти заново",
+        help_text="После завершения ученик может начать задание с чистого листа.",
+    )
+    recording_limit_seconds = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        validators=recording_limit_validators,
+        verbose_name="Лимит записи, секунд",
+        help_text="Максимальная длительность аудиоответа. Пусто — без лимита.",
+    )
     order = models.PositiveIntegerField(default=0, verbose_name="Порядок")
     is_active = models.BooleanField(default=True, verbose_name="Активно")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -353,6 +401,14 @@ class Assignment(models.Model):
     @property
     def total_question_points(self):
         return sum(question.points for question in self.questions.all())
+
+    @property
+    def records_audio(self):
+        return self.assignment_type in (Assignment.Type.AUDIO, Assignment.Type.MIXED)
+
+    @property
+    def recording_limit_display(self):
+        return format_duration(self.recording_limit_seconds)
 
 
 class SubmissionQuerySet(models.QuerySet):
@@ -613,6 +669,12 @@ class Question(models.Model):
         ORDER = "order", "Предложение из слов"
         SORT = "sort", "Сортировка по колонкам"
         SPELL = "spell", "Слово из букв"
+        TEXT = "text", "Свободный ответ (проверяет преподаватель)"
+        VOICE = "voice", "Голосовой ответ (проверяет преподаватель)"
+
+    #: Пункты без правильного ответа: их оценивает преподаватель.
+    MANUAL_KINDS = frozenset({Kind.TEXT, Kind.VOICE})
+    DEFAULT_VOICE_LIMIT = 60
 
     assignment = models.ForeignKey(
         Assignment,
@@ -630,6 +692,12 @@ class Question(models.Model):
         validators=[MinValueValidator(1), MaxValueValidator(100)],
         verbose_name="Баллы",
     )
+    recording_limit_seconds = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        validators=recording_limit_validators,
+        verbose_name="Лимит записи, секунд",
+    )
     order = models.PositiveIntegerField(default=0, verbose_name="Порядок")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -641,6 +709,18 @@ class Question(models.Model):
 
     def __str__(self):
         return f"{self.assignment_id}: {self.text[:60]}"
+
+    @property
+    def is_manual(self):
+        return self.kind in self.MANUAL_KINDS
+
+    @property
+    def voice_limit(self):
+        return self.recording_limit_seconds or self.DEFAULT_VOICE_LIMIT
+
+    @property
+    def voice_limit_display(self):
+        return format_duration(self.voice_limit)
 
     @property
     def correct_choices(self):
@@ -731,6 +811,103 @@ class QuizAttempt(models.Model):
 
     def __str__(self):
         return f"{self.score}/{self.max_score} — {self.submission_id}"
+
+
+class QuestionResponse(models.Model):
+    """Ответ ученика на один пункт задания: все попытки «Принять» и итог.
+
+    Строка живёт в рамках «прохода» (``round`` = номер будущей сдачи). Пока
+    проход не завершён, ``submission`` пуст и сервис дописывает попытки; после
+    завершения строка привязывается к неизменяемой сдаче и больше не меняется.
+    Так преподаватель видит и неверные ответы, введённые до правильного.
+    """
+
+    class State(models.TextChoices):
+        OPEN = "open", "Есть попытки"
+        CORRECT = "correct", "Верно"
+        FAILED = "failed", "Попытки исчерпаны"
+        ANSWERED = "answered", "Ответ принят"
+
+    CLOSED_STATES = frozenset({State.CORRECT, State.FAILED, State.ANSWERED})
+
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="question_responses",
+        verbose_name="Ученик",
+    )
+    assignment = models.ForeignKey(
+        Assignment,
+        on_delete=models.CASCADE,
+        related_name="question_responses",
+        verbose_name="Задание",
+    )
+    question = models.ForeignKey(
+        Question,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="responses",
+        verbose_name="Пункт",
+    )
+    submission = models.ForeignKey(
+        Submission,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="question_responses",
+        verbose_name="Сдача",
+    )
+    round = models.PositiveIntegerField(default=1, verbose_name="Проход")
+    state = models.CharField(
+        max_length=10, choices=State.choices, default=State.OPEN, verbose_name="Состояние"
+    )
+    tries = models.JSONField(default=list, blank=True, verbose_name="Попытки")
+    text_answer = models.TextField(blank=True, max_length=20000, verbose_name="Текст ответа")
+    file_answer = models.FileField(
+        upload_to=response_upload_to,
+        db_index=True,
+        blank=True,
+        validators=[file_validator, validate_upload],
+        verbose_name="Запись ответа",
+    )
+    points = models.PositiveIntegerField(default=0, verbose_name="Баллы автопроверки")
+    teacher_points = models.PositiveIntegerField(
+        null=True, blank=True, verbose_name="Баллы преподавателя"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Ответ на пункт"
+        verbose_name_plural = "Ответы на пункты"
+        ordering = ["round", "question__order", "question_id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["student", "question", "round"], name="unique_question_response_round"
+            )
+        ]
+        indexes = [
+            models.Index(fields=["student", "assignment", "round"], name="response_round_idx")
+        ]
+
+    def __str__(self):
+        return f"{self.student_id} → {self.question_id} (проход {self.round})"
+
+    @property
+    def is_closed(self):
+        return self.state in self.CLOSED_STATES
+
+    @property
+    def tries_used(self):
+        return len(self.tries or [])
+
+    @property
+    def last_try(self):
+        return (self.tries or [None])[-1]
+
+    @property
+    def wrong_tries(self):
+        return [item for item in (self.tries or []) if not item.get("correct")]
 
 
 class AnswerDraft(models.Model):

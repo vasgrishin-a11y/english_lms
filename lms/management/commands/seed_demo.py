@@ -332,6 +332,22 @@ class Command(BaseCommand):
             max_points=50,
         )
         speaking.skills.set([skills["speaking"], skills["listening"]])
+        if not speaking.recording_limit_seconds:
+            speaking.recording_limit_seconds = 180
+            speaking.save(update_fields=["recording_limit_seconds", "updated_at"])
+
+        # Смешанное задание: пункты с автопроверкой + устный и письменный ответ.
+        mixed_quiz = make(
+            topic(lexis, "Speaking: describe a trip"),
+            "Урок: в аэропорту",
+            "Ответьте на каждый пункт и нажмите «Принять». Пункты с правильным ответом "
+            "проверяются сразу, устный и письменный ответы проверит преподаватель.",
+            kind=Assignment.Type.QUIZ,
+            order=4,
+            max_points=0,
+        )
+        mixed_quiz.skills.set([skills["speaking"], skills["vocabulary"], skills["writing"]])
+        self._mixed_questions(mixed_quiz)
 
         task1 = make(
             topic(ielts, "IELTS Task 1: line graph"),
@@ -492,6 +508,48 @@ class Command(BaseCommand):
         Choice.objects.create(question=spell_q, text="book", is_correct=True, order=1)
         Choice.objects.create(question=spell_q, text="books", is_correct=True, order=2)
 
+        quiz.max_points = sum(question.points for question in quiz.questions.all())
+        quiz.save(update_fields=["max_points", "updated_at"])
+
+    def _mixed_questions(self, quiz):
+        """Урок с пошаговой проверкой: выбор, пропуск, голосовой и письменный ответы."""
+        if not quiz.questions.exists():
+            mcq = Question.objects.create(
+                assignment=quiz,
+                kind=Question.Kind.MCQ,
+                text="Where do you show your boarding pass?",
+                explanation="Посадочный талон проверяют у выхода на посадку — at the gate.",
+                points=1,
+                order=1,
+            )
+            Choice.objects.create(question=mcq, text="at the gate", is_correct=True, order=1)
+            Choice.objects.create(question=mcq, text="at the baggage claim", order=2)
+            Choice.objects.create(question=mcq, text="at the duty free", order=3)
+            gap = Question.objects.create(
+                assignment=quiz,
+                kind=Question.Kind.GAP,
+                text="My flight was ___ because of the storm. (задержан)",
+                points=2,
+                order=2,
+            )
+            Choice.objects.create(question=gap, text="delayed", is_correct=True, order=1)
+            Choice.objects.create(question=gap, text="postponed", is_correct=True, order=2)
+            Question.objects.create(
+                assignment=quiz,
+                kind=Question.Kind.VOICE,
+                text="Ask the check-in agent for a window seat and about the baggage allowance.",
+                explanation="Would I be able to get a window seat? How many bags can I check in?",
+                points=4,
+                order=3,
+                recording_limit_seconds=45,
+            )
+            Question.objects.create(
+                assignment=quiz,
+                kind=Question.Kind.TEXT,
+                text="Write 3–4 sentences: what went wrong on your worst trip?",
+                points=3,
+                order=4,
+            )
         quiz.max_points = sum(question.points for question in quiz.questions.all())
         quiz.save(update_fields=["max_points", "updated_at"])
 

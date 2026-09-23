@@ -1,0 +1,197 @@
+{% load lms_tags %}
+{% with question=item.question %}
+<article class="ex item item-{{ item.state }}{% if item.just_wrong %} item-wrong{% endif %}" id="q-{{ question.pk }}" data-item data-state="{{ item.state }}" aria-labelledby="q-{{ question.pk }}-title">
+    <header class="ex-head">
+        <span class="ex-num tnum" aria-hidden="true">
+            {% if item.state == 'correct' %}{% icon "check" "icon icon-sm" %}
+            {% elif item.state == 'failed' %}{% icon "x" "icon icon-sm" %}
+            {% elif item.state == 'answered' %}{% icon "send" "icon icon-sm" %}
+            {% else %}{{ number }}{% endif %}
+        </span>
+        <div class="ex-head-main">
+            <p class="ex-title mb-0" id="q-{{ question.pk }}-title"><span class="sr-only">Пункт {{ number }}. </span>{{ question.text|linebreaksbr }}</p>
+            <p class="ex-meta tiny muted mb-0">
+                {% icon question.kind|kind_icon "icon icon-sm" %}
+                <span>{{ question.kind|kind_hint }}</span>
+                <span aria-hidden="true">·</span>
+                <span class="tnum">{{ question.points }} б.</span>
+                {% if item.manual %}
+                    {% if question.kind == 'voice' %}<span aria-hidden="true">·</span><span>{% icon "timer" "icon icon-sm" %} до {{ question.voice_limit_display }}</span>{% endif %}
+                {% elif not item.closed %}
+                    <span aria-hidden="true">·</span>
+                    <span class="tnum" data-tries-left>Попыток: {{ item.tries_left }} из {{ item.max_tries }}</span>
+                {% endif %}
+            </p>
+        </div>
+        <span class="item-mark" aria-hidden="true">
+            {% if item.state == 'correct' %}<span class="mark mark-ok">{% icon "check" %}</span>
+            {% elif item.state == 'failed' %}<span class="mark mark-bad">{% icon "x" %}</span>
+            {% elif item.just_wrong %}<span class="mark mark-bad mark-soft">{% icon "x" %}</span>{% endif %}
+        </span>
+    </header>
+
+    <div class="ex-body">
+        {# Итог пункта: живой регион, чтобы экранный диктор озвучил «Верно» / «Неверно». #}
+        <div class="item-feedback" role="status" aria-live="polite">
+            {% if item_error %}
+                <p class="item-note item-note-warn mb-0">{% icon "alert" "icon icon-sm" %}{{ item_error }}</p>
+            {% elif item.state == 'correct' %}
+                <p class="item-note item-note-ok mb-0">{% icon "check-circle" "icon icon-sm" %}<strong>Верно!</strong>{% if item.tries_used > 1 %} С попытки {{ item.tries_used }}.{% endif %}</p>
+            {% elif item.state == 'failed' %}
+                <p class="item-note item-note-bad mb-0">{% icon "x" "icon icon-sm" %}<strong>Неверно.</strong> Попытки закончились.</p>
+            {% elif item.just_wrong %}
+                <p class="item-note item-note-bad mb-0">{% icon "x" "icon icon-sm" %}<strong>Неверно.</strong>
+                    {% if item.parts.hits != None and item.parts.total %}Верно выбрано {{ item.parts.hits }} из {{ item.parts.total }}{% if item.parts.extra %}, лишних — {{ item.parts.extra }}{% endif %}.{% endif %}
+                    {% if item.order_total %}На своих местах {{ item.order_hits }} из {{ item.order_total }} слов.{% endif %}
+                    {% if item.row_marks %}Неверные строки отмечены красным.{% endif %}
+                    Осталось попыток: {{ item.tries_left }}.</p>
+            {% elif item.state == 'answered' %}
+                <p class="item-note item-note-info mb-0">{% icon "send" "icon icon-sm" %}<strong>Ответ принят.</strong> Его проверит преподаватель.</p>
+            {% endif %}
+        </div>
+
+        {% if item.reveal %}
+            {# Пункт закрыт: ответ ученика, правильный ответ и пояснение. #}
+            {% if item.last and item.last.display %}
+                <p class="small mb-0"><span class="muted">Ваш ответ:</span> {{ item.last.display }}</p>
+            {% endif %}
+            {% if item.state != 'correct' and item.expected %}
+                <p class="small mb-0 item-expected"><span class="muted">Правильный ответ:</span> <strong>{{ item.expected }}</strong></p>
+            {% endif %}
+            {% if question.explanation %}
+                <p class="small muted mb-0" style="margin-top:6px">{% icon "lightbulb" "icon icon-sm" %} {{ question.explanation }}</p>
+            {% endif %}
+            {% if item.wrong_tries %}
+                <details class="item-tries">
+                    <summary class="tiny">Ваши попытки: {{ item.tries_used }}</summary>
+                    <ol class="tiny">
+                        {% for entry in item.tries %}{% if entry.correct != None %}
+                            <li class="{% if entry.correct %}is-correct{% else %}is-wrong{% endif %}">{% if entry.correct %}✓{% else %}✗{% endif %} {{ entry.display|default:"—" }}</li>
+                        {% endif %}{% endfor %}
+                    </ol>
+                </details>
+            {% endif %}
+
+        {% elif item.manual and not item.editable %}
+            {# Итог уже отправлен: свободный или голосовой ответ ждёт преподавателя. #}
+            {% if item.text_answer %}<div class="answer-body small">{{ item.text_answer|linebreaksbr }}</div>{% endif %}
+            {% if item.file_answer %}<audio controls preload="metadata" src="{% url 'media_preview' item.file_answer.name %}"></audio>{% endif %}
+            {% if not item.text_answer and not item.file_answer %}<p class="small muted mb-0">Ответ не дан.</p>{% endif %}
+            {% if item.teacher_points != None %}<p class="small mb-0" style="margin-top:6px">Оценка преподавателя: <strong class="tnum">{{ item.teacher_points }}/{{ question.points }}</strong></p>{% endif %}
+
+        {% elif question.kind == 'voice' %}
+            {% if item.state == 'answered' %}
+                {% if item.file_answer %}<audio controls preload="metadata" src="{% url 'media_preview' item.file_answer.name %}"></audio>{% endif %}
+                <form method="post" action="{% url 'student_item_reset' assignment.pk question.pk %}"
+                      hx-post="{% url 'student_item_reset' assignment.pk question.pk %}" hx-target="#q-{{ question.pk }}" hx-swap="outerHTML"
+                      hx-confirm="Удалить запись и записать заново?" class="row" style="margin-top:8px">
+                    {% csrf_token %}<input type="hidden" name="round" value="{{ quiz_round }}">
+                    <button class="btn btn-secondary btn-sm" type="submit">{% icon "refresh" %}Удалить и записать заново</button>
+                </form>
+            {% else %}
+                <form method="post" enctype="multipart/form-data" action="{% url 'student_item_answer' assignment.pk question.pk %}"
+                      hx-post="{% url 'student_item_answer' assignment.pk question.pk %}" hx-encoding="multipart/form-data"
+                      hx-target="#q-{{ question.pk }}" hx-swap="outerHTML">
+                    {% csrf_token %}<input type="hidden" name="round" value="{{ quiz_round }}">
+                    {% include "lms/parts/recorder.html" with input_id=item.file_field input_name=item.file_field limit=question.voice_limit limit_label=question.voice_limit_display %}
+                    <button class="btn" type="submit" data-item-submit>{% icon "check" %}Принять</button>
+                </form>
+            {% endif %}
+
+        {% else %}
+            {# Пункт открыт: поле ответа и «Принять». Без JS форма работает обычным POST. #}
+            {% if question.kind == 'text' %}
+                {% url 'student_item_answer' assignment.pk question.pk as item_url %}
+            {% else %}
+                {% url 'student_item_check' assignment.pk question.pk as item_url %}
+            {% endif %}
+            <form method="post" action="{{ item_url }}" hx-post="{{ item_url }}" hx-target="#q-{{ question.pk }}" hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]" data-item-form>
+                {% csrf_token %}<input type="hidden" name="round" value="{{ quiz_round }}">
+                {% if question.kind == 'mcq' %}
+                    <div class="opts" role="radiogroup" aria-labelledby="q-{{ question.pk }}-title">
+                        {% for choice in question.choices.all %}
+                            {% with pk_str=choice.pk|stringformat:"s" %}
+                            <label class="opt{% if pk_str in item.wrong_choices %} opt-tried{% endif %}" for="q_{{ question.pk }}_{{ choice.pk }}">
+                                <input type="radio" id="q_{{ question.pk }}_{{ choice.pk }}" name="q_{{ question.pk }}" value="{{ choice.pk }}">
+                                <span class="opt-mark" aria-hidden="true"></span>
+                                <span>{{ choice.text }}</span>
+                                {% if pk_str in item.wrong_choices %}<span class="tiny opt-tried-note">уже пробовали</span>{% endif %}
+                            </label>
+                            {% endwith %}
+                        {% endfor %}
+                    </div>
+                {% elif question.kind == 'multi' %}
+                    <div class="opts" role="group" aria-labelledby="q-{{ question.pk }}-title">
+                        {% for choice in question.choices.all %}
+                            <label class="opt" for="q_{{ question.pk }}_{{ choice.pk }}">
+                                <input type="checkbox" id="q_{{ question.pk }}_{{ choice.pk }}" name="q_{{ question.pk }}" value="{{ choice.pk }}"{% if choice.pk|stringformat:"s" in item.selected.choices %} checked{% endif %}>
+                                <span class="opt-mark" aria-hidden="true"></span>
+                                <span>{{ choice.text }}</span>
+                            </label>
+                        {% endfor %}
+                    </div>
+                {% elif question.kind == 'spell' %}
+                    <div class="tiles" data-tiles="spell" data-target="q_{{ question.pk }}" aria-hidden="true">
+                        {% for letter in question.scrambled %}
+                            <button type="button" class="tile" tabindex="-1" data-letter="{{ letter }}">{{ letter }}</button>
+                        {% endfor %}
+                    </div>
+                    <label class="sr-only" for="q_{{ question.pk }}">Ваше слово</label>
+                    <input type="text" id="q_{{ question.pk }}" name="q_{{ question.pk }}" maxlength="500" value="{{ item.selected.text|default:'' }}"
+                           autocomplete="off" autocapitalize="off" spellcheck="false"
+                           placeholder="Соберите слово из букв или впишите с клавиатуры">
+                {% elif question.kind == 'order' %}
+                    <div class="tiles" data-tiles="order" data-target="q_{{ question.pk }}" aria-hidden="true">
+                        {% for choice in question.choices.all|shuffled:question.pk %}
+                            <button type="button" class="tile" tabindex="-1" data-word="{{ choice.text }}" data-id="{{ choice.pk }}">{{ choice.text }}</button>
+                        {% endfor %}
+                    </div>
+                    <div class="slot-row" data-slot="q_{{ question.pk }}" aria-hidden="true"></div>
+                    <label class="sr-only" for="q_{{ question.pk }}">Предложение из слов в нужном порядке</label>
+                    <input type="text" id="q_{{ question.pk }}" name="q_{{ question.pk }}" maxlength="500"
+                           autocomplete="off" spellcheck="false"
+                           placeholder="Соберите предложение из слов или впишите словами через пробел">
+                {% elif question.kind == 'sort' or question.kind == 'match' %}
+                    <div class="table-scroll" role="region" tabindex="0"
+                         aria-label="{% if question.kind == 'sort' %}Сортировка по колонкам{% else %}Соответствие{% endif %}, прокручивается по горизонтали">
+                        <table style="margin-top:8px">
+                            <caption class="sr-only">{% if question.kind == 'sort' %}Распределите элементы по колонкам{% else %}Соответствие: термин и определение{% endif %}</caption>
+                            <thead><tr><th scope="col">{% if question.kind == 'sort' %}Элемент{% else %}Термин{% endif %}</th><th scope="col">{% if question.kind == 'sort' %}Колонка{% else %}Определение{% endif %}</th></tr></thead>
+                            <tbody>
+                                {% for choice in question.choices.all %}
+                                    {% with mark=item.row_marks|dictkey:choice.pk picked=item.selected.mapping|dictkey:choice.pk %}
+                                    <tr class="{% if mark == True %}row-ok{% elif mark == False %}row-bad{% endif %}">
+                                        <td>{% if mark == True %}<span class="sr-only">Верно: </span>{% elif mark == False %}<span class="sr-only">Ошибка: </span>{% endif %}{{ choice.text }}</td>
+                                        <td>
+                                            <label class="sr-only" for="q_{{ question.pk }}_{{ choice.pk }}">{% if question.kind == 'sort' %}Колонка{% else %}Определение{% endif %} для «{{ choice.text }}»</label>
+                                            <select id="q_{{ question.pk }}_{{ choice.pk }}" name="q_{{ question.pk }}_{{ choice.pk }}">
+                                                <option value="">— выберите —</option>
+                                                {% if question.kind == 'sort' %}
+                                                    {% for column in question.columns %}<option value="{{ column }}"{% if picked == column %} selected{% endif %}>{{ column }}</option>{% endfor %}
+                                                {% else %}
+                                                    {% for option in question.choices.all|shuffled:question.pk %}<option value="{{ option.pk }}"{% if picked == option.pk|stringformat:"s" %} selected{% endif %}>{{ option.match_text }}</option>{% endfor %}
+                                                {% endif %}
+                                            </select>
+                                        </td>
+                                    </tr>
+                                    {% endwith %}
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% elif question.kind == 'text' %}
+                    <label class="sr-only" for="q_{{ question.pk }}">Ваш ответ</label>
+                    <textarea id="q_{{ question.pk }}" name="q_{{ question.pk }}" rows="5" maxlength="20000" placeholder="Напишите ответ">{{ item.text_answer }}</textarea>
+                {% else %}
+                    <label class="sr-only" for="q_{{ question.pk }}">Ваш ответ</label>
+                    <input type="text" id="q_{{ question.pk }}" name="q_{{ question.pk }}" maxlength="500" value="{{ item.selected.text|default:'' }}" autocomplete="off" placeholder="Впишите ответ">
+                {% endif %}
+                <div class="item-actions">
+                    <button class="btn" type="submit" data-item-submit>{% icon "check" %}{% if question.kind == 'text' and item.state == 'answered' %}Сохранить изменения{% else %}Принять{% endif %}</button>
+                    {% if not item.manual %}<span class="tiny muted">Регистр и знаки препинания не важны.</span>{% endif %}
+                </div>
+            </form>
+        {% endif %}
+    </div>
+</article>
+{% endwith %}

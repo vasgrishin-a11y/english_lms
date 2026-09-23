@@ -6,7 +6,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from lms.file_cleanup import delete_unreferenced_file
-from lms.models import Assignment, Submission
+from lms.models import Assignment, QuestionResponse, Submission
 
 
 class Command(BaseCommand):
@@ -30,6 +30,9 @@ class Command(BaseCommand):
         )
         referenced.update(
             Submission.objects.exclude(file_answer="").values_list("file_answer", flat=True)
+        )
+        referenced.update(
+            QuestionResponse.objects.exclude(file_answer="").values_list("file_answer", flat=True)
         )
         count = 0
         for namespace in ("assignments", "submissions"):

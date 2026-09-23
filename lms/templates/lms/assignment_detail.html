@@ -72,7 +72,7 @@
                 {% else %}
                     <p class="small muted" style="margin-top:12px">Преподаватель ещё не добавил слова — загляните позже.</p>
                 {% endif %}
-            {% else %}
+            {% elif not assignment.is_quiz %}
                 <div class="callout" style="margin-top:16px">
                     {% icon "info" %}
                     <div>
@@ -84,21 +84,31 @@
         </section>
 
         {% if assignment.is_quiz %}
-            {% if submission and quiz_result %}
-                {% include "lms/parts/quiz_result.html" %}
-            {% endif %}
-            <section class="card">
+            <section class="card quiz-card" aria-labelledby="quiz-title">
                 <div class="card-head">
-                    <h2 class="card-title">{% icon "target" %}{% if submission %}Пройти тест заново{% else %}Упражнения урока{% endif %}</h2>
-                    <span class="badge badge-turquoise">Автопроверка · мгновенно</span>
+                    <h2 class="card-title" id="quiz-title">{% icon "target" %}{% if quiz_accepting and submission %}Новая попытка{% else %}Упражнения урока{% endif %}</h2>
+                    <span class="badge badge-turquoise">Проверка по каждому пункту</span>
                 </div>
-                {% if conflict %}<p class="alert alert-danger" role="alert">{% icon "alert" %}<span>Страница устарела: кто-то уже отправил тест. Обновите страницу.</span></p>{% endif %}
-                <form method="post">
-                    {% csrf_token %}
-                    <input type="hidden" name="expected_version" value="{{ submission.version|default:0 }}">
-                    {% include "lms/parts/quiz_form.html" %}
-                    <button class="btn btn-lg" type="submit" style="margin-top:16px">{% icon "send" %}{% t "Отправить и проверить" %}</button>
-                </form>
+                {% if quiz_error %}<div class="alert alert-error" role="alert">{% icon "alert" %}<span>{{ quiz_error }}</span></div>{% endif %}
+                {% if not items %}
+                    <p class="muted">В этом задании пока нет вопросов. Напишите преподавателю.</p>
+                {% else %}
+                    {% if quiz_accepting %}
+                        <div class="callout" style="margin-bottom:16px">
+                            {% icon "info" %}
+                            <div>
+                                <p class="mb-0 strong">Как выполнять</p>
+                                <p class="mb-0 small">Ответьте на пункт и нажмите «Принять» — сразу увидите {% icon "check" "icon icon-sm" %} верно или {% icon "x" "icon icon-sm" %} неверно. На каждый пункт — {{ assignment.max_tries }} {{ assignment.max_tries|pluralize_ru:"попытка,попытки,попыток" }}. Ответы сохраняются сразу: можно уйти и вернуться.</p>
+                            </div>
+                        </div>
+                    {% endif %}
+                    {% include "lms/parts/quiz_progress.html" %}
+                    <div class="quiz-items" data-quiz>
+                        {% for item in items %}
+                            {% include "lms/parts/quiz_item.html" with number=item.number %}
+                        {% endfor %}
+                    </div>
+                {% endif %}
             </section>
         {% else %}
             <section class="card">
@@ -119,19 +129,9 @@
                             {{ form.text_answer.errors }}
                         </div>
                     {% endif %}
-                    {% if assignment.assignment_type == 'audio' or assignment.assignment_type == 'mixed' %}
-                        <div class="panel" data-recorder data-input="{{ form.file_answer.id_for_label }}" style="margin-bottom:16px">
-                            <div class="row row-between">
-                                <p class="strong mb-0">{% icon "mic" %} Запись ответа в браузере</p>
-                                <span class="pill-note" data-recorder-status>Микрофон не активен</span>
-                            </div>
-                            <p class="tiny muted">Запись сохраняется в WAV и подставляется в поле файла.</p>
-                            <div class="row">
-                                <button type="button" class="btn btn-secondary btn-sm" data-recorder-toggle>{% icon "mic" %} Начать запись</button>
-                                <button type="button" class="btn btn-ghost btn-sm hidden" data-recorder-stop>{% icon "stop" %} Остановить</button>
-                                <audio controls preload="none" class="hidden" data-recorder-preview></audio>
-                            </div>
-                            <p class="tiny muted mb-0" data-recorder-error role="status"></p>
+                    {% if assignment.records_audio %}
+                        <div style="margin-bottom:16px">
+                            {% include "lms/parts/recorder.html" with input_id=form.file_answer.id_for_label limit=assignment.recording_limit_seconds limit_label=assignment.recording_limit_display external_input=True %}
                         </div>
                     {% endif %}
                     {% if form.file_answer %}

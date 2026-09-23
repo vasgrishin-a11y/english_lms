@@ -13,6 +13,7 @@
                             <strong>{{ forloop.counter }}. {{ question.text }}</strong>
                             <span class="tag">{{ question.get_kind_display }}</span>
                             <span class="tiny muted tnum">{{ question.points }} б.</span>
+                            {% if question.kind == 'voice' %}<span class="pill-note">{% icon "timer" "icon icon-sm" %}до {{ question.voice_limit_display }}</span>{% endif %}
                         </div>
                         {% include "lms/parts/question_choices.html" with reveal=True %}
                         {% if question.explanation %}<p class="tiny muted mb-0" style="margin-top:6px">{% icon "lightbulb" "icon icon-sm" %} {{ question.explanation }}</p>{% endif %}

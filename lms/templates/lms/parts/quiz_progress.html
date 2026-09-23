@@ -1,0 +1,47 @@
+{% load lms_tags %}
+{# Прогресс прохода. В ответе htmx обновляется out-of-band вместе с пунктом. #}
+<div id="quiz-progress" class="quiz-progress{% if not quiz_accepting %} is-done{% endif %}"{% if oob %} hx-swap-oob="true"{% endif %}>
+    {% if quiz_accepting %}
+        <div class="quiz-progress-head">
+            <p class="strong mb-0">Выполнено {{ quiz_progress.done }} из {{ quiz_progress.total }}</p>
+            <p class="tiny muted mb-0">
+                <span class="quiz-stat quiz-stat-ok">{% icon "check" "icon icon-sm" %}{{ quiz_progress.correct }} верно</span>
+                {% if quiz_progress.failed %}<span class="quiz-stat quiz-stat-bad">{% icon "x" "icon icon-sm" %}{{ quiz_progress.failed }} с ошибкой</span>{% endif %}
+                {% if quiz_progress.manual %}<span class="quiz-stat">{% icon "send" "icon icon-sm" %}{{ quiz_progress.answered }} из {{ quiz_progress.manual }} на проверку</span>{% endif %}
+            </p>
+        </div>
+        <div class="progress progress-lg" role="progressbar" aria-label="Выполнено пунктов" aria-valuemin="0" aria-valuemax="{{ quiz_progress.total }}" aria-valuenow="{{ quiz_progress.done }}">
+            <span style="width:{{ quiz_progress.percent }}%"></span>
+        </div>
+        {% if quiz_progress.complete and quiz_progress.manual %}
+            <form method="post" action="{% url 'student_quiz_finish' assignment.pk %}" class="quiz-finish">
+                {% csrf_token %}<input type="hidden" name="round" value="{{ quiz_round }}">
+                <p class="small mb-0">Все пункты готовы. Проверьте записи — после отправки их нельзя будет заменить.</p>
+                <button class="btn" type="submit">{% icon "send" %}{% t "Отправить преподавателю" %}</button>
+            </form>
+        {% elif quiz_progress.manual %}
+            <p class="tiny muted mb-0">Пункты с автопроверкой проверяются сразу. Свободные и голосовые ответы можно менять до отправки — кнопка появится, когда будут готовы все пункты.</p>
+        {% else %}
+            <p class="tiny muted mb-0">На каждый пункт — {{ assignment.max_tries }} {{ assignment.max_tries|pluralize_ru:"попытка,попытки,попыток" }}. Результат отправится преподавателю автоматически, когда вы закончите последний пункт.</p>
+        {% endif %}
+    {% else %}
+        <div class="quiz-progress-head">
+            <p class="strong mb-0">{% icon "check-circle" %} Задание завершено</p>
+            {% if submission.feedback and submission.feedback.grade != None %}
+                <span class="grade-pill tnum {{ submission.feedback.grade|grade_class:submission.max_points_snapshot }}">{{ submission.feedback.grade }}<small>/{{ submission.max_points_snapshot }}</small></span>
+            {% elif quiz_result %}
+                <span class="badge badge-submitted">{% icon "clock" "icon icon-sm" %}Ждёт проверки преподавателя</span>
+            {% endif %}
+        </div>
+        {% if quiz_result %}
+            <p class="small mb-0">Результат автопроверки: верно {{ quiz_result.correct_count }} из {{ quiz_result.total_count }}{% if quiz_progress.first_try %}, с первой попытки — {{ quiz_progress.first_try }}{% endif %}. Баллы за автопроверку: <strong class="tnum">{{ quiz_result.score }}</strong>.</p>
+        {% endif %}
+        {% if oob %}<p class="small mb-0"><a href="{% url 'assignment_detail' assignment.pk %}">Обновить страницу и посмотреть разбор</a></p>{% endif %}
+        {% if assignment.allow_retake %}
+            <form method="post" action="{% url 'student_quiz_retake' assignment.pk %}">
+                {% csrf_token %}
+                <button class="btn btn-secondary btn-sm" type="submit">{% icon "refresh" %}{% t "Пройти заново" %}</button>
+            </form>
+        {% endif %}
+    {% endif %}
+</div>

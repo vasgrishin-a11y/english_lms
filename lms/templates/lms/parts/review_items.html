@@ -1,0 +1,70 @@
+{% load lms_tags %}
+<section class="card" aria-labelledby="review-items-title">
+    <div class="card-head">
+        <h2 class="card-title" id="review-items-title">{% icon "target" %}Автопроверка теста — по пунктам</h2>
+        <span class="grade-pill tnum {{ quiz.score|grade_class:quiz.max_score }}" title="Баллы автопроверки">{{ quiz.score }}<small>/{{ quiz.max_score }}</small></span>
+    </div>
+    <div class="review-summary">
+        <span class="quiz-stat quiz-stat-ok">{% icon "check" "icon icon-sm" %}Верно: {{ items_progress.correct }}</span>
+        <span class="quiz-stat">{% icon "star" "icon icon-sm" %}С первой попытки: {{ items_progress.first_try }}</span>
+        {% if items_progress.failed %}<span class="quiz-stat quiz-stat-bad">{% icon "x" "icon icon-sm" %}Не решено: {{ items_progress.failed }}</span>{% endif %}
+        {% if items_progress.manual %}<span class="quiz-stat">{% icon "pencil" "icon icon-sm" %}Проверить вручную: {{ items_progress.manual }}</span>{% endif %}
+    </div>
+    <p class="tiny muted">Автопроверка уже выставила баллы за пункты с правильным ответом. Верный ответ засчитывается полностью с любой попытки; неверные попытки показаны для разбора.{% if items_progress.manual %} Оцените пункты со свободным ответом — итоговый балл сложится сам, если поле «Балл» оставить пустым.{% endif %}</p>
+    <ol class="review-items">
+        {% for item in items %}
+            <li class="review-item review-item-{{ item.state }}" id="review-q-{{ item.question.pk }}">
+                <div class="row row-tight">
+                    {% if item.manual %}
+                        <span class="badge badge-submitted">{% icon "pencil" "icon icon-sm" %}Проверить</span>
+                    {% elif item.state == 'correct' %}
+                        <span class="badge badge-checked">{% icon "check" "icon icon-sm" %}Верно{% if item.tries_used > 1 %} с {{ item.tries_used }}-й попытки{% endif %}</span>
+                    {% else %}
+                        <span class="badge badge-needs_revision">{% icon "x" "icon icon-sm" %}Не решено</span>
+                    {% endif %}
+                    <span class="grow strong">{{ item.number }}. {{ item.question.text|truncatechars:220 }}</span>
+                    {% if item.manual %}
+                        <span class="tiny muted tnum">{% if item.teacher_points != None %}{{ item.teacher_points }}{% else %}—{% endif %}/{{ item.question.points }} б.</span>
+                    {% else %}
+                        <span class="tiny muted tnum">{{ item.points }}/{{ item.question.points }} б.</span>
+                    {% endif %}
+                </div>
+
+                {% if item.manual %}
+                    {% if item.text_answer %}<div class="answer-body small" style="margin-top:8px">{{ item.text_answer|linebreaksbr }}</div>{% endif %}
+                    {% if item.file_answer %}
+                        <div class="media-frame" style="margin-top:8px">
+                            <audio controls preload="metadata" src="{% url 'media_preview' item.file_answer.name %}"></audio>
+                            <a class="btn btn-secondary btn-sm" href="{{ item.file_answer.url }}">{% icon "download" %}Скачать запись</a>
+                        </div>
+                    {% endif %}
+                    {% if not item.text_answer and not item.file_answer %}<p class="small muted mb-0">Ответ не дан.</p>{% endif %}
+                    {% if item.points_field %}
+                        <div class="form-field item-points{% if item.points_field.errors %} field-error{% endif %}">
+                            <label for="{{ item.points_field.id_for_label }}">Баллы за пункт</label>
+                            <span class="row row-tight">{{ item.points_field }}<span class="tiny muted">из {{ item.question.points }}</span></span>
+                            {{ item.points_field.errors }}
+                        </div>
+                    {% endif %}
+                {% else %}
+                    {% if item.tries %}
+                        <ol class="try-list" aria-label="Попытки ученика">
+                            {% for entry in item.tries %}
+                                <li class="{% if entry.correct %}try-ok{% else %}try-bad{% endif %}">
+                                    <span class="try-mark" aria-hidden="true">{% if entry.correct %}✓{% else %}✗{% endif %}</span>
+                                    <span class="sr-only">{% if entry.correct %}Верно{% else %}Неверно{% endif %}:</span>
+                                    <span class="tiny muted tnum">#{{ forloop.counter }}</span>
+                                    <span>{{ entry.display|default:"ответ до пошаговой проверки" }}</span>
+                                </li>
+                            {% endfor %}
+                        </ol>
+                    {% else %}
+                        <p class="small muted mb-0">Ответа нет.</p>
+                    {% endif %}
+                    {% if item.expected %}<p class="small mb-0" style="margin-top:6px"><span class="muted">Правильный ответ:</span> {{ item.expected }}</p>{% endif %}
+                {% endif %}
+            </li>
+        {% endfor %}
+    </ol>
+    <p class="tiny muted" style="margin-top:12px"><a href="{% url 'teacher_item_results' submission.assignment_id %}">{% icon "target" "icon icon-sm" %}Результаты всей группы по пунктам</a></p>
+</section>

@@ -19,7 +19,8 @@ from .curriculum import (
 )
 from .decorators import student_required
 from .forms import DictionaryWordForm, SubmissionForm
-from .models import AnswerDraft, Assignment, CardReview, Flashcard, Submission
+from .models import AnswerDraft, Assignment, CardReview, Flashcard, QuestionResponse, Submission
+from .quiz_items import build_items, progress_of
 from .scoring import normalize_gap
 from .services import (
     RATING_CHOICES,
@@ -27,10 +28,16 @@ from .services import (
     RateLimitError,
     add_dictionary_word,
     card_set_stats,
+    check_item,
+    finish_round,
     personal_cards,
     practice_queue,
+    reset_item_answer,
     review_flashcard,
+    round_state,
     save_answer_draft,
+    save_item_answer,
+    start_retake,
     submit_assignment,
     submit_quiz,
 )
@@ -66,25 +73,26 @@ def _parse_order_answer(value, question):
     return ordered
 
 
+def _collect_item_answer(request, question):
+    """Ответ на один пункт из POST: выбор, пропуск, соответствие, порядок, сортировка."""
+    key = f"q_{question.pk}"
+    if question.kind == "multi":
+        return request.POST.getlist(key)
+    if question.kind in ("match", "sort"):
+        mapping = {}
+        for choice in question.choices.all():
+            value = request.POST.get(f"{key}_{choice.pk}")
+            if value:
+                mapping[str(choice.pk)] = value
+        return mapping
+    if question.kind == "order":
+        return _parse_order_answer(request.POST.get(key, ""), question)
+    return request.POST.get(key, "")
+
+
 def _collect_quiz_answers(request, questions):
-    """Собрать ответы теста из POST: выбор, пропуск, соответствие, порядок, сортировка."""
-    answers = {}
-    for question in questions:
-        key = f"q_{question.pk}"
-        if question.kind == "multi":
-            answers[str(question.pk)] = request.POST.getlist(key)
-        elif question.kind in ("match", "sort"):
-            mapping = {}
-            for choice in question.choices.all():
-                value = request.POST.get(f"{key}_{choice.pk}")
-                if value:
-                    mapping[str(choice.pk)] = value
-            answers[str(question.pk)] = mapping
-        elif question.kind == "order":
-            answers[str(question.pk)] = _parse_order_answer(request.POST.get(key, ""), question)
-        else:
-            answers[str(question.pk)] = request.POST.get(key, "")
-    return answers
+    """Ответы сразу на все пункты — формат сервиса ``{str(question_id): значение}``."""
+    return {str(question.pk): _collect_item_answer(request, question) for question in questions}
 
 
 @student_required
@@ -229,71 +237,39 @@ def assignment_detail(request, pk):
         .order_by("-version")
     )
     submission = attempts.first()
-    questions = _questions_with_choices(assignment) if assignment.is_quiz else []
-    quiz_result = getattr(submission, "quiz_attempt", None) if submission else None
-    draft = (
-        AnswerDraft.objects.filter(student=request.user, assignment=assignment).first()
-        if not assignment.is_quiz
-        else None
-    )
-    form = None
+    if assignment.is_quiz:
+        return _quiz_detail(request, assignment, attempts, submission)
+    draft = AnswerDraft.objects.filter(student=request.user, assignment=assignment).first()
     status = 200
-    if not assignment.is_quiz:
-        form = SubmissionForm(
-            request.POST if request.method == "POST" else None,
-            request.FILES if request.method == "POST" else None,
-            assignment=assignment,
-            submission=submission,
-            draft=draft,
-        )
+    form = SubmissionForm(
+        request.POST if request.method == "POST" else None,
+        request.FILES if request.method == "POST" else None,
+        assignment=assignment,
+        submission=submission,
+        draft=draft,
+    )
 
-    if request.method == "POST":
-        expected_version = _parse_int(request.POST.get("expected_version"), -1)
-        if assignment.is_quiz:
-            if not questions:
-                messages.error(request, "В этом тесте пока нет вопросов. Напишите преподавателю.")
-            else:
-                try:
-                    submit_quiz(
-                        student=request.user,
-                        assignment_id=assignment.pk,
-                        expected_version=expected_version,
-                        answers=_collect_quiz_answers(request, questions),
-                    )
-                except ConflictError as exc:
-                    status = 409
-                    messages.error(request, str(exc))
-                except RateLimitError as exc:
-                    status = 429
-                    messages.error(request, str(exc))
-                except ValidationError as exc:
-                    messages.error(request, "; ".join(exc.messages))
-                except PermissionDenied as exc:
-                    raise Http404 from exc
-                else:
-                    messages.success(request, "Тест отправлен и проверен автоматически.")
-                    return redirect("assignment_detail", pk=assignment.pk)
-        elif form.is_valid():
-            try:
-                submit_assignment(
-                    student=request.user, assignment_id=assignment.pk, **form.cleaned_data
-                )
-            except ConflictError as exc:
-                form.add_error(None, str(exc))
-                status = 409
-            except RateLimitError as exc:
-                form.add_error(None, str(exc))
-                status = 429
-            except ValidationError as exc:
-                _add_validation_errors(form, exc)
-            except PermissionDenied as exc:
-                raise Http404 from exc
-            else:
-                messages.success(
-                    request,
-                    "Новая попытка отправлена на проверку. Предыдущие ответы сохранены в истории.",
-                )
-                return redirect("assignment_detail", pk=assignment.pk)
+    if request.method == "POST" and form.is_valid():
+        try:
+            submit_assignment(
+                student=request.user, assignment_id=assignment.pk, **form.cleaned_data
+            )
+        except ConflictError as exc:
+            form.add_error(None, str(exc))
+            status = 409
+        except RateLimitError as exc:
+            form.add_error(None, str(exc))
+            status = 429
+        except ValidationError as exc:
+            _add_validation_errors(form, exc)
+        except PermissionDenied as exc:
+            raise Http404 from exc
+        else:
+            messages.success(
+                request,
+                "Новая попытка отправлена на проверку. Предыдущие ответы сохранены в истории.",
+            )
+            return redirect("assignment_detail", pk=assignment.pk)
 
     history = Paginator(attempts, settings.LMS_PAGE_SIZE).get_page(request.GET.get("page"))
     response = render(
@@ -303,8 +279,8 @@ def assignment_detail(request, pk):
             "assignment": assignment,
             "submission": submission,
             "form": form,
-            "questions": questions,
-            "quiz_result": quiz_result,
+            "questions": [],
+            "quiz_result": None,
             "draft": draft,
             "page_obj": history,
             "conflict": status == 409,
@@ -316,6 +292,222 @@ def assignment_detail(request, pk):
     if status == 429:
         response["Retry-After"] = "3600"
     return response
+
+
+def _quiz_context(request, assignment, attempts=None, submission=None):
+    """Всё для экрана пошагового задания: пункты с состоянием, прогресс, итог."""
+    if attempts is None:
+        attempts = (
+            Submission.objects.filter(student=request.user, assignment=assignment)
+            .select_related("feedback__teacher")
+            .order_by("-version")
+        )
+        submission = attempts.first()
+    questions = _questions_with_choices(assignment)
+    current, latest, accepting = round_state(request.user, assignment)
+    if accepting:
+        responses = QuestionResponse.objects.filter(
+            student=request.user, assignment=assignment, round=current
+        )
+    else:
+        responses = QuestionResponse.objects.filter(submission=submission)
+    responses = {item.question_id: item for item in responses}
+    quiz_result = getattr(submission, "quiz_attempt", None) if submission else None
+    items = build_items(
+        assignment,
+        questions,
+        responses,
+        closed_round=not accepting,
+        legacy=quiz_result.answers if quiz_result and not accepting else None,
+    )
+    return {
+        "assignment": assignment,
+        "submission": submission,
+        "attempts": attempts,
+        "items": items,
+        "questions": questions,
+        "quiz_round": current,
+        "quiz_accepting": accepting,
+        "quiz_progress": progress_of(items),
+        "quiz_result": quiz_result if not accepting else None,
+        "previous_result": quiz_result if accepting else None,
+    }
+
+
+def _quiz_detail(request, assignment, attempts, submission):
+    status = 200
+    quiz_error = ""
+    if request.method == "POST":
+        # Старая форма «сдать всё разом» (открытая до обновления вкладка, импорт):
+        # каждый пункт получает одну окончательную попытку.
+        try:
+            submit_quiz(
+                student=request.user,
+                assignment_id=assignment.pk,
+                expected_version=_parse_int(request.POST.get("expected_version"), -1),
+                answers=_collect_quiz_answers(request, _questions_with_choices(assignment)),
+                by_student=True,
+            )
+        except ConflictError as exc:
+            quiz_error, status = str(exc), 409
+        except RateLimitError as exc:
+            quiz_error, status = str(exc), 429
+        except ValidationError as exc:
+            quiz_error = "; ".join(exc.messages)
+        except PermissionDenied as exc:
+            raise Http404 from exc
+        else:
+            messages.success(request, "Ответы приняты и проверены.")
+            return redirect("assignment_detail", pk=assignment.pk)
+        attempts = attempts.all()
+        submission = attempts.first()
+    context = _quiz_context(request, assignment, attempts, submission)
+    history = Paginator(attempts, settings.LMS_PAGE_SIZE).get_page(request.GET.get("page"))
+    context.update(
+        {
+            "form": None,
+            "draft": None,
+            "page_obj": history,
+            "conflict": status == 409,
+            "quiz_error": quiz_error,
+            "trainer_cards": _topic_trainer_cards(assignment),
+            "workspace": "curriculum",
+        }
+    )
+    response = render(request, "lms/assignment_detail.html", context, status=status)
+    if status == 429:
+        response["Retry-After"] = "3600"
+    return response
+
+
+def _item_response(request, assignment, question_id, *, error="", status=200, flash=None):
+    """Ответ на действие с пунктом: фрагмент для htmx или редирект к пункту без JS."""
+    if not request.headers.get("HX-Request"):
+        if error:
+            messages.error(request, error)
+        elif flash:
+            messages.success(request, flash)
+        return redirect(f"{reverse('assignment_detail', args=[assignment.pk])}#q-{question_id}")
+    context = _quiz_context(request, assignment)
+    item = next((entry for entry in context["items"] if entry["question"].pk == question_id), None)
+    if item is None:
+        raise Http404
+    context.update({"item": item, "item_error": error, "oob": True})
+    return render(request, "lms/parts/quiz_item_response.html", context, status=status)
+
+
+def _item_action(request, pk, question_id, action):
+    assignment = get_object_or_404(Assignment.objects.visible(), pk=pk)
+    if not assignment.is_quiz:
+        raise Http404
+    expected_round = _parse_int(request.POST.get("round"), None)
+    try:
+        flash = action(assignment, expected_round)
+    except ConflictError as exc:
+        return _item_response(request, assignment, question_id, error=str(exc), status=409)
+    except RateLimitError as exc:
+        return _item_response(request, assignment, question_id, error=str(exc), status=429)
+    except ValidationError as exc:
+        return _item_response(request, assignment, question_id, error="; ".join(exc.messages))
+    except PermissionDenied as exc:
+        raise Http404 from exc
+    return _item_response(request, assignment, question_id, flash=flash)
+
+
+@student_required
+@require_POST
+def item_check(request, pk, question_id):
+    """«Принять» для пункта с автопроверкой: ✓ или ✗ и счётчик попыток."""
+
+    def action(assignment, expected_round):
+        question = get_object_or_404(
+            assignment.questions.prefetch_related("choices"), pk=question_id
+        )
+        response = check_item(
+            student=request.user,
+            assignment_id=assignment.pk,
+            question_id=question.pk,
+            answer=_collect_item_answer(request, question),
+            expected_round=expected_round,
+        )
+        if response.state == QuestionResponse.State.CORRECT:
+            return "Верно!"
+        if response.state == QuestionResponse.State.FAILED:
+            return "Попытки закончились — посмотрите правильный ответ."
+        return f"Неверно. Осталось попыток: {assignment.max_tries - response.tries_used}."
+
+    return _item_action(request, pk, question_id, action)
+
+
+@student_required
+@require_POST
+def item_answer(request, pk, question_id):
+    """«Принять» для свободного или голосового ответа: сохраняется без проверки."""
+
+    def action(assignment, expected_round):
+        save_item_answer(
+            student=request.user,
+            assignment_id=assignment.pk,
+            question_id=question_id,
+            text=request.POST.get(f"q_{question_id}", ""),
+            file=request.FILES.get(f"q_{question_id}_file"),
+            expected_round=expected_round,
+        )
+        return "Ответ принят — его проверит преподаватель."
+
+    return _item_action(request, pk, question_id, action)
+
+
+@student_required
+@require_POST
+def item_reset(request, pk, question_id):
+    """Удалить принятый свободный/голосовой ответ и записать новый."""
+
+    def action(assignment, expected_round):
+        reset_item_answer(
+            student=request.user,
+            assignment_id=assignment.pk,
+            question_id=question_id,
+            expected_round=expected_round,
+        )
+        return "Ответ удалён — запишите новый."
+
+    return _item_action(request, pk, question_id, action)
+
+
+@student_required
+@require_POST
+def quiz_finish(request, pk):
+    """Отправить работу со свободными/голосовыми пунктами преподавателю."""
+    assignment = get_object_or_404(Assignment.objects.visible(), pk=pk)
+    try:
+        finish_round(
+            student=request.user,
+            assignment_id=assignment.pk,
+            expected_round=_parse_int(request.POST.get("round"), None),
+        )
+    except (ConflictError, RateLimitError, ValidationError) as exc:
+        text = "; ".join(exc.messages) if isinstance(exc, ValidationError) else str(exc)
+        messages.error(request, text)
+    except PermissionDenied as exc:
+        raise Http404 from exc
+    else:
+        messages.success(
+            request, "Работа отправлена. Автопроверка готова, остальное проверит преподаватель."
+        )
+    return redirect("assignment_detail", pk=assignment.pk)
+
+
+@student_required
+@require_POST
+def quiz_retake(request, pk):
+    assignment = get_object_or_404(Assignment.objects.visible(), pk=pk)
+    try:
+        start_retake(student=request.user, assignment_id=assignment.pk)
+    except PermissionDenied as exc:
+        raise Http404 from exc
+    messages.success(request, "Новая попытка начата. Предыдущий результат сохранён в истории.")
+    return redirect("assignment_detail", pk=assignment.pk)
 
 
 def _topic_trainer_cards(assignment):

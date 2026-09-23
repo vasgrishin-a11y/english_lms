@@ -36,6 +36,23 @@ urlpatterns = [
     path("assignments/", views_student.student_assignments, name="student_assignments"),
     path("assignments/<int:pk>/", views_student.assignment_detail, name="assignment_detail"),
     path("assignments/<int:pk>/draft/", views_student.save_draft, name="student_save_draft"),
+    path(
+        "assignments/<int:pk>/items/<int:question_id>/check/",
+        views_student.item_check,
+        name="student_item_check",
+    ),
+    path(
+        "assignments/<int:pk>/items/<int:question_id>/answer/",
+        views_student.item_answer,
+        name="student_item_answer",
+    ),
+    path(
+        "assignments/<int:pk>/items/<int:question_id>/reset/",
+        views_student.item_reset,
+        name="student_item_reset",
+    ),
+    path("assignments/<int:pk>/finish/", views_student.quiz_finish, name="student_quiz_finish"),
+    path("assignments/<int:pk>/retake/", views_student.quiz_retake, name="student_quiz_retake"),
     path("upcoming/", views_student.upcoming, name="student_upcoming"),
     path("trainer/", views_student.trainer, name="student_trainer"),
     path("trainer/<int:pk>/", views_student.trainer_session, name="trainer_session"),
@@ -147,6 +164,11 @@ urlpatterns = [
         "teacher/curriculum/assignments/<int:pk>/questions/",
         views_teacher.questions,
         name="teacher_questions",
+    ),
+    path(
+        "teacher/curriculum/assignments/<int:pk>/results/",
+        views_teacher.item_results,
+        name="teacher_item_results",
     ),
     path(
         "teacher/curriculum/questions/<int:pk>/",

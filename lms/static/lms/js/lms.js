@@ -163,144 +163,405 @@
     });
   }
 
-  function audioRecorder() {
-    var panel = document.querySelector("[data-recorder]");
-    if (!panel) return;
+  /* ── Запись ответа с микрофона ─────────────────────────────
+   * Несколько рекордеров на странице (по одному на голосовой пункт).
+   * Лимит преподавателя: обратный отсчёт, предупреждение за 10 секунд и
+   * автоматическая остановка. Запись кодируется в WAV 16 кГц моно (~1,9 МБ
+   * в минуту — 10 минут помещаются в лимит файла) и подставляется в поле
+   * файла. Где браузер не даёт подставить файл (старый Safari), запись
+   * добавляется в отправку формы напрямую.
+   */
+  var TARGET_RATE = 16000;
+
+  function formatClock(seconds) {
+    seconds = Math.max(0, Math.floor(seconds));
+    var minutes = Math.floor(seconds / 60);
+    var rest = seconds % 60;
+    return minutes + ":" + (rest < 10 ? "0" : "") + rest;
+  }
+
+  function encodeWav(blob, callback) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      var Context = window.AudioContext || window.webkitAudioContext;
+      if (!Context) {
+        callback(blob, null);
+        return;
+      }
+      var context = new Context();
+      var done = function (buffer) {
+        var channels = buffer.numberOfChannels;
+        var ratio = buffer.sampleRate / TARGET_RATE;
+        if (ratio < 1) ratio = 1;
+        var rate = Math.round(buffer.sampleRate / ratio);
+        var length = Math.floor(buffer.length / ratio);
+        var data = [];
+        for (var c = 0; c < channels; c += 1) data.push(buffer.getChannelData(c));
+        var bytes = 44 + length * 2;
+        var view = new DataView(new ArrayBuffer(bytes));
+        var writeText = function (offset, text) {
+          for (var i = 0; i < text.length; i += 1) view.setUint8(offset + i, text.charCodeAt(i));
+        };
+        writeText(0, "RIFF");
+        view.setUint32(4, bytes - 8, true);
+        writeText(8, "WAVE");
+        writeText(12, "fmt ");
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, 1, true);
+        view.setUint32(24, rate, true);
+        view.setUint32(28, rate * 2, true);
+        view.setUint16(32, 2, true);
+        view.setUint16(34, 16, true);
+        writeText(36, "data");
+        view.setUint32(40, length * 2, true);
+        var offset = 44;
+        for (var i = 0; i < length; i += 1) {
+          // Моно и понижение частоты: среднее по каналам и по окну исходных сэмплов.
+          var from = Math.floor(i * ratio);
+          var to = Math.min(buffer.length, Math.floor((i + 1) * ratio)) || from + 1;
+          var sum = 0;
+          var count = 0;
+          for (var j = from; j < to; j += 1) {
+            for (var k = 0; k < channels; k += 1) {
+              sum += data[k][j];
+              count += 1;
+            }
+          }
+          var sample = Math.max(-1, Math.min(1, count ? sum / count : 0));
+          view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+          offset += 2;
+        }
+        if (context.close) context.close();
+        callback(new Blob([view.buffer], { type: "audio/wav" }), buffer.duration);
+      };
+      var fail = function () {
+        if (context.close) context.close();
+        callback(blob, null);
+      };
+      var promise = context.decodeAudioData(reader.result, done, fail);
+      if (promise && promise.catch) promise.catch(fail);
+    };
+    reader.readAsArrayBuffer(blob);
+  }
+
+  function setupRecorder(panel) {
+    if (panel.dataset.recorderReady === "1") return;
+    panel.dataset.recorderReady = "1";
     var toggle = panel.querySelector("[data-recorder-toggle]");
     var stop = panel.querySelector("[data-recorder-stop]");
     var status = panel.querySelector("[data-recorder-status]");
+    var clock = panel.querySelector("[data-recorder-clock]");
+    var meter = panel.querySelector("[data-recorder-meter]");
+    var dot = panel.querySelector("[data-recorder-dot]");
+    var take = panel.querySelector("[data-recorder-take]");
     var preview = panel.querySelector("[data-recorder-preview]");
+    var discard = panel.querySelector("[data-recorder-discard]");
     var errorBox = panel.querySelector("[data-recorder-error]");
     var input = document.getElementById(panel.getAttribute("data-input") || "");
-    if (!toggle || !input) return;
+    var limit = parseInt(panel.getAttribute("data-limit"), 10) || 0;
+    var form = panel.closest("form");
+    if (!toggle) return;
 
     var recorder = null;
     var chunks = [];
     var stream = null;
+    var timer = null;
+    var startedAt = 0;
+    var previewUrl = "";
 
-    function fail(message) {
-      if (errorBox) errorBox.textContent = message;
-      if (status) status.textContent = "Запись недоступна";
-      reset();
+    function say(text) {
+      if (status) status.textContent = text;
     }
 
-    function reset() {
-      toggle.classList.remove("hidden");
-      if (stop) stop.classList.add("hidden");
+    function showError(message) {
+      if (errorBox) errorBox.textContent = message || "";
+    }
+
+    function tick() {
+      var elapsed = (Date.now() - startedAt) / 1000;
+      if (clock) clock.textContent = formatClock(elapsed) + (limit ? " / " + formatClock(limit) : "");
+      if (limit) {
+        var left = limit - elapsed;
+        if (meter) meter.style.width = Math.min(100, (100 * elapsed) / limit) + "%";
+        panel.classList.toggle("is-ending", left <= 10);
+        if (left <= 0) {
+          say("Время вышло — запись остановлена автоматически.");
+          finish();
+        }
+      }
+    }
+
+    function release() {
+      if (timer) window.clearInterval(timer);
+      timer = null;
       if (stream) {
         stream.getTracks().forEach(function (track) {
           track.stop();
         });
-        stream = null;
       }
-      recorder = null;
-      chunks = [];
+      stream = null;
+      panel.classList.remove("is-recording", "is-ending");
+      toggle.classList.remove("hidden");
+      if (stop) stop.classList.add("hidden");
+      if (dot) dot.classList.add("hidden");
     }
 
-    function encodeWav(blob, callback) {
-      var reader = new FileReader();
-      reader.onload = function () {
-        var context = new (window.AudioContext || window.webkitAudioContext)();
-        context
-          .decodeAudioData(reader.result)
-          .then(function (buffer) {
-            var channels = buffer.numberOfChannels;
-            var length = buffer.length;
-            var sampleRate = buffer.sampleRate;
-            var bytes = 44 + length * channels * 2;
-            var view = new DataView(new ArrayBuffer(bytes));
-            var writeText = function (offset, text) {
-              for (var i = 0; i < text.length; i += 1) view.setUint8(offset + i, text.charCodeAt(i));
-            };
-            writeText(0, "RIFF");
-            view.setUint32(4, bytes - 8, true);
-            writeText(8, "WAVE");
-            writeText(12, "fmt ");
-            view.setUint32(16, 16, true);
-            view.setUint16(20, 1, true);
-            view.setUint16(22, channels, true);
-            view.setUint32(24, sampleRate, true);
-            view.setUint32(28, sampleRate * channels * 2, true);
-            view.setUint16(32, channels * 2, true);
-            view.setUint16(34, 16, true);
-            writeText(36, "data");
-            view.setUint32(40, length * channels * 2, true);
-            var offset = 44;
-            for (var i = 0; i < length; i += 1) {
-              for (var channel = 0; channel < channels; channel += 1) {
-                var sample = Math.max(-1, Math.min(1, buffer.getChannelData(channel)[i]));
-                view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
-                offset += 2;
-              }
-            }
-            if (context.close) context.close();
-            callback(new Blob([view.buffer], { type: "audio/wav" }));
-          })
-          .catch(function () {
-            callback(blob);
-          });
-      };
-      reader.readAsArrayBuffer(blob);
+    function finish() {
+      if (recorder && recorder.state !== "inactive") {
+        recorder.stop();
+      } else {
+        release();
+      }
     }
 
-    function attach(blob) {
-      var name = "zapis-otveta-" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "") + ".wav";
-      var file = new File([blob], name, { type: "audio/wav" });
-      try {
-        var transfer = new DataTransfer();
-        transfer.items.add(file);
-        input.files = transfer.files;
-      } catch (error) {
-        fail("Браузер не позволяет подставить файл автоматически — скачайте запись и прикрепите её вручную.");
-        return;
+    function clearTake() {
+      panel._recording = null;
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      previewUrl = "";
+      if (preview) preview.removeAttribute("src");
+      if (take) take.classList.add("hidden");
+      if (input) {
+        try {
+          input.value = "";
+        } catch (error) {}
+        input.dispatchEvent(new Event("change", { bubbles: true }));
       }
-      if (preview) {
-        preview.src = URL.createObjectURL(blob);
-        preview.classList.remove("hidden");
+      if (clock) clock.textContent = "0:00" + (limit ? " / " + formatClock(limit) : "");
+      if (meter) meter.style.width = "0%";
+      toggle.querySelector("span").textContent = "Начать запись";
+    }
+
+    function attach(blob, seconds) {
+      var extension = blob.type === "audio/wav" ? ".wav" : ".webm";
+      var name =
+        "otvet-" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "") + extension;
+      var file = new File([blob], name, { type: blob.type || "audio/wav" });
+      panel._recording = file;
+      if (input) {
+        try {
+          var transfer = new DataTransfer();
+          transfer.items.add(file);
+          input.files = transfer.files;
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+        } catch (error) {
+          // Старый Safari: файл уйдёт в отправку формы напрямую (см. submit ниже).
+        }
       }
-      if (status) status.textContent = "Запись готова: " + name;
-      if (errorBox) errorBox.textContent = "";
-      input.dispatchEvent(new Event("change", { bubbles: true }));
+      previewUrl = URL.createObjectURL(blob);
+      if (preview) preview.src = previewUrl;
+      if (take) take.classList.remove("hidden");
+      toggle.querySelector("span").textContent = "Записать заново";
+      var length = seconds ? " (" + formatClock(seconds) + ")" : "";
+      say("Запись готова" + length + ". Прослушайте её и нажмите «Принять» или «Отправить».");
+      showError("");
     }
 
     toggle.addEventListener("click", function () {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        fail("Браузер не поддерживает запись звука. Прикрепите готовый аудиофайл.");
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+        showError(
+          window.isSecureContext === false
+            ? "Микрофон доступен только по защищённому соединению (HTTPS). Загрузите аудиофайл."
+            : "Браузер не поддерживает запись звука. Загрузите готовый аудиофайл."
+        );
         return;
       }
-      if (errorBox) errorBox.textContent = "";
-      if (status) status.textContent = "Запрашиваем микрофон…";
+      clearTake();
+      showError("");
+      say("Запрашиваем доступ к микрофону…");
       navigator.mediaDevices
-        .getUserMedia({ audio: true })
+        .getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } })
         .then(function (mediaStream) {
           stream = mediaStream;
           chunks = [];
-          var mime = window.MediaRecorder && MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "";
+          var mime = "";
+          ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"].some(function (type) {
+            if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(type)) {
+              mime = type;
+              return true;
+            }
+            return false;
+          });
           recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
           recorder.ondataavailable = function (event) {
             if (event.data && event.data.size) chunks.push(event.data);
           };
           recorder.onstop = function () {
-            var blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
-            encodeWav(blob, attach);
-            reset();
+            var raw = new Blob(chunks, { type: recorder.mimeType || mime || "audio/webm" });
+            release();
+            say("Обрабатываем запись…");
+            encodeWav(raw, attach);
           };
-          recorder.start();
+          recorder.start(250);
+          startedAt = Date.now();
+          timer = window.setInterval(tick, 200);
+          panel.classList.add("is-recording");
           toggle.classList.add("hidden");
-          if (stop) stop.classList.remove("hidden");
-          if (status) status.textContent = "Идёт запись…";
+          if (stop) {
+            stop.classList.remove("hidden");
+            stop.focus();
+          }
+          if (dot) dot.classList.remove("hidden");
+          say(limit ? "Идёт запись. Лимит — " + formatClock(limit) + "." : "Идёт запись…");
         })
-        .catch(function () {
-          fail("Нет доступа к микрофону. Разрешите запись в настройках браузера или прикрепите файл.");
+        .catch(function (error) {
+          release();
+          var denied = error && (error.name === "NotAllowedError" || error.name === "SecurityError");
+          showError(
+            denied
+              ? "Нет доступа к микрофону. Разрешите его в настройках браузера (значок замка в адресной строке) или загрузите файл."
+              : "Микрофон не найден или занят другим приложением. Подключите микрофон или загрузите файл."
+          );
+          say("Запись недоступна.");
         });
     });
 
-    if (stop) {
-      stop.addEventListener("click", function () {
-        if (recorder && recorder.state !== "inactive") recorder.stop();
-        else reset();
+    if (stop) stop.addEventListener("click", finish);
+    if (discard) {
+      discard.addEventListener("click", function () {
+        clearTake();
+        say("Запись удалена. Можно записать новую.");
+        toggle.focus();
       });
     }
+    if (input) {
+      input.addEventListener("change", function () {
+        // Выбран файл вручную — он заменяет запись с микрофона.
+        if (input.files && input.files[0] && input.files[0] !== panel._recording) {
+          panel._recording = null;
+          if (take) take.classList.add("hidden");
+        }
+      });
+    }
+
+    if (form && !form.dataset.recorderSubmit) {
+      form.dataset.recorderSubmit = "1";
+      form.addEventListener("submit", function (event) {
+        var panels = form.querySelectorAll("[data-recorder]");
+        for (var i = 0; i < panels.length; i += 1) {
+          if (panels[i].classList.contains("is-recording")) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            showError("Сначала остановите запись.");
+            return;
+          }
+        }
+        if (form.hasAttribute("hx-post")) return; // htmx: см. htmx:configRequest
+        var missing = pendingRecordings(form);
+        if (!missing.length) return;
+        // Поле файла не приняло запись — отправляем форму сами.
+        event.preventDefault();
+        var data = new FormData(form);
+        missing.forEach(function (item) {
+          data.set(item.name, item.file, item.file.name);
+        });
+        fetch(form.action || window.location.href, {
+          method: "POST",
+          body: data,
+          credentials: "same-origin",
+          headers: { "X-CSRFToken": csrfToken() },
+        }).then(function (response) {
+          window.location.href = response.url || window.location.href;
+        });
+      });
+    }
+  }
+
+  function pendingRecordings(form) {
+    var result = [];
+    Array.prototype.forEach.call(form.querySelectorAll("[data-recorder]"), function (panel) {
+      var input = document.getElementById(panel.getAttribute("data-input") || "");
+      if (panel._recording && input && !(input.files && input.files.length)) {
+        result.push({ name: input.name, file: panel._recording });
+      }
+    });
+    return result;
+  }
+
+  function audioRecorder(root) {
+    var scope = root && root.querySelectorAll ? root : document;
+    Array.prototype.forEach.call(scope.querySelectorAll("[data-recorder]"), setupRecorder);
+  }
+
+  /* ── Пошаговая проверка пунктов ────────────────────────────
+   * После «Принять» htmx заменяет пункт ответом сервера. Здесь — фокус на
+   * результате (важно для клавиатуры и экранного диктора), запрет двойной
+   * отправки и повторная инициализация плиток и рекордеров во фрагменте.
+   */
+  function quizItems() {
+    document.body.addEventListener("htmx:configRequest", function (event) {
+      var form = event.detail && event.detail.elt;
+      if (!form || !form.querySelectorAll || !event.detail.formData) return;
+      if (form.querySelector("[data-recorder].is-recording")) {
+        event.preventDefault();
+        var box = form.querySelector("[data-recorder-error]");
+        if (box) box.textContent = "Сначала остановите запись.";
+        return;
+      }
+      pendingRecordings(form).forEach(function (item) {
+        event.detail.formData.set(item.name, item.file, item.file.name);
+      });
+    });
+    document.body.addEventListener("htmx:afterSwap", function (event) {
+      var target = event.detail && event.detail.target;
+      if (!target) return;
+      var item = document.getElementById(target.id) || target;
+      if (item && item.matches && item.matches("[data-item]")) {
+        quizTiles(item);
+        audioRecorder(item);
+        var feedback = item.querySelector(".item-note");
+        var field = item.querySelector("input:not([type=hidden]), textarea, select");
+        var state = item.getAttribute("data-state");
+        if (state === "correct" || state === "failed") {
+          var next = item.nextElementSibling;
+          while (next && next.getAttribute("data-state") !== "new" && next.getAttribute("data-state") !== "open") {
+            next = next.nextElementSibling;
+          }
+          if (feedback) feedback.setAttribute("tabindex", "-1");
+          if (feedback) feedback.focus({ preventScroll: true });
+          item.classList.add("is-flash");
+          window.setTimeout(function () {
+            item.classList.remove("is-flash");
+          }, 900);
+          if (next) {
+            window.setTimeout(function () {
+              next.scrollIntoView({ behavior: "smooth", block: "center" });
+            }, 700);
+          }
+        } else if (field) {
+          field.focus({ preventScroll: true });
+          if (field.select && field.type === "text") field.select();
+        }
+      }
+    });
+  }
+
+  /* ── Форма пункта: поля по типу ───────────────────────────
+   * Лимит записи нужен только голосовому пункту, варианты ответа —
+   * только пунктам с автопроверкой. Скрытые поля не очищаются: сервер
+   * сам обнуляет лишнее, а преподаватель не теряет набранное при смене типа.
+   */
+  function questionKindForms(root) {
+    var scope = root && root.querySelectorAll ? root : document;
+    Array.prototype.forEach.call(scope.querySelectorAll("select[name=kind]"), function (select) {
+      var form = select.form;
+      if (!form || select.dataset.kindReady === "1") return;
+      select.dataset.kindReady = "1";
+      var wrap = function (name) {
+        var field = form.querySelector("[name^='" + name + "']");
+        return field ? field.closest(".form-field") : null;
+      };
+      var limit = wrap("recording_limit_seconds");
+      var choices = wrap("choices_text");
+      var update = function () {
+        var kind = select.value;
+        var manual = kind === "text" || kind === "voice";
+        if (limit) limit.classList.toggle("hidden", kind !== "voice");
+        if (choices) choices.classList.toggle("hidden", manual);
+      };
+      select.addEventListener("change", update);
+      update();
+    });
   }
 
   function reviewPage() {
@@ -513,8 +774,9 @@
     });
   }
 
-  function quizTiles() {
-    var containers = document.querySelectorAll("[data-tiles]");
+  function quizTiles(root) {
+    var scope = root && root.querySelectorAll ? root : document;
+    var containers = scope.querySelectorAll("[data-tiles]");
     if (!containers.length) return;
 
     Array.prototype.forEach.call(containers, function (container) {
@@ -1185,6 +1447,11 @@
     draftAutosave();
     flashcards();
     audioRecorder();
+    quizItems();
+    questionKindForms();
+    document.body.addEventListener("htmx:afterSwap", function (event) {
+      questionKindForms(event.detail && event.detail.target);
+    });
     reviewPage();
     queueHelp();
     templatePresets();

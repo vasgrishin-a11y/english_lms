@@ -1,3 +1,5 @@
+import random
+
 from django import template
 from django.utils import timezone
 from django.utils.html import format_html
@@ -71,6 +73,8 @@ KIND_ICONS = {
     "order": "list-ordered",
     "sort": "columns",
     "spell": "shuffle",
+    "text": "file-text",
+    "voice": "mic",
 }
 KIND_HINTS = {
     "mcq": "один правильный ответ",
@@ -80,6 +84,8 @@ KIND_HINTS = {
     "order": "соберите предложение из слов",
     "sort": "распределите по колонкам",
     "spell": "соберите слово из букв",
+    "text": "свободный ответ — проверит преподаватель",
+    "voice": "ответ голосом — проверит преподаватель",
 }
 
 
@@ -272,6 +278,57 @@ def media_kind(name):
     if lowered.endswith(AUDIO_SUFFIXES):
         return "audio"
     return "other"
+
+
+@register.filter
+def pluralize_ru(value, forms):
+    """3|pluralize_ru:"попытка,попытки,попыток" → «попытки»."""
+    one, few, many = (forms.split(",") + ["", "", ""])[:3]
+    try:
+        number = abs(int(value))
+    except (TypeError, ValueError):
+        return many
+    if number % 10 == 1 and number % 100 != 11:
+        return one
+    if 2 <= number % 10 <= 4 and not 12 <= number % 100 <= 14:
+        return few
+    return many
+
+
+@register.filter
+def mmss(seconds):
+    """90 → «1:30» — для таймера записи."""
+    try:
+        total = int(seconds)
+    except (TypeError, ValueError):
+        return ""
+    return f"{total // 60}:{total % 60:02d}"
+
+
+@register.filter
+def duration(seconds):
+    """90 → «1 мин 30 с»."""
+    from lms.models import format_duration
+
+    return format_duration(seconds)
+
+
+@register.filter
+def shuffled(items, seed=0):
+    """Стабильно перемешать варианты: порядок слов и пары не должны подсказывать ответ.
+
+    Сид — id вопроса, поэтому порядок не прыгает между перезагрузками страницы.
+    """
+    values = list(items)
+    if len(values) < 2:
+        return values
+    original = [getattr(value, "pk", value) for value in values]
+    rng = random.Random(f"shuffle-{seed}")  # nosec B311 — не криптография
+    for _ in range(8):
+        rng.shuffle(values)
+        if [getattr(value, "pk", value) for value in values] != original:
+            break
+    return values
 
 
 @register.filter

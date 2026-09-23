@@ -140,6 +140,26 @@
                             {{ form.max_points.errors }}
                         </div>
 
+                        <div class="form-field{% if form.max_tries.errors %} field-error{% endif %}" data-show-types="quiz">
+                            <label for="{{ form.max_tries.id_for_label }}">{{ form.max_tries.label }}</label>
+                            {{ form.max_tries }}
+                            <div class="help-text" id="{{ form.max_tries.auto_id }}_helptext">{{ form.max_tries.help_text }}</div>
+                            {{ form.max_tries.errors }}
+                        </div>
+
+                        <div class="form-field checkline{% if form.allow_retake.errors %} field-error{% endif %}" data-show-types="quiz">
+                            {{ form.allow_retake }}<label for="{{ form.allow_retake.id_for_label }}">{{ form.allow_retake.label }}</label>
+                            <div class="help-text" id="{{ form.allow_retake.auto_id }}_helptext">{{ form.allow_retake.help_text }}</div>
+                            {{ form.allow_retake.errors }}
+                        </div>
+
+                        <div class="form-field{% if form.recording_limit_seconds.errors %} field-error{% endif %}" data-show-types="audio mixed">
+                            <label for="{{ form.recording_limit_seconds.id_for_label }}">{% icon "timer" "icon icon-sm" %} {{ form.recording_limit_seconds.label }}</label>
+                            {{ form.recording_limit_seconds }}
+                            <div class="help-text" id="{{ form.recording_limit_seconds.auto_id }}_helptext">{{ form.recording_limit_seconds.help_text }}</div>
+                            {{ form.recording_limit_seconds.errors }}
+                        </div>
+
                         <div class="form-field{% if form.deadline.errors %} field-error{% endif %}">
                             <label for="{{ form.deadline.id_for_label }}">{{ form.deadline.label }}</label>
                             {{ form.deadline }}

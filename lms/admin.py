@@ -17,6 +17,7 @@ from .models import (
     Flashcard,
     Profile,
     Question,
+    QuestionResponse,
     QuizAttempt,
     Skill,
     Submission,
@@ -182,6 +183,16 @@ class ReadOnlyRecordsAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+@admin.register(QuestionResponse)
+class QuestionResponseAdmin(ReadOnlyRecordsAdmin):
+    """Попытки по пунктам: ✓/✗ и история ответов. Меняются только через сервисы."""
+
+    list_display = ("student", "assignment", "question", "round", "state", "points", "updated_at")
+    list_filter = ("state",)
+    search_fields = ("student__username", "assignment__title", "question__text")
+    list_select_related = ("student", "assignment", "question")
 
 
 @admin.register(Submission)
