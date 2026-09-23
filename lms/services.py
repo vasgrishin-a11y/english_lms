@@ -239,7 +239,7 @@ def _apply_item_points(submission, item_points, grade):
     """
     responses = {
         item.pk: item
-        for item in QuestionResponse.objects.select_for_update()
+        for item in QuestionResponse.objects.select_for_update(of=("self",))
         .filter(submission=submission)
         .select_related("question")
     }
@@ -395,7 +395,7 @@ def _question_for(assignment, question_id):
 
 
 def _response_for(student, assignment, question, current):
-    response, _ = QuestionResponse.objects.select_for_update().get_or_create(
+    response, _ = QuestionResponse.objects.select_for_update(of=("self",)).get_or_create(
         student=student,
         assignment=assignment,
         question=question,
@@ -608,7 +608,7 @@ def _finish_if_complete(student, assignment, current, *, explicit=False):
         return None
     responses = {
         item.question_id: item
-        for item in QuestionResponse.objects.select_for_update().filter(
+        for item in QuestionResponse.objects.select_for_update(of=("self",)).filter(
             student=student, assignment=assignment, round=current, submission__isnull=True
         )
     }
