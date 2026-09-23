@@ -87,7 +87,7 @@
             <section class="card quiz-card" aria-labelledby="quiz-title">
                 <div class="card-head">
                     <h2 class="card-title" id="quiz-title">{% icon "target" %}{% if quiz_accepting and submission %}Новая попытка{% else %}Упражнения урока{% endif %}</h2>
-                    <span class="badge badge-turquoise">Проверка по каждому пункту</span>
+                    {% if assignment.exam_mode %}<span class="badge badge-sand">{% icon "lock" "icon icon-sm" %}Контрольная</span>{% else %}<span class="badge badge-turquoise">Проверка по каждому пункту</span>{% endif %}
                 </div>
                 {% if quiz_error %}<div class="alert alert-error" role="alert">{% icon "alert" %}<span>{{ quiz_error }}</span></div>{% endif %}
                 {% if not items %}
@@ -97,8 +97,12 @@
                         <div class="callout" style="margin-bottom:16px">
                             {% icon "info" %}
                             <div>
-                                <p class="mb-0 strong">Как выполнять</p>
+                                <p class="mb-0 strong">{% if assignment.exam_mode %}Контрольная работа{% else %}Как выполнять{% endif %}</p>
+                                {% if assignment.exam_mode %}
+                                <p class="mb-0 small">На каждый пункт — одна попытка: после «Принять» ответ изменить нельзя. Верно или нет, правильные ответы и пояснения вы увидите, когда ответите на все пункты. Ответы сохраняются сразу.</p>
+                                {% else %}
                                 <p class="mb-0 small">Ответьте на пункт и нажмите «Принять» — сразу увидите {% icon "check" "icon icon-sm" %} верно или {% icon "x" "icon icon-sm" %} неверно. На каждый пункт — {{ assignment.max_tries }} {{ assignment.max_tries|pluralize_ru:"попытка,попытки,попыток" }}. Ответы сохраняются сразу: можно уйти и вернуться.</p>
+                                {% endif %}
                             </div>
                         </div>
                     {% endif %}

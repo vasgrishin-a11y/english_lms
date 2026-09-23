@@ -19,6 +19,7 @@
         <p class="page-note">Последняя попытка каждого ученика. {% icon "check" "icon icon-sm" %} — верно (цифра — с какой попытки), {% icon "x" "icon icon-sm" %} — попытки закончились, {% icon "pencil" "icon icon-sm" %} — свободный ответ, оцените его в проверке. Нажмите на имя, чтобы открыть работу.</p>
     </div>
     <div class="row">
+        {% if rows %}<a class="btn btn-secondary" href="{% url 'teacher_item_results_export' assignment.pk %}">{% icon "download" %}{% t "Выгрузить XLSX" %}</a>{% endif %}
         <a class="btn btn-ghost" href="{% url 'teacher_questions' assignment.pk %}">{% icon "list" %}{% t "Вопросы" %}</a>
     </div>
 </div>

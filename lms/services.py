@@ -327,7 +327,7 @@ def submit_quiz(*, student, assignment_id, expected_version, answers, by_student
                     response,
                     question,
                     (answers or {}).get(str(question.pk)),
-                    max_tries=assignment.max_tries,
+                    max_tries=assignment.tries_per_item,
                     final=True,
                 )
             return _finish_if_complete(student, assignment, current)
@@ -422,7 +422,7 @@ def check_item(*, student, assignment_id, question_id, answer, expected_round=No
             raise ConflictError("Этот пункт уже закрыт. Обновите страницу.")
         if is_blank_answer(question, answer):
             raise ValidationError("Сначала ответьте на пункт, затем нажмите «Принять».")
-        _apply_try(response, question, answer, max_tries=assignment.max_tries)
+        _apply_try(response, question, answer, max_tries=assignment.tries_per_item)
         _finish_if_complete(student, assignment, current)
     return response
 

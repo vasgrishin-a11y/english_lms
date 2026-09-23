@@ -171,6 +171,11 @@ urlpatterns = [
         name="teacher_item_results",
     ),
     path(
+        "teacher/curriculum/assignments/<int:pk>/results/export.xlsx",
+        views_teacher.item_results_export,
+        name="teacher_item_results_export",
+    ),
+    path(
         "teacher/curriculum/questions/<int:pk>/",
         views_teacher.question_form,
         name="teacher_question_edit",

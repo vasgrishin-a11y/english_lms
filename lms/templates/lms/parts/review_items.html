@@ -10,6 +10,7 @@
         {% if items_progress.failed %}<span class="quiz-stat quiz-stat-bad">{% icon "x" "icon icon-sm" %}Не решено: {{ items_progress.failed }}</span>{% endif %}
         {% if items_progress.manual %}<span class="quiz-stat">{% icon "pencil" "icon icon-sm" %}Проверить вручную: {{ items_progress.manual }}</span>{% endif %}
     </div>
+    {% if submission.assignment.exam_mode %}<p class="tiny mb-0"><span class="badge badge-sand">{% icon "lock" "icon icon-sm" %}Контрольная</span> одна попытка на пункт, ученик видел результат только после завершения.</p>{% endif %}
     <p class="tiny muted">Автопроверка уже выставила баллы за пункты с правильным ответом. Верный ответ засчитывается полностью с любой попытки; неверные попытки показаны для разбора.{% if items_progress.manual %} Оцените пункты со свободным ответом — итоговый балл сложится сам, если поле «Балл» оставить пустым.{% endif %}</p>
     <ol class="review-items">
         {% for item in items %}

@@ -882,6 +882,7 @@ def assignment_duplicate(request, pk):
         max_points=source.max_points,
         max_tries=source.max_tries,
         allow_retake=source.allow_retake,
+        exam_mode=source.exam_mode,
         recording_limit_seconds=source.recording_limit_seconds,
         order=source.order + 1,
         is_active=source.is_active,
@@ -1028,15 +1029,8 @@ def questions(request, pk):
     return render(request, template, context)
 
 
-@teacher_required
-@require_GET
-def item_results(request, pk):
-    """Матрица «ученик × пункт» по последним прохождениям задания.
-
-    В ячейке — ✓ (с какой попытки), ✗ или отметка ручной проверки; сверху —
-    доля верных по каждому пункту, чтобы сразу видеть трудные места.
-    """
-    assignment = get_object_or_404(Assignment.objects.select_related("topic__block"), pk=pk)
+def _item_results_data(assignment):
+    """Последняя попытка каждого ученика по пунктам + статистика по столбцам."""
     items = list(assignment.questions.order_by("order", "pk"))
     latest = {}
     for submission in (
@@ -1060,7 +1054,7 @@ def item_results(request, pk):
         for item in items:
             response = responses.get((submission.pk, item.pk))
             cells.append(response)
-            if response is None:
+            if response is None or item.is_manual:
                 continue
             stats[item.pk]["answered"] += 1
             if response.state == QuestionResponse.State.CORRECT:
@@ -1073,6 +1067,37 @@ def item_results(request, pk):
         stat = stats[item.pk]
         rate = round(100 * stat["correct"] / stat["answered"]) if stat["answered"] else None
         columns.append({"number": number, "question": item, "rate": rate, **stat})
+    return columns, rows
+
+
+def _item_cell_text(question, response):
+    """Ячейка XLSX: баллы и отметка, понятные без легенды."""
+    if response is None:
+        return ""
+    if question.is_manual:
+        if response.teacher_points is None:
+            return "ждёт проверки"
+        return f"{response.teacher_points}/{question.points}"
+    if response.state == QuestionResponse.State.CORRECT:
+        tries = response.tries_used
+        return f"✓ {response.points}/{question.points}" + (
+            f" (попытка {tries})" if tries > 1 else ""
+        )
+    if response.state == QuestionResponse.State.FAILED:
+        return f"✗ {response.points}/{question.points}"
+    return ""
+
+
+@teacher_required
+@require_GET
+def item_results(request, pk):
+    """Матрица «ученик × пункт» по последним прохождениям задания.
+
+    В ячейке — ✓ (с какой попытки), ✗ или отметка ручной проверки; сверху —
+    доля верных по каждому пункту, чтобы сразу видеть трудные места.
+    """
+    assignment = get_object_or_404(Assignment.objects.select_related("topic__block"), pk=pk)
+    columns, rows = _item_results_data(assignment)
     return render(
         request,
         "lms/teacher_item_results.html",
@@ -1083,6 +1108,50 @@ def item_results(request, pk):
             "workspace": "curriculum",
         },
     )
+
+
+@teacher_required
+@require_GET
+def item_results_export(request, pk):
+    """Та же матрица в XLSX: строка на ученика, столбец на пункт, внизу — доля верных."""
+    assignment = get_object_or_404(Assignment, pk=pk)
+    columns, rows = _item_results_data(assignment)
+    header = ["Ученик"]
+    for column in columns:
+        text = " ".join(str(column["question"].text).split())
+        header.append(f"{column['number']}. {text[:60]}")
+    header += ["Итог", "Максимум", "Статус"]
+    table = [header]
+    for row in rows:
+        submission = row["submission"]
+        feedback = getattr(submission, "feedback", None)
+        grade = feedback.grade if feedback and feedback.grade is not None else ""
+        table.append(
+            [
+                submission.student.get_full_name() or submission.student.username,
+                *[
+                    _item_cell_text(column["question"], cell)
+                    for column, cell in zip(columns, row["cells"], strict=True)
+                ],
+                grade,
+                submission.max_points_snapshot,
+                submission.get_status_display(),
+            ]
+        )
+    table.append(
+        [
+            "Доля верных, %",
+            *[column["rate"] if column["rate"] is not None else "" for column in columns],
+            "",
+            "",
+            "",
+        ]
+    )
+    payload = xlsx.build_xlsx(table, sheet_name="По пунктам")
+    response = HttpResponse(payload, content_type=xlsx.CONTENT_TYPE)
+    response["Content-Disposition"] = f'attachment; filename="items-{assignment.pk}.xlsx"'
+    response["Content-Length"] = str(len(payload))
+    return response
 
 
 def _sync_quiz_points(assignment):

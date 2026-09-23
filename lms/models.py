@@ -356,6 +356,14 @@ class Assignment(models.Model):
         verbose_name="Можно пройти заново",
         help_text="После завершения ученик может начать задание с чистого листа.",
     )
+    exam_mode = models.BooleanField(
+        default=False,
+        verbose_name="Режим контрольной",
+        help_text=(
+            "Одна попытка на пункт, без ✓/✗ и правильных ответов до завершения задания. "
+            "Разбор ученик увидит после того, как ответит на все пункты."
+        ),
+    )
     recording_limit_seconds = models.PositiveIntegerField(
         null=True,
         blank=True,
@@ -405,6 +413,11 @@ class Assignment(models.Model):
     @property
     def records_audio(self):
         return self.assignment_type in (Assignment.Type.AUDIO, Assignment.Type.MIXED)
+
+    @property
+    def tries_per_item(self):
+        """Сколько раз можно ответить на пункт с автопроверкой (в контрольной — один)."""
+        return 1 if self.exam_mode else self.max_tries
 
     @property
     def recording_limit_display(self):

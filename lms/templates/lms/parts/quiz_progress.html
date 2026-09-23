@@ -5,7 +5,7 @@
         <div class="quiz-progress-head">
             <p class="strong mb-0">Выполнено {{ quiz_progress.done }} из {{ quiz_progress.total }}</p>
             <p class="tiny muted mb-0">
-                <span class="quiz-stat quiz-stat-ok">{% icon "check" "icon icon-sm" %}{{ quiz_progress.correct }} верно</span>
+                {% if assignment.exam_mode %}<span class="quiz-stat">{% icon "lock" "icon icon-sm" %}Результат — после завершения</span>{% else %}<span class="quiz-stat quiz-stat-ok">{% icon "check" "icon icon-sm" %}{{ quiz_progress.correct }} верно</span>{% endif %}
                 {% if quiz_progress.failed %}<span class="quiz-stat quiz-stat-bad">{% icon "x" "icon icon-sm" %}{{ quiz_progress.failed }} с ошибкой</span>{% endif %}
                 {% if quiz_progress.manual %}<span class="quiz-stat">{% icon "send" "icon icon-sm" %}{{ quiz_progress.answered }} из {{ quiz_progress.manual }} на проверку</span>{% endif %}
             </p>
@@ -22,7 +22,7 @@
         {% elif quiz_progress.manual %}
             <p class="tiny muted mb-0">Пункты с автопроверкой проверяются сразу. Свободные и голосовые ответы можно менять до отправки — кнопка появится, когда будут готовы все пункты.</p>
         {% else %}
-            <p class="tiny muted mb-0">На каждый пункт — {{ assignment.max_tries }} {{ assignment.max_tries|pluralize_ru:"попытка,попытки,попыток" }}. Результат отправится преподавателю автоматически, когда вы закончите последний пункт.</p>
+            <p class="tiny muted mb-0">{% if assignment.exam_mode %}Одна попытка на пункт. Когда ответите на последний пункт, работа отправится преподавателю и откроется разбор.{% else %}На каждый пункт — {{ assignment.max_tries }} {{ assignment.max_tries|pluralize_ru:"попытка,попытки,попыток" }}. Результат отправится преподавателю автоматически, когда вы закончите последний пункт.{% endif %}</p>
         {% endif %}
     {% else %}
         <div class="quiz-progress-head">

@@ -45,6 +45,8 @@
                     {% if item.order_total %}На своих местах {{ item.order_hits }} из {{ item.order_total }} слов.{% endif %}
                     {% if item.row_marks %}Неверные строки отмечены красным.{% endif %}
                     Осталось попыток: {{ item.tries_left }}.</p>
+            {% elif item.exam_hidden %}
+                <p class="item-note item-note-info mb-0">{% icon "lock" "icon icon-sm" %}<strong>Ответ принят.</strong> Верно или нет — увидите после завершения задания.</p>
             {% elif item.state == 'answered' %}
                 <p class="item-note item-note-info mb-0">{% icon "send" "icon icon-sm" %}<strong>Ответ принят.</strong> Его проверит преподаватель.</p>
             {% endif %}
@@ -71,6 +73,9 @@
                     </ol>
                 </details>
             {% endif %}
+
+        {% elif item.exam_hidden %}
+            {% if item.last and item.last.display %}<p class="small mb-0"><span class="muted">Ваш ответ:</span> {{ item.last.display }}</p>{% endif %}
 
         {% elif item.manual and not item.editable %}
             {# Итог уже отправлен: свободный или голосовой ответ ждёт преподавателя. #}
@@ -188,7 +193,8 @@
                 {% endif %}
                 <div class="item-actions">
                     <button class="btn" type="submit" data-item-submit>{% icon "check" %}{% if question.kind == 'text' and item.state == 'answered' %}Сохранить изменения{% else %}Принять{% endif %}</button>
-                    {% if not item.manual %}<span class="tiny muted">Регистр и знаки препинания не важны.</span>{% endif %}
+                    {% if item.exam and not item.manual %}<span class="tiny muted">Одна попытка: ответ нельзя будет изменить.</span>
+                    {% elif not item.manual %}<span class="tiny muted">Регистр и знаки препинания не важны.</span>{% endif %}
                 </div>
             </form>
         {% endif %}

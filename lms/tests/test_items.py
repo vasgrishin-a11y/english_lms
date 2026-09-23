@@ -413,3 +413,92 @@ class RecordingLimitFormTests(LMSCase):
         self.assignment.save()
         page = self.student_client.get(self.url)
         self.assertContains(page, 'data-limit="90"')
+
+
+class ExamModeTests(ItemFlowBase):
+    """Контрольная: одна попытка, без ✓/✗ и правильного ответа до завершения."""
+
+    def setUp(self):
+        super().setUp()
+        self.quiz.exam_mode = True
+        self.quiz.max_tries = 3
+        self.quiz.save()
+
+    def test_wrong_answer_is_sealed_without_feedback(self):
+        response = self.check(self.gap, "live")
+        self.assertContains(response, "увидите после завершения")
+        self.assertNotContains(response, "Неверно")
+        self.assertNotContains(response, "lives", msg_prefix="Правильный ответ скрыт")
+        self.assertNotContains(response, "mark-bad")
+        item = self.response_for(self.gap)
+        self.assertEqual(item.state, QuestionResponse.State.FAILED, "Одна попытка — пункт закрыт")
+        again = self.check(self.gap, "lives")
+        self.assertEqual(again.status_code, 409)
+
+    def test_correct_answer_is_sealed_too(self):
+        response = self.check(self.mcq, str(self.right.pk))
+        self.assertNotContains(response, "Верно!")
+        self.assertNotContains(response, "mark-ok")
+        page = self.student_client.get(self.quiz_url)
+        self.assertContains(page, "Контрольная")
+        self.assertContains(page, "Выполнено 1 из 2")
+
+    def test_review_opens_after_last_item(self):
+        self.check(self.mcq, str(self.wrong.pk))
+        self.check(self.gap, "lives")
+        attempt = Submission.objects.get(student=self.student, assignment=self.quiz)
+        self.assertEqual(attempt.feedback.grade, 3)
+        page = self.student_client.get(self.quiz_url)
+        self.assertContains(page, "Задание завершено")
+        self.assertContains(page, "Правильный ответ")
+        self.assertContains(page, "have")
+
+    def test_teacher_form_saves_exam_mode(self):
+        form = AssignmentForm(
+            data={
+                "topic": self.topic.pk,
+                "title": "Exam",
+                "description": "Control work.",
+                "assignment_type": Assignment.Type.QUIZ,
+                "max_points": 0,
+                "order": 1,
+                "status": Assignment.Publication.PUBLISHED,
+                "is_active": "on",
+                "exam_mode": "on",
+            }
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertTrue(form.cleaned_data["exam_mode"])
+
+
+class ItemResultsExportTests(ItemFlowBase):
+    def test_xlsx_contains_marks_and_rates(self):
+        import zipfile
+
+        self.check(self.mcq, str(self.wrong.pk))
+        self.check(self.mcq, str(self.right.pk))
+        self.check(self.gap, "a")
+        self.check(self.gap, "b")
+        self.check(self.gap, "c")
+        response = self.teacher_client.get(
+            f"/teacher/curriculum/assignments/{self.quiz.pk}/results/export.xlsx"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("spreadsheetml", response["Content-Type"])
+        with zipfile.ZipFile(io.BytesIO(response.content)) as book:
+            sheet = book.read("xl/worksheets/sheet1.xml").decode()
+            strings = sheet + (
+                book.read("xl/sharedStrings.xml").decode()
+                if "xl/sharedStrings.xml" in book.namelist()
+                else ""
+            )
+        self.assertIn("✓ 2/2 (попытка 2)", strings)
+        self.assertIn("✗ 0/3", strings)
+        self.assertIn("Доля верных, %", strings)
+        self.assertIn("student", strings)
+
+    def test_students_cannot_export(self):
+        response = self.student_client.get(
+            f"/teacher/curriculum/assignments/{self.quiz.pk}/results/export.xlsx"
+        )
+        self.assertNotEqual(response.status_code, 200)

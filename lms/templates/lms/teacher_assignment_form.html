@@ -153,6 +153,12 @@
                             {{ form.allow_retake.errors }}
                         </div>
 
+                        <div class="form-field checkline{% if form.exam_mode.errors %} field-error{% endif %}" data-show-types="quiz">
+                            {{ form.exam_mode }}<label for="{{ form.exam_mode.id_for_label }}">{% icon "lock" "icon icon-sm" %} {{ form.exam_mode.label }}</label>
+                            <div class="help-text" id="{{ form.exam_mode.auto_id }}_helptext">{{ form.exam_mode.help_text }} Поле «{{ form.max_tries.label }}» в этом режиме не действует.</div>
+                            {{ form.exam_mode.errors }}
+                        </div>
+
                         <div class="form-field{% if form.recording_limit_seconds.errors %} field-error{% endif %}" data-show-types="audio mixed">
                             <label for="{{ form.recording_limit_seconds.id_for_label }}">{% icon "timer" "icon icon-sm" %} {{ form.recording_limit_seconds.label }}</label>
                             {{ form.recording_limit_seconds }}

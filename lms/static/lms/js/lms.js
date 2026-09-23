@@ -512,7 +512,7 @@
         var feedback = item.querySelector(".item-note");
         var field = item.querySelector("input:not([type=hidden]), textarea, select");
         var state = item.getAttribute("data-state");
-        if (state === "correct" || state === "failed") {
+        if (state === "correct" || state === "failed" || (state === "answered" && !field)) {
           var next = item.nextElementSibling;
           while (next && next.getAttribute("data-state") !== "new" && next.getAttribute("data-state") !== "open") {
             next = next.nextElementSibling;

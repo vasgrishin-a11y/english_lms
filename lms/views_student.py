@@ -430,11 +430,13 @@ def item_check(request, pk, question_id):
             answer=_collect_item_answer(request, question),
             expected_round=expected_round,
         )
+        if assignment.exam_mode:
+            return "Ответ принят. Результат — после завершения задания."
         if response.state == QuestionResponse.State.CORRECT:
             return "Верно!"
         if response.state == QuestionResponse.State.FAILED:
             return "Попытки закончились — посмотрите правильный ответ."
-        return f"Неверно. Осталось попыток: {assignment.max_tries - response.tries_used}."
+        return f"Неверно. Осталось попыток: {assignment.tries_per_item - response.tries_used}."
 
     return _item_action(request, pk, question_id, action)
 

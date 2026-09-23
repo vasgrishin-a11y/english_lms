@@ -342,6 +342,7 @@ class AssignmentForm(forms.ModelForm):
             "max_points",
             "max_tries",
             "allow_retake",
+            "exam_mode",
             "recording_limit_seconds",
             "deadline",
             "publish_at",
