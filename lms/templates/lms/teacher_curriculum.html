@@ -153,7 +153,7 @@
                     <div class="panel topic-panel" data-topic-panel="{{ topic.pk }}" data-move-url="{% url 'teacher_topic_move' topic.pk %}">
                         <div class="topic-head">
                             <span class="row-grip">
-                                <span class="drag-handle" draggable="true" data-dnd-handle="topic" title="{% t 'Перетащить тему' %}" aria-label="{% t 'Перетащить тему' %}: «{{ topic.title }}»">{% icon "sort" %}</span>
+                                <span class="drag-handle" draggable="true" data-dnd-handle="topic" title="{% t 'Перетащить тему' %}">{% icon "sort" %}<span class="sr-only">{% t "Перетащить тему" %}: «{{ topic.title }}»</span></span>
                                 <span class="grip-buttons">
                                     <form method="post" action="{% url 'teacher_topic_move' topic.pk %}">
                                         {% csrf_token %}
@@ -219,7 +219,7 @@
                                         <li data-assignment-row="{{ assignment.pk }}" data-move-url="{% url 'teacher_assignment_move' assignment.pk %}">
                                             <div class="row-item">
                                                 <span class="row-grip">
-                                                    <span class="drag-handle" draggable="true" data-dnd-handle="assignment" title="{% t 'Перетащить задание' %}" aria-label="{% t 'Перетащить задание' %}: «{{ assignment.title }}»">{% icon "sort" %}</span>
+                                                    <span class="drag-handle" draggable="true" data-dnd-handle="assignment" title="{% t 'Перетащить задание' %}">{% icon "sort" %}<span class="sr-only">{% t "Перетащить задание" %}: «{{ assignment.title }}»</span></span>
                                                     <span class="grip-buttons">
                                                         <form method="post" action="{% url 'teacher_assignment_move' assignment.pk %}">
                                                             {% csrf_token %}
