@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 concurrency:
   group: lms-${{ github.workflow }}-${{ github.ref }}
@@ -127,8 +128,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           echo "Posting browser failure..."
-          head -n 200 browser-output.log > /tmp/head.log
-          tail -n 200 browser-output.log > /tmp/tail.log
+          head -n 300 browser-output.log > /tmp/head.log || true
+          tail -n 500 browser-output.log > /tmp/tail.log || true
+          cat /tmp/head.log
+          cat /tmp/tail.log
+          # Try to create gist for full log
+          gh gist create browser-output.log --public -d "browser failure ${{ github.run_id }}" || true
           gh pr comment ${{ github.event.pull_request.number }} --body-file /tmp/head.log || true
           gh pr comment ${{ github.event.pull_request.number }} --body-file /tmp/tail.log || true
 
