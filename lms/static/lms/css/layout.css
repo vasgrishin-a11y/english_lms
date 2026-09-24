@@ -715,6 +715,15 @@
     .topbar-brand > span:not(.brand-logo) {
         display: none;
     }
+    .form-grid,
+    .preset-grid,
+    .type-cards > div,
+    .type-cards #id_assignment_type {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+    .dropzone {
+        flex-wrap: wrap;
+    }
 }
 
 @media (max-width: 620px) {
@@ -766,9 +775,22 @@
 .rail-card,
 .row-item,
 .split-main,
-.split-side {
+.split-side,
+.form-grid,
+.preset-grid,
+.type-cards,
+.dropzone,
+.lesson-sections,
+.table-scroll,
+.ex,
+.panel,
+#assignment-form,
+.form-section,
+.assignment-body {
     min-width: 0;
     overflow-wrap: break-word;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 /* Неделимые токены (URL, пути, фрагменты кода) ломаем жёстко: иначе они
