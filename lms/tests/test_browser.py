@@ -108,8 +108,14 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
                             .map(el => {
                               const r = el.getBoundingClientRect();
                               return `${el.tagName}${el.id ? '#'+el.id : ''}${el.className ? '.'+String(el.className).split(' ').slice(0,3).join('.') : ''} scrollW=${el.scrollWidth} rectW=${Math.round(r.width)} left=${Math.round(r.left)}`;
-                            }).slice(0,30);
-                          return `docScroll=${document.documentElement.scrollWidth} inner=${innerWidth} bodyScroll=${document.body.scrollWidth}\\n` + els.join('\\n');
+                            }).slice(0,50);
+                          const inside = Array.from(document.querySelectorAll('#assignment-form *'))
+                            .filter(el => el.scrollWidth > 300)
+                            .map(el => {
+                              const r = el.getBoundingClientRect();
+                              return `FORM-INNER ${el.tagName}${el.id ? '#'+el.id : ''}${el.className ? '.'+String(el.className).split(' ').slice(0,3).join('.') : ''} scrollW=${el.scrollWidth} rectW=${Math.round(r.width)} left=${Math.round(r.left)} outerHTML=${el.outerHTML.slice(0,120)}`;
+                            }).slice(0,50);
+                          return `docScroll=${document.documentElement.scrollWidth} inner=${innerWidth} bodyScroll=${document.body.scrollWidth}\\n` + els.join('\\n') + '\\n--- inside form ---\\n' + inside.join('\\n');
                         }"""
                     )
                     print(f"OVERFLOW {name}:\\n{overflow_info}")
