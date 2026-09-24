@@ -451,7 +451,9 @@ class AssignmentForm(forms.ModelForm):
         self.fields["material_file"].widget.attrs["accept"] = accept_str
         self.fields["material_file"].widget.attrs["data-dropzone"] = "1"
         self.fields["material_file"].widget.attrs["data-max-mb"] = str(max_mb)
-        self.fields["material_file"].widget.attrs["data-dropzone-hint"] = "Перетащите файл сюда или вставьте скриншот Ctrl+V"
+        self.fields["material_file"].widget.attrs["data-dropzone-hint"] = (
+            "Перетащите файл сюда или вставьте скриншот Ctrl+V"
+        )
         self.fields["material_file"].help_text = (
             f"Файл до {max_mb} MiB: документ, картинка, аудио или архив. "
             "Можно перетащить или вставить из буфера (Ctrl+V). Ученик увидит его на странице задания."

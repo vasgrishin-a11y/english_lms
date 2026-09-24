@@ -186,13 +186,13 @@
                                         <a href="{% url 'teacher_assignment_form' assignment.pk %}" style="font-size:13px;color:var(--text);text-decoration:none;flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" data-title title="{{ assignment.title }}">{{ assignment.title }}</a>
                                         <span class="badge badge-{{ assignment.status }} tiny" data-status-badge style="font-size:10px">{{ assignment.get_status_display }}</span>
                                     </div>
-                                    <div class="row row-tight" style="gap:2px;flex:0 0 auto">
+                                    <div class="row row-tight" style="gap:2px;flex:0 1 auto;flex-wrap:wrap;max-width:100%">
                                         <button class="btn btn-ghost btn-sm" type="button" data-rename data-rename-url="{% url 'teacher_assignment_rename' assignment.pk %}" title="Переименовать">{% icon "pencil" "icon icon-sm" %}</button>
-                                        <form method="post" action="{% url 'teacher_assignment_publish' assignment.pk %}" data-board-toggle data-label-publish="Опубликовать" data-label-unpublish="В черновики" style="display:inline">
+                                        <form method="post" action="{% url 'teacher_assignment_publish' assignment.pk %}" data-board-toggle data-label-publish="Опубл." data-label-unpublish="В черн." style="display:inline">
                                             {% csrf_token %}
                                             <input type="hidden" name="publish" value="{% if assignment.status == 'published' %}0{% else %}1{% endif %}">
                                             <input type="hidden" name="next" value="{% url 'teacher_curriculum' %}#block-{{ block.pk }}">
-                                            <button class="btn btn-ghost btn-sm" type="submit" title="{% if assignment.status == 'published' %}В черновики{% else %}Опубликовать{% endif %}"><span data-toggle-label>{% if assignment.status == 'published' %}В черновики{% else %}Опубликовать{% endif %}</span></button>
+                                            <button class="btn btn-ghost btn-sm" type="submit" title="{% if assignment.status == 'published' %}В черновики{% else %}Опубликовать{% endif %}"><span data-toggle-label>{% if assignment.status == 'published' %}В черн.{% else %}Опубл.{% endif %}</span></button>
                                         </form>
                                         <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_ai' assignment.pk %}" title="ИИ для задания">{% icon "sparkles" "icon icon-sm" %}</a>
                                         <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_preview' assignment.pk %}" title="Превью">{% icon "eye" "icon icon-sm" %}</a>
