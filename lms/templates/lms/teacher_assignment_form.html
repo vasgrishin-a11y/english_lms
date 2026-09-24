@@ -222,7 +222,7 @@
                     <div class="form-field{% if form.new_attachments.errors %} field-error{% endif %}">
                         <label for="{{ form.new_attachments.id_for_label }}">{{ form.new_attachments.label }} — можно несколько</label>
                         {{ form.new_attachments }}
-                        {% if form.new_attachments.help_text %}<div class="help-text">{{ form.new_attachments.help_text }}</div>{% endif %}
+                        {% if form.new_attachments.help_text %}<div class="help-text" id="{{ form.new_attachments.auto_id }}_helptext">{{ form.new_attachments.help_text }}</div>{% endif %}
                         {{ form.new_attachments.errors }}
                         <p class="tiny muted" style="margin-top:6px">Поддерживается Ctrl+V скриншота в окно загрузки или в поле Условия задания — файл добавится автоматически.</p>
                     </div>
