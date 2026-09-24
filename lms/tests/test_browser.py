@@ -98,60 +98,15 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
                 )
                 page.set_viewport_size({"width": 320, "height": 800})
                 overflow = page.evaluate("document.documentElement.scrollWidth > innerWidth")
-                overflow_info = ""
-                if overflow:
-                    overflow_info = page.evaluate(
-                        """() => {
-                          const vw = innerWidth;
-                          const els = Array.from(document.querySelectorAll('*'))
-                            .filter(el => el.scrollWidth > vw + 1)
-                            .map(el => {
-                              const r = el.getBoundingClientRect();
-                              return `${el.tagName}${el.id ? '#'+el.id : ''}${el.className ? '.'+String(el.className).split(' ').slice(0,3).join('.') : ''} scrollW=${el.scrollWidth} rectW=${Math.round(r.width)} left=${Math.round(r.left)}`;
-                            }).slice(0,80);
-                          const form = document.getElementById('assignment-form');
-                          let inside = [];
-                          if(form){
-                            const all = Array.from(form.querySelectorAll('*'));
-                            for(const el of all){
-                              if(el.scrollWidth > el.clientWidth + 2){
-                                const r = el.getBoundingClientRect();
-                                const cls = el.className ? String(el.className).slice(0,80) : '';
-                                inside.push(`FORM-OVER ${el.tagName}${el.id ? '#'+el.id : ''} .${cls} scrollW=${el.scrollWidth} clientW=${el.clientWidth} rectW=${Math.round(r.width)} html=${el.outerHTML.slice(0,300).replace(/\\n/g,' ')}`);
-                              }
-                            }
-                          }
-                          // also check form sections themselves
-                          const sections = Array.from(document.querySelectorAll('.form-section')).map(el=>{
-                            const r=el.getBoundingClientRect();
-                            return `SEC ${el.tagName} .${String(el.className).slice(0,60)} scrollW=${el.scrollWidth} clientW=${el.clientWidth} rectW=${Math.round(r.width)} left=${Math.round(r.left)}`;
-                          });
-                          return `docScroll=${document.documentElement.scrollWidth} inner=${innerWidth} bodyScroll=${document.body.scrollWidth}\\n` + els.join('\\n') + '\\n--- sections ---\\n' + sections.join('\\n') + '\\n--- form overflows ---\\n' + inside.slice(0,100).join('\\n');
-                        }"""
-                    )
-                    print(f"OVERFLOW {name}:\\n{overflow_info}")
-                missing_info = page.evaluate(
-                    """() => {
-                      const els = Array.from(document.querySelectorAll('[aria-describedby]')).map(el=>{
-                        const ids = el.getAttribute('aria-describedby').split(/\\s+/);
-                        const missing = ids.filter(id=>!document.getElementById(id));
-                        if(missing.length){
-                          return `${el.tagName}#${el.id} aria-describedby=${el.getAttribute('aria-describedby')} missing=${missing.join(',')} html=${el.outerHTML.slice(0,200)}`;
-                        }
-                        return null;
-                      }).filter(Boolean);
-                      return els.slice(0,20).join('\\n');
-                    }"""
+                missing_help = page.evaluate(
+                    "Array.from(document.querySelectorAll('[aria-describedby]')).some(el => el.getAttribute('aria-describedby').split(/\\s+/).some(id => !document.getElementById(id)))"
                 )
-                missing_help = bool(missing_info)
-                if missing_help:
-                    print(f"MISSING_HELP {name}:\\n{missing_info}")
                 if violations or overflow or missing_help:
                     Path("test-results").mkdir(exist_ok=True)
                     page.screenshot(path=f"test-results/{name}.png", full_page=True)
                 self.assertEqual(violations, [], name)
-                self.assertFalse(overflow, f"{name} overflow:\\n{overflow_info}")
-                self.assertFalse(missing_help, f"{name} missing_help:\\n{missing_info}")
+                self.assertFalse(overflow, name)
+                self.assertFalse(missing_help, name)
                 page.set_viewport_size({"width": 1280, "height": 900})
 
             def login(username):
