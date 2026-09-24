@@ -109,14 +109,24 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
                               const r = el.getBoundingClientRect();
                               return `${el.tagName}${el.id ? '#'+el.id : ''}${el.className ? '.'+String(el.className).split(' ').slice(0,3).join('.') : ''} scrollW=${el.scrollWidth} rectW=${Math.round(r.width)} left=${Math.round(r.left)}`;
                             }).slice(0,80);
-                          const inside = Array.from(document.querySelectorAll('#assignment-form *'))
-                            .filter(el => el.scrollWidth > 260)
-                            .map(el => {
-                              const r = el.getBoundingClientRect();
-                              const cls = el.className ? String(el.className).slice(0,80) : '';
-                              return `FORM-INNER ${el.tagName}${el.id ? '#'+el.id : ''} .${cls} scrollW=${el.scrollWidth} rectW=${Math.round(r.width)} left=${Math.round(r.left)} html=${el.outerHTML.slice(0,200).replace(/\\n/g,' ')}`;
-                            }).slice(0,100);
-                          return `docScroll=${document.documentElement.scrollWidth} inner=${innerWidth} bodyScroll=${document.body.scrollWidth}\\n` + els.join('\\n') + '\\n--- inside form ---\\n' + inside.join('\\n');
+                          const form = document.getElementById('assignment-form');
+                          let inside = [];
+                          if(form){
+                            const all = Array.from(form.querySelectorAll('*'));
+                            for(const el of all){
+                              if(el.scrollWidth > el.clientWidth + 2){
+                                const r = el.getBoundingClientRect();
+                                const cls = el.className ? String(el.className).slice(0,80) : '';
+                                inside.push(`FORM-OVER ${el.tagName}${el.id ? '#'+el.id : ''} .${cls} scrollW=${el.scrollWidth} clientW=${el.clientWidth} rectW=${Math.round(r.width)} html=${el.outerHTML.slice(0,300).replace(/\\n/g,' ')}`);
+                              }
+                            }
+                          }
+                          // also check form sections themselves
+                          const sections = Array.from(document.querySelectorAll('.form-section')).map(el=>{
+                            const r=el.getBoundingClientRect();
+                            return `SEC ${el.tagName} .${String(el.className).slice(0,60)} scrollW=${el.scrollWidth} clientW=${el.clientWidth} rectW=${Math.round(r.width)} left=${Math.round(r.left)}`;
+                          });
+                          return `docScroll=${document.documentElement.scrollWidth} inner=${innerWidth} bodyScroll=${document.body.scrollWidth}\\n` + els.join('\\n') + '\\n--- sections ---\\n' + sections.join('\\n') + '\\n--- form overflows ---\\n' + inside.slice(0,100).join('\\n');
                         }"""
                     )
                     print(f"OVERFLOW {name}:\\n{overflow_info}")
