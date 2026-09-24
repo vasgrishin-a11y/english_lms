@@ -33,39 +33,7 @@
                 {{ assignment.description|linebreaks }}
             </div>
 
-            {% if assignment.material_file or assignment.attachments.exists or attachments %}
-                <div class="media-frame" style="margin-top:16px">
-                    <p class="strong mb-0">{% icon "file-text" %} Материалы урока</p>
-                    {% if assignment.material_file %}
-                        {% if assignment.material_file.name|media_kind == 'image' %}
-                            <img src="{% url 'media_preview' assignment.material_file.name %}" alt="Материал задания: {{ assignment.title }}" loading="lazy">
-                        {% elif assignment.material_file.name|media_kind == 'audio' %}
-                            <audio controls preload="none" src="{% url 'media_preview' assignment.material_file.name %}"></audio>
-                        {% endif %}
-                        <a class="btn btn-secondary btn-sm" href="{{ assignment.material_file.url }}">{% icon "download" %}{% t "Скачать материалы" %}</a>
-                    {% endif %}
-                    {% for att in assignment.attachments.all %}
-                        <div style="margin-top:8px">
-                            {% if att.file.name|media_kind == 'image' %}
-                                <img src="{% url 'media_preview' att.file.name %}" alt="Вложение" loading="lazy" style="max-height:300px;border-radius:8px">
-                            {% elif att.file.name|media_kind == 'audio' %}
-                                <audio controls preload="none" src="{% url 'media_preview' att.file.name %}"></audio>
-                            {% endif %}
-                            <a class="btn btn-secondary btn-sm" href="{{ att.file.url }}" style="margin-top:6px">{% icon "download" "icon icon-sm" %} {{ att.file.name|slice:"-30:" }}</a>
-                        </div>
-                    {% endfor %}
-                    {% for att in attachments %}
-                        {% if att not in assignment.attachments.all %}
-                        <div style="margin-top:8px">
-                            {% if att.file.name|media_kind == 'image' %}
-                                <img src="{% url 'media_preview' att.file.name %}" alt="Вложение" loading="lazy" style="max-height:300px;border-radius:8px">
-                            {% endif %}
-                            <a class="btn btn-secondary btn-sm" href="{{ att.file.url }}">{% icon "download" "icon icon-sm" %} {{ att.file.name|slice:"-30:" }}</a>
-                        </div>
-                        {% endif %}
-                    {% endfor %}
-                </div>
-            {% endif %}
+            {% include "lms/parts/material_files.html" %}
 
             {% if assignment.is_flashcards %}
                 <div class="callout" style="margin-top:16px">

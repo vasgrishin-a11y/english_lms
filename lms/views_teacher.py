@@ -30,6 +30,7 @@ from .curriculum import course_tree, gradebook, queue_counts, teacher_overview
 from .decorators import get_user_role, teacher_required
 from .forms import (
     AssignmentForm,
+    AssignmentQuickForm,
     BlockForm,
     CommentSnippetForm,
     FlashcardBulkForm,
@@ -1242,77 +1243,55 @@ def assignment_rename(request, pk):
 @teacher_required
 @require_POST
 def assignment_quick_edit(request, pk):
-    """Быстрое редактирование задания прямо в доске темы: заголовок, описание, статус, порядок + файлы."""
     assignment = get_object_or_404(Assignment, pk=pk)
-    title = request.POST.get("title", "").strip()
-    description = request.POST.get("description", "")
-    status_val = request.POST.get("status", "")
-    order_val = request.POST.get("order", "")
-    changed = []
-    if title:
-        if len(title) > 200:
-            title = title[:200]
-        if assignment.title != title:
-            assignment.title = title
-            changed.append("title")
-    if description != "" and assignment.description != description:
-        assignment.description = description
-        changed.append("description")
-    if status_val in Assignment.Publication.values:
-        if assignment.status != status_val:
-            assignment.status = status_val
-            changed.append("status")
-            if (
-                status_val == Assignment.Publication.PUBLISHED
-                and assignment.publish_at
-                and assignment.publish_at > timezone.now()
-            ):
-                assignment.publish_at = None
-    if order_val:
+    form = AssignmentQuickForm(
+        request.POST, request.FILES, instance=assignment, auto_id=f"assignment-{pk}-%s"
+    )
+    question_forms = [
+        QuestionForm(request.POST, instance=q, prefix=f"question-{q.pk}")
+        for q in assignment.questions.prefetch_related("choices")
+    ]
+    valid = form.is_valid()
+    for question_form in question_forms:
+        valid = question_form.is_valid() and valid
+    from .models import AssignmentAttachment
+
+    attachments = []
+    for upload in request.FILES.getlist("new_attachments"):
+        attachment = AssignmentAttachment(assignment=assignment, file=upload)
         try:
-            order_int = int(order_val)
-            if assignment.order != order_int:
-                assignment.order = order_int
-                changed.append("order")
-        except (ValueError, TypeError):
-            pass
-    if changed:
-        assignment.save(update_fields=changed + ["updated_at"])
-    # attachments: new files
-    new_files = request.FILES.getlist("new_attachments")
-    if new_files:
-        from django.db.models import Max
+            attachment.full_clean()
+        except ValidationError as error:
+            form.add_error(None, error.messages)
+            valid = False
+        attachments.append(attachment)
+    if not valid:
+        return _render_topic_board(
+            request, assignment.topic_id, edit_errors=(assignment.pk, form, question_forms)
+        )
+    with transaction.atomic():
+        form.save()
+        for question_form in question_forms:
+            question = question_form.save()
+            question_form.save_choices(question)
+        if question_forms:
+            _sync_quiz_points(assignment)
+            from .services import regrade_assignment
 
-        from .models import AssignmentAttachment
-
+            regrade_assignment(assignment)
         last_order = assignment.attachments.aggregate(m=Max("order"))["m"] or 0
-        for idx, f in enumerate(new_files, start=1):
-            AssignmentAttachment.objects.create(
-                assignment=assignment, file=f, order=last_order + idx
-            )
-        changed.append("attachments")
-    # delete marked
-    delete_ids = request.POST.getlist("delete_attachments")
-    if delete_ids:
-        assignment.attachments.filter(pk__in=[i for i in delete_ids if i.isdigit()]).delete()
-    # material file clear?
-    if request.POST.get("material_file-clear") == "on":
-        if assignment.material_file:
-            assignment.material_file.delete(save=False)
-            assignment.material_file = ""
-            assignment.save(update_fields=["material_file", "updated_at"])
-    # material file new?
-    if request.FILES.get("material_file"):
-        assignment.material_file = request.FILES["material_file"]
-        assignment.save(update_fields=["material_file", "updated_at"])
-    if changed:
-        messages.success(request, f"Задание обновлено: {assignment.title}")
-    else:
-        messages.info(request, "Изменений нет.")
-    nxt = request.POST.get("next") or request.GET.get("next")
-    if nxt:
-        return redirect(nxt)
-    return redirect("teacher_topic_board", pk=assignment.topic_id)
+        for index, attachment in enumerate(attachments, 1):
+            attachment.order = last_order + index
+            attachment.save()
+        assignment.attachments.filter(
+            pk__in=[
+                value for value in request.POST.getlist("delete_attachments") if value.isdigit()
+            ]
+        ).delete()
+    messages.success(request, "Задание сохранено. Автоматические результаты пересчитаны.")
+    return redirect(
+        reverse("teacher_topic_board", args=[assignment.topic_id]) + f"#assignment-{assignment.pk}"
+    )
 
 
 @teacher_required
@@ -1463,6 +1442,10 @@ def assignment_preview(request, pk):
 @teacher_required
 @require_GET
 def topic_board(request, pk):
+    return _render_topic_board(request, pk)
+
+
+def _render_topic_board(request, pk, edit_errors=None):
     """Раздел Задания по Теме: все задания темы со всем содержимым для правок учителя.
 
     Открывается при клике на тему в разделе Курс. Справа — навигация по навыкам на английском.
@@ -1475,6 +1458,16 @@ def topic_board(request, pk):
         .prefetch_related("skills", "questions__choices", "cards", "attachments")
         .order_by("order", "pk")
     )
+    for assignment in assignments:
+        assignment.quick_form = AssignmentQuickForm(
+            instance=assignment, auto_id=f"assignment-{assignment.pk}-%s"
+        )
+        assignment.question_forms = [
+            QuestionForm(instance=q, prefix=f"question-{q.pk}") for q in assignment.questions.all()
+        ]
+        if edit_errors and assignment.pk == edit_errors[0]:
+            assignment.quick_form, assignment.question_forms = edit_errors[1:]
+            assignment.edit_open = True
     # Собираем навыки присутствующие в теме
     # Для фильтра
     selected_skill = request.GET.get("skill", "").strip().lower()
@@ -1855,9 +1848,13 @@ def question_form(request, pk):
     question = get_object_or_404(Question.objects.select_related("assignment"), pk=pk)
     form = QuestionForm(request.POST or None, instance=question)
     if request.method == "POST" and form.is_valid():
-        form.save()
-        form.save_choices(question)
-        _sync_quiz_points(question.assignment)
+        with transaction.atomic():
+            form.save()
+            form.save_choices(question)
+            _sync_quiz_points(question.assignment)
+            from .services import regrade_assignment
+
+            regrade_assignment(question.assignment)
         messages.success(request, "Вопрос обновлён.")
         return redirect("teacher_questions", pk=question.assignment_id)
     return render(

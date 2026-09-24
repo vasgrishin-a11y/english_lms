@@ -91,7 +91,7 @@
                 </div>
             </div>
             <div class="row row-tight" style="gap:4px;flex-wrap:wrap">
-                <a class="btn btn-secondary btn-sm" href="{% url 'teacher_assignment_form' assignment.pk %}?from_topic=1">{% icon "pencil" %}Изменить</a>
+                <a class="btn btn-secondary btn-sm" href="#edit-{{ assignment.pk }}" data-open-editor="edit-{{ assignment.pk }}">{% icon "pencil" %}Редактировать</a>
                 <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_preview' assignment.pk %}" title="Как увидит ученик">{% icon "eye" %}</a>
                 <form method="post" action="{% url 'teacher_assignment_publish' assignment.pk %}" style="display:inline">
                     {% csrf_token %}<input type="hidden" name="publish" value="{% if assignment.status == 'published' %}0{% else %}1{% endif %}"><input type="hidden" name="next" value="{% url 'teacher_topic_board' topic.pk %}"><button class="btn btn-ghost btn-sm" type="submit">{% if assignment.status == 'published' %}В черновики{% else %}Опубликовать{% endif %}</button>
@@ -102,44 +102,7 @@
         <div class="col" style="gap:12px">
             <div style="background:var(--surface-sunken);border:1px solid var(--border-subtle);border-radius:8px;padding:12px 14px;font-size:14px;line-height:1.6;white-space:pre-wrap">{{ assignment.description }}</div>
 
-            {% if assignment.material_file or assignment.attachments.exists %}
-            <div class="media-frame" style="gap:12px">
-                <p class="strong mb-0 tiny" style="text-transform:uppercase;letter-spacing:.05em">{% icon "file-text" "icon icon-sm" %} Материалы — превью картинкой</p>
-                {% if assignment.material_file %}
-                    <div style="display:flex;flex-direction:column;gap:8px;background:var(--surface);border:1px solid var(--border-subtle);border-radius:8px;padding:10px">
-                        {% if assignment.material_file.name|media_kind == 'image' %}
-                            <img src="{% url 'media_preview' assignment.material_file.name %}" alt="Материал" loading="lazy" style="max-width:100%;max-height:360px;object-fit:contain;border-radius:8px;border:1px solid var(--border-subtle)">
-                        {% elif assignment.material_file.name|media_kind == 'audio' %}
-                            <audio controls preload="none" src="{% url 'media_preview' assignment.material_file.name %}" style="width:100%"></audio>
-                        {% endif %}
-                        <div class="row row-tight" style="gap:8px;flex-wrap:wrap">
-                            <a class="btn btn-secondary btn-sm" href="{{ assignment.material_file.url }}">{% icon "download" "icon icon-sm" %}Скачать основной файл</a>
-                            <span class="tiny muted">{{ assignment.material_file.name|slice:"-40:" }}</span>
-                        </div>
-                    </div>
-                {% endif %}
-                {% if assignment.attachments.exists %}
-                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px">
-                    {% for att in assignment.attachments.all %}
-                        <div style="background:var(--surface);border:1px solid var(--border-subtle);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px">
-                            {% if att.file.name|media_kind == 'image' %}
-                                <img src="{% url 'media_preview' att.file.name %}" alt="Вложение" loading="lazy" style="width:100%;height:140px;object-fit:cover;border-radius:6px;border:1px solid var(--border-subtle)">
-                            {% elif att.file.name|media_kind == 'audio' %}
-                                <audio controls preload="none" src="{% url 'media_preview' att.file.name %}" style="width:100%"></audio>
-                            {% else %}
-                                <div style="height:80px;display:grid;place-items:center;background:var(--surface-sunken);border-radius:6px">{% icon "file-text" %}</div>
-                            {% endif %}
-                            <span class="tiny muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ att.file.name|slice:"-30:" }}</span>
-                            <div class="row row-tight" style="gap:4px">
-                                <a class="btn btn-secondary btn-sm" href="{{ att.file.url }}" style="flex:1">{% icon "download" "icon icon-sm" %}Скачать</a>
-                                <form method="post" action="{% url 'teacher_attachment_delete' att.pk %}" style="flex:0"><input type="hidden" name="from" value="board">{% csrf_token %}<button class="btn btn-danger-ghost btn-sm" type="submit">{% icon "trash" "icon icon-sm" %}</button></form>
-                            </div>
-                        </div>
-                    {% endfor %}
-                </div>
-                {% endif %}
-            </div>
-            {% endif %}
+            {% include "lms/parts/material_files.html" %}
 
             {% if assignment.is_quiz %}
                 <div>
@@ -149,7 +112,7 @@
                         <li style="font-size:13px"><strong>{{ q.text|truncatechars:120 }}</strong> <span class="tag">{{ q.get_kind_display }} · {{ q.points }}б</span>{% if q.choices.exists %}<br><span class="tiny muted">{% for c in q.choices.all %}{% if c.is_correct %}*{% endif %}{{ c.text }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}</li>
                         {% endfor %}
                     </ol>
-                    <div class="row row-tight" style="margin-top:8px"><a class="btn btn-ghost btn-sm" href="{% url 'teacher_questions' assignment.pk %}">{% icon "list" %}Редактировать вопросы</a><a class="btn btn-ghost btn-sm" href="{% url 'teacher_item_results' assignment.pk %}">Результаты по пунктам</a></div>
+                    <div class="row row-tight" style="margin-top:8px"><a class="btn btn-ghost btn-sm" href="{% url 'teacher_questions' assignment.pk %}">{% icon "list" %}Редактировать вопросы</a></div>
                 </div>
             {% endif %}
 
@@ -165,44 +128,22 @@
             {% endif %}
 
             <!-- Быстрое редактирование inline -->
-            <details style="margin-top:4px;border:1px dashed var(--border);border-radius:8px;padding:10px;background:var(--surface-sunken)">
+            <details id="edit-{{ assignment.pk }}" {% if assignment.edit_open %}open{% endif %} style="margin-top:4px;border:1px dashed var(--border);border-radius:8px;padding:10px;background:var(--surface-sunken)">
                 <summary style="cursor:pointer;font-weight:600;font-size:13px;list-style:none;display:flex;align-items:center;gap:6px">{% icon "pencil" "icon icon-sm" %} Быстрое редактирование прямо здесь</summary>
                 <form method="post" action="{% url 'teacher_assignment_quick_edit' assignment.pk %}" enctype="multipart/form-data" style="margin-top:12px;display:flex;flex-direction:column;gap:10px">
                     {% csrf_token %}
                     <input type="hidden" name="next" value="{% url 'teacher_topic_board' topic.pk %}#assignment-{{ assignment.pk }}">
-                    <div class="form-field">
-                        <label>Название</label>
-                        <input type="text" name="title" value="{{ assignment.title }}" maxlength="200" style="width:100%">
-                    </div>
-                    <div class="form-field">
-                        <label>Описание / Условия</label>
-                        <textarea name="description" rows="4" style="width:100%;font-size:13px">{{ assignment.description }}</textarea>
-                    </div>
-                    <div class="form-grid">
-                        <div class="form-field">
-                            <label>Статус</label>
-                            <select name="status" style="width:100%">
-                                <option value="draft" {% if assignment.status == 'draft' %}selected{% endif %}>черновик</option>
-                                <option value="published" {% if assignment.status == 'published' %}selected{% endif %}>опубликовано</option>
-                            </select>
-                        </div>
-                        <div class="form-field">
-                            <label>Порядок</label>
-                            <input type="number" name="order" value="{{ assignment.order }}" style="width:100%">
-                        </div>
-                    </div>
-                    <div class="form-grid">
-                        <div class="form-field">
-                            <label>Основной файл (заменит)</label>
-                            <input type="file" name="material_file">
-                            <label style="font-weight:500;font-size:12px;margin-top:4px;display:flex;gap:4px;align-items:center"><input type="checkbox" name="material_file-clear"> Очистить основной файл</label>
-                        </div>
-                        <div class="form-field">
-                            <label>Добавить вложения (несколько)</label>
-                            <input type="file" name="new_attachments" multiple>
-                            <p class="tiny muted" style="margin-top:4px">Поддерживается Ctrl+V скриншота в поле описания на странице полного редактора</p>
-                        </div>
-                    </div>
+                    {% include "lms/form_fields.html" with form=assignment.quick_form %}
+                    <label for="files-{{ assignment.pk }}">Добавить вложения</label>
+                    <input id="files-{{ assignment.pk }}" type="file" name="new_attachments" multiple>
+                    {% if assignment.question_forms %}
+                    <p class="alert">При сохранении правильных ответов автоматические результаты прошлых работ будут пересчитаны. Ручные оценки сохранятся.</p>
+                    {% for question_form in assignment.question_forms %}
+                    <fieldset><legend>Пункт {{ forloop.counter }} — вопрос и правильные ответы</legend>
+                        {% include "lms/form_fields.html" with form=question_form %}
+                    </fieldset>
+                    {% endfor %}
+                    {% endif %}
                     {% if assignment.attachments.exists %}
                     <div class="form-field">
                         <label>Удалить вложения</label>
@@ -214,7 +155,8 @@
                     </div>
                     {% endif %}
                     <div class="row row-tight">
-                        <button class="btn btn-sm" type="submit">{% icon "save" %}Сохранить быстро</button>
+                        <button class="btn btn-sm" type="submit">{% icon "save" %}Сохранить</button>
+                        <button class="btn btn-ghost btn-sm" type="button" data-cancel-editor>Отмена</button>
                         <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_form' assignment.pk %}?from_topic=1">Полный редактор</a>
                     </div>
                 </form>
@@ -240,7 +182,18 @@
 (function(){
   const board = document.querySelector('[data-topic-board]');
   if(!board) return;
-  // автофокус после сохранения — прокрутка к якорю уже работает через #assignment-xxx
+  board.addEventListener('click', function(event){
+    const opener = event.target.closest('[data-open-editor]');
+    if(opener){
+      event.preventDefault();
+      const editor = document.getElementById(opener.dataset.openEditor);
+      editor.open = true;
+      editor.scrollIntoView({block:'start'});
+      editor.querySelector('input:not([type=hidden]), textarea')?.focus();
+    }
+    const cancel = event.target.closest('[data-cancel-editor]');
+    if(cancel){ cancel.closest('form').reset(); cancel.closest('details').open = false; }
+  });
 })();
 </script>
 {% endblock %}

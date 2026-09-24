@@ -18,6 +18,7 @@
         <section class="card">
             <h1 class="card-title">Изменить вопрос</h1>
             <p class="tiny muted">{{ assignment.title }} · {{ assignment.topic.block.name }} · {{ assignment.topic.title }}</p>
+            <p class="alert">При сохранении правильных ответов автоматические результаты прошлых работ будут пересчитаны. Ручные оценки сохранятся.</p>
             <form method="post" novalidate>
                 {% csrf_token %}
                 {% include "lms/form_fields.html" %}

@@ -921,3 +921,53 @@ def _card_set(key, title, subtitle, cards, student, now, assignment=None):
             else reverse("trainer_session", args=[assignment.pk])
         ),
     }
+
+
+@transaction.atomic
+def regrade_assignment(assignment):
+    """Recalculate automatic marks without rewriting submitted answers/manual grades."""
+    questions = {q.pk: q for q in assignment.questions.prefetch_related("choices")}
+    for response in QuestionResponse.objects.select_for_update().filter(assignment=assignment):
+        question = questions.get(response.question_id)
+        if question is None or question.is_manual or not response.tries:
+            continue
+        tries = []
+        for entry in response.tries:
+            result = score_question(question, entry.get("given"))
+            tries.append({**entry, **result})
+        last = tries[-1]
+        response.tries = tries
+        response.points = last["points"]
+        if last["correct"]:
+            response.state = QuestionResponse.State.CORRECT
+        elif response.submission_id or len(tries) >= assignment.max_tries:
+            response.state = QuestionResponse.State.FAILED
+        else:
+            response.state = QuestionResponse.State.OPEN
+        response.save(update_fields=["tries", "points", "state", "updated_at"])
+
+    for attempt in QuizAttempt.objects.select_for_update().filter(
+        submission__assignment=assignment
+    ):
+        details = dict(attempt.answers)
+        responses = {r.question_id: r for r in attempt.submission.question_responses.all()}
+        for key, detail in details.items():
+            question = questions.get(int(key))
+            if question is None or question.is_manual:
+                continue
+            if question.pk in responses:
+                details[key] = response_details(question, responses[question.pk])
+            else:
+                details[key] = {**detail, **score_question(question, detail.get("given"))}
+        attempt.answers = details
+        attempt.score = sum(d.get("points", 0) for d in details.values() if not d.get("manual"))
+        attempt.correct_count = sum(
+            bool(d.get("correct")) for d in details.values() if not d.get("manual")
+        )
+        # Historical maxima and manually reviewed totals remain snapshots.
+        attempt.score = min(attempt.score, attempt.max_score)
+        attempt.save(update_fields=["answers", "score", "correct_count"])
+        Feedback.objects.filter(submission_id=attempt.submission_id, teacher__isnull=True).update(
+            grade=attempt.score,
+            comment=f"Автопроверка после изменения ключа: {attempt.correct_count} из {attempt.total_count} верно.",
+        )

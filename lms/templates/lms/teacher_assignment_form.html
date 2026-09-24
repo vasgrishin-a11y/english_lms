@@ -210,7 +210,7 @@
                             {% for att in assignment.attachments.all %}
                             <div class="row row-tight" style="gap:8px;align-items:center;background:var(--surface);border:1px solid var(--border-subtle);border-radius:8px;padding:8px 12px">
                                 {% if att.file.name|media_kind == 'image' %}<img src="{% url 'media_preview' att.file.name %}" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:6px">{% endif %}
-                                <a href="{{ att.file.url }}" target="_blank" style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ att.file.name|slice:"-40:" }}</a>
+                                <a href="{% url 'private_file' att.file.name %}" target="_blank" style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ att.file.name|slice:"-40:" }}</a>
                                 <label style="display:flex;align-items:center;gap:4px;margin:0;font-weight:500;font-size:12px"><input type="checkbox" name="delete_attachments" value="{{ att.pk }}"> Удалить</label>
                             </div>
                             {% endfor %}
