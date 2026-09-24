@@ -964,6 +964,48 @@ def _flat_presets(groups):
     return [item for group in groups for item in group["items"]]
 
 
+def _copy_topics_into_block(request, block, ids):
+    """Скопировать темы ``ids`` из других классов в ``block``; вернуть число копий.
+
+    Ошибки выбора (пусто, слишком много, список устарел) сообщаются через
+    ``messages`` — вызывающему остаётся только решить, куда перенаправить.
+    """
+    if not ids:
+        messages.error(request, "Выберите хотя бы одну тему.")
+        return 0
+    if len(ids) > 100 or any(not str(value).isdigit() for value in ids):
+        messages.error(request, "Выберите не более 100 тем из списка.")
+        return 0
+    ids = set(map(int, ids))
+    with transaction.atomic():
+        Block.objects.select_for_update().get(pk=block.pk)
+        sources = list(
+            Topic.objects.filter(pk__in=ids, is_active=True)
+            .exclude(block=block)
+            .select_related("block")
+            .order_by("block__order", "order", "pk")
+        )
+        if len(sources) != len(ids):
+            messages.error(request, "Список тем изменился. Выберите темы из других классов заново.")
+            return 0
+        for source in sources:
+            _clone_topic_to_block(source, block)
+    messages.success(request, f"Скопировано тем: {len(sources)}. Задания сохранены как черновики.")
+    return len(sources)
+
+
+def _copyable_topics(block=None):
+    """Активные темы других классов — кандидаты на копирование в ``block``."""
+    qs = Topic.objects.filter(is_active=True)
+    if block is not None:
+        qs = qs.exclude(block=block)
+    return (
+        qs.select_related("block", "chapter")
+        .annotate(assignment_count=Count("assignments"))
+        .order_by("block__order", "chapter__order", "order", "title")[:100]
+    )
+
+
 @teacher_required
 @require_http_methods(["GET", "POST"])
 def block_form(request, pk=None):
@@ -976,49 +1018,20 @@ def block_form(request, pk=None):
             messages.error(request, "Сначала сохраните класс, затем копируйте темы.")
             return redirect("teacher_block_new")
         ids = request.POST.getlist("copy_topic_ids") or request.POST.getlist("copy_topic_id")
-        if not ids:
-            messages.error(request, "Выберите хотя бы одну тему.")
-        elif len(ids) > 100 or any(not value.isdigit() for value in ids):
-            messages.error(request, "Выберите не более 100 тем из списка.")
-        else:
-            ids = set(map(int, ids))
-            with transaction.atomic():
-                Block.objects.select_for_update().get(pk=block.pk)
-                sources = list(
-                    Topic.objects.filter(pk__in=ids, is_active=True)
-                    .exclude(block=block)
-                    .select_related("block")
-                    .order_by("block__order", "order", "pk")
-                )
-                if len(sources) != len(ids):
-                    messages.error(
-                        request, "Список тем изменился. Выберите темы из других классов заново."
-                    )
-                else:
-                    for source in sources:
-                        _clone_topic_to_block(source, block)
-                    messages.success(
-                        request,
-                        f"Скопировано тем: {len(sources)}. Задания сохранены как черновики.",
-                    )
+        _copy_topics_into_block(request, block, ids)
         return redirect("teacher_block_edit", pk=block.pk)
     form = BlockForm(request.POST or None, instance=block)
     if request.method == "POST" and form.is_valid():
         instance = form.save()
         messages.success(request, f"Класс сохранён: {instance.name}")
+        # При создании класса темы других классов выбираются сразу в той же форме:
+        # не нужно сохранять пустой класс и возвращаться за копированием.
+        if block is None and request.POST.getlist("copy_topic_ids"):
+            _copy_topics_into_block(request, instance, request.POST.getlist("copy_topic_ids"))
         return redirect("teacher_curriculum")
     groups = block_suggestion_groups()
-    # Темы из других классов для быстрого копирования
-    other_topics = []
-    all_blocks = []
+    other_topics = _copyable_topics(block)
     if block:
-        other_topics = (
-            Topic.objects.filter(is_active=True)
-            .exclude(block=block)
-            .select_related("block", "chapter")
-            .annotate(assignment_count=Count("assignments"))
-            .order_by("block__order", "chapter__order", "order", "title")[:100]
-        )
         all_blocks = Block.objects.exclude(pk=block.pk).order_by("order", "name")
     else:
         all_blocks = Block.objects.order_by("order", "name")
@@ -1203,8 +1216,6 @@ def topic_delete(request, pk):
     return _delete_cascade(request, topic, target, "тему", topic_tree_stats(topic))
 
 
-@teacher_required
-@require_POST
 def _target_chapter(request, block):
     """Глава-приёмник из запроса (``chapter``/``target_chapter``) — только из ``block``."""
     raw = request.POST.get("target_chapter") or request.POST.get("chapter") or ""

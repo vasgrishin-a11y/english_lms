@@ -63,6 +63,50 @@
     });
   }
 
+  function dangerZones() {
+    // Панели подтверждения удаления (<details class="danger-zone">): открыта
+    // только одна, закрываются кликом мимо и по Escape и не уезжают за край экрана.
+    function closeAll(except) {
+      document.querySelectorAll("details.danger-zone[open]").forEach(function (d) {
+        if (d !== except) d.removeAttribute("open");
+      });
+    }
+    function fit(details) {
+      var panel = details.querySelector(".danger-panel");
+      if (!panel) return;
+      panel.style.left = "";
+      panel.style.right = "";
+      var rect = panel.getBoundingClientRect();
+      var margin = 8;
+      var width = document.documentElement.clientWidth;
+      if (rect.left < margin) {
+        panel.style.right = "auto";
+        panel.style.left = Math.round(margin - details.getBoundingClientRect().left) + "px";
+      } else if (rect.right > width - margin) {
+        panel.style.left = "auto";
+        panel.style.right = Math.round(margin - (width - details.getBoundingClientRect().right)) + "px";
+      }
+    }
+    document.addEventListener(
+      "toggle",
+      function (event) {
+        var details = event.target;
+        if (!details || !details.classList || !details.classList.contains("danger-zone")) return;
+        if (!details.open) return;
+        closeAll(details);
+        fit(details);
+      },
+      true
+    );
+    document.addEventListener("click", function (event) {
+      var inside = event.target.closest ? event.target.closest("details.danger-zone") : null;
+      closeAll(inside);
+    });
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") closeAll(null);
+    });
+  }
+
   function draftAutosave() {
     var form = document.querySelector("form[data-draft-url]");
     if (!form) return;
@@ -1984,6 +2028,7 @@
   ready(function () {
     autohideAlerts();
     confirmForms();
+    dangerZones();
     draftAutosave();
     flashcards();
     audioRecorder();

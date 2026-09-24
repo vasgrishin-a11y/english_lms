@@ -1,0 +1,20 @@
+{% load lms_tags %}
+{# Список тем других классов с чекбоксами: используется и при создании класса (внутри основной формы), и при редактировании (отдельная форма копирования). #}
+<p><label><input type="checkbox" data-select-all-topics> Выбрать все темы в списке</label></p>
+<div class="rows" style="max-height:420px;overflow:auto">
+    {% for t in other_topics %}
+    <div class="row-item">
+        <span class="row-main">
+            <label class="row-title"><input type="checkbox" name="copy_topic_ids" value="{{ t.pk }}"> {{ t.title }}</label>
+            <span class="row-meta">
+                <span>{{ t.block.name }} · {{ t.chapter.title }}</span>
+                <span>{{ t.assignment_count }} {{ t.assignment_count|pluralize_ru:"задание,задания,заданий" }}</span>
+            </span>
+        </span>
+        <span class="row-side">
+            <a class="btn btn-ghost btn-sm" href="{% url 'teacher_topic_board' t.pk %}" title="Открыть исходную тему" target="_blank" rel="noopener">{% icon "eye" "icon icon-sm" %}</a>
+        </span>
+    </div>
+    {% endfor %}
+</div>
+<p class="help-text" data-copy-selection aria-live="polite">Выберите темы для копирования.</p>
