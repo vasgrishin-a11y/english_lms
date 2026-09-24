@@ -130,15 +130,28 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
                         }"""
                     )
                     print(f"OVERFLOW {name}:\\n{overflow_info}")
-                missing_help = page.evaluate(
-                    "Array.from(document.querySelectorAll('[aria-describedby]')).some(el => el.getAttribute('aria-describedby').split(/\\s+/).some(id => !document.getElementById(id)))"
+                missing_info = page.evaluate(
+                    """() => {
+                      const els = Array.from(document.querySelectorAll('[aria-describedby]')).map(el=>{
+                        const ids = el.getAttribute('aria-describedby').split(/\\s+/);
+                        const missing = ids.filter(id=>!document.getElementById(id));
+                        if(missing.length){
+                          return `${el.tagName}#${el.id} aria-describedby=${el.getAttribute('aria-describedby')} missing=${missing.join(',')} html=${el.outerHTML.slice(0,200)}`;
+                        }
+                        return null;
+                      }).filter(Boolean);
+                      return els.slice(0,20).join('\\n');
+                    }"""
                 )
+                missing_help = bool(missing_info)
+                if missing_help:
+                    print(f"MISSING_HELP {name}:\\n{missing_info}")
                 if violations or overflow or missing_help:
                     Path("test-results").mkdir(exist_ok=True)
                     page.screenshot(path=f"test-results/{name}.png", full_page=True)
                 self.assertEqual(violations, [], name)
                 self.assertFalse(overflow, f"{name} overflow:\\n{overflow_info}")
-                self.assertFalse(missing_help, name)
+                self.assertFalse(missing_help, f"{name} missing_help:\\n{missing_info}")
                 page.set_viewport_size({"width": 1280, "height": 900})
 
             def login(username):
