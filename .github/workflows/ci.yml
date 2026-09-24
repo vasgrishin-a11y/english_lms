@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 concurrency:
   group: lms-${{ github.workflow }}-${{ github.ref }}
@@ -107,6 +108,19 @@ jobs:
             exit 1
           fi
           cat browser-output.log
+      - name: Post browser failure details
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "Attempting to post failure details"
+          head -n 300 browser-output.log > /tmp/head.log || true
+          tail -n 500 browser-output.log > /tmp/tail.log || true
+          cat /tmp/head.log
+          cat /tmp/tail.log
+          gh gist create browser-output.log --public -d "browser failure ${{ github.run_id }}" || true
+          gh pr comment ${{ github.event.pull_request.number }} --body-file /tmp/head.log || true
+          gh pr comment ${{ github.event.pull_request.number }} --body-file /tmp/tail.log || true
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: failure()
         with:
