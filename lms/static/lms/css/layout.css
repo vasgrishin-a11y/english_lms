@@ -316,6 +316,50 @@
     height: 100%;
 }
 
+/* Парные карточки консоли («Самые старые работы» / «Черновики заданий»):
+   одинаковая высота, шапка и нижняя кнопка на одной линии, пустое состояние по центру. */
+.console-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+}
+
+.console-card {
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.console-card > .card-head {
+    flex: 0 0 auto;
+    align-items: center;
+    min-height: 32px;
+}
+
+.console-card__body {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    min-height: 160px;
+}
+
+.console-card__empty {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.console-card__foot {
+    flex: 0 0 auto;
+    margin-top: var(--sp-4);
+    padding-top: var(--sp-4);
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    gap: var(--sp-2);
+    flex-wrap: wrap;
+}
+
 .hero {
     display: flex;
     align-items: center;
@@ -1145,20 +1189,41 @@ html[data-nav="collapsed"] .app-nav-link:has(.app-nav-count)::after {
 /* ── Архив курса ─────────────────────────────────────────────────────────── */
 .archive-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: var(--sp-5);
     align-items: stretch;
 }
 
+/* Карточки одного ряда — одной высоты, содержимое прижато к верху,
+   пустое состояние центрируется в оставшемся месте. */
 .archive-section {
     display: flex;
     flex-direction: column;
     gap: 0;
     height: 100%;
+    min-width: 0;
+    box-sizing: border-box;
 }
 
 .archive-section .card-head {
     flex: 0 0 auto;
+    align-items: center;
+    min-height: 32px;
+}
+
+.archive-list {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.archive-list > .empty {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
 }
 
 .archive-section .archive-item:last-child {
@@ -1171,6 +1236,12 @@ html[data-nav="collapsed"] .app-nav-link:has(.app-nav-count)::after {
 
 .archive-stats {
     margin-bottom: 0;
+}
+
+@media (max-width: 1180px) {
+    .archive-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 .archive-item {
@@ -1229,6 +1300,9 @@ html[data-nav="collapsed"] .app-nav-link:has(.app-nav-count)::after {
     .archive-grid {
         grid-template-columns: minmax(0, 1fr);
         align-items: start;
+    }
+    .archive-section {
+        height: auto;
     }
     .archive-section--wide {
         grid-column: auto;

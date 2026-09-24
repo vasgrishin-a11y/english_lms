@@ -47,6 +47,10 @@ else:
     assert GRADE <= 40
     from lms.models import Submission as NewSubmission
     from lms.models import Feedback as NewFeedback
+    from lms.models import Topic as NewTopic, Chapter as NewChapter
+    migrated_topic = NewTopic.objects.get(pk=topic.pk)
+    assert migrated_topic.chapter.slug == NewChapter.DEFAULT_SLUG and migrated_topic.chapter.block_id == block.pk
+    assert migrated_topic.chapter.title == NewChapter.DEFAULT_TITLE
     current = NewSubmission.objects.get(pk=attempt.pk)
     assert current.version == 1 and current.max_points_snapshot == 40
     assert current.text_answer == 'Preserve this answer' and current.file_answer.name == 'submissions/legacy.txt'
@@ -74,3 +78,54 @@ else:
         result = self.run_upgrade(50)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("invalid-grade-preserved-and-upgrade-rejected", result.stdout)
+
+
+class AudienceMigrationTests(SimpleTestCase):
+    """0012: одиночная «Группа» задания переезжает в множественные «Группы» без потерь."""
+
+    def test_assignment_group_is_copied_into_groups(self):
+        with tempfile.TemporaryDirectory(prefix="lms-migration-") as directory:
+            env = os.environ.copy()
+            env.update(
+                {
+                    "DJANGO_SETTINGS_MODULE": "core.settings",
+                    "DJANGO_DEBUG": "True",
+                    "DATABASE_URL": f"sqlite:///{directory}/audience.sqlite3",
+                    "DJANGO_MEDIA_ROOT": directory,
+                }
+            )
+            script = """
+import django
+django.setup()
+from django.core.management import call_command
+from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
+call_command('migrate', 'lms', '0011', verbosity=0)
+apps = MigrationExecutor(connection).loader.project_state([('lms', '0011_chapter_and_issued_password')]).apps
+Block, Chapter, Topic, Assignment, Group = [apps.get_model('lms', n) for n in ['Block', 'Chapter', 'Topic', 'Assignment', 'Group']]
+block = Block.objects.create(name='OGE', slug='oge')
+chapter = Chapter.objects.create(block=block, title='General', slug='general')
+topic = Topic.objects.create(block=block, chapter=chapter, title='Topic', slug='topic')
+group = Group.objects.create(name='OGE-A', slug='oge-a')
+restricted = Assignment.objects.create(topic=topic, title='Restricted', description='x', max_points=10, group=group)
+open_task = Assignment.objects.create(topic=topic, title='Open', description='x', max_points=10)
+call_command('migrate', 'lms', verbosity=0)
+from lms.models import Assignment as NewAssignment, Block as NewBlock
+new_restricted = NewAssignment.objects.get(pk=restricted.pk)
+assert list(new_restricted.groups.values_list('slug', flat=True)) == ['oge-a']
+assert not NewAssignment.objects.get(pk=open_task.pk).groups.exists()
+assert not NewBlock.objects.get(pk=block.pk).groups.exists()
+assert not hasattr(new_restricted, 'group_id')
+print('assignment-group-migrated')
+"""
+            result = subprocess.run(
+                [sys.executable, "-c", script],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                capture_output=True,
+                timeout=60,
+                check=False,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("assignment-group-migrated", result.stdout)

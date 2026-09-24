@@ -11,6 +11,7 @@ from .models import (
     Assignment,
     Block,
     CardReview,
+    Chapter,
     Choice,
     CommentSnippet,
     Feedback,
@@ -84,6 +85,7 @@ class BlockAdmin(admin.ModelAdmin):
     prepopulated_fields = {"slug": ("name",)}
     search_fields = ("name", "slug", "description")
     list_editable = ("order", "is_active")
+    filter_horizontal = ("groups", "students")
 
     def get_queryset(self, request):
         return super().get_queryset(request).annotate(_topics_count=Count("topics"))
@@ -93,20 +95,44 @@ class BlockAdmin(admin.ModelAdmin):
         return obj._topics_count
 
 
-@admin.register(Topic)
-class TopicAdmin(admin.ModelAdmin):
-    list_display = ("title", "block", "slug", "order", "is_active", "assignments_count")
+@admin.register(Chapter)
+class ChapterAdmin(admin.ModelAdmin):
+    list_display = ("title", "block", "slug", "order", "is_active", "topics_count")
     prepopulated_fields = {"slug": ("title",)}
     autocomplete_fields = ("block",)
     search_fields = ("title", "description", "block__name")
     list_filter = ("block", "is_active")
     list_editable = ("order", "is_active")
+    filter_horizontal = ("groups", "students")
 
     def get_queryset(self, request):
         return (
             super()
             .get_queryset(request)
             .select_related("block")
+            .annotate(_topics_count=Count("topics"))
+        )
+
+    @admin.display(description="Тем", ordering="_topics_count")
+    def topics_count(self, obj):
+        return obj._topics_count
+
+
+@admin.register(Topic)
+class TopicAdmin(admin.ModelAdmin):
+    list_display = ("title", "block", "chapter", "slug", "order", "is_active", "assignments_count")
+    prepopulated_fields = {"slug": ("title",)}
+    autocomplete_fields = ("block", "chapter")
+    search_fields = ("title", "description", "block__name", "chapter__title")
+    list_filter = ("block", "chapter", "is_active")
+    list_editable = ("order", "is_active")
+    filter_horizontal = ("groups", "students")
+
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .select_related("block", "chapter")
             .annotate(_assignments_count=Count("assignments"))
         )
 
@@ -156,7 +182,7 @@ class AssignmentAdmin(admin.ModelAdmin):
         return (
             super()
             .get_queryset(request)
-            .select_related("topic__block")
+            .select_related("topic__block", "topic__chapter")
             .annotate(_submissions_count=Count("submissions"))
         )
 

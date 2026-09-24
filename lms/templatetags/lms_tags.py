@@ -141,6 +141,22 @@ def icon(name, css="icon", title=""):
 
 
 @register.filter
+def display_name(user):
+    """Имя для интерфейса учителя: «Имя Фамилия», а без них — логин."""
+    if user is None:
+        return ""
+    return (user.get_full_name() or user.username or "").strip()
+
+
+@register.filter
+def own_name(user):
+    """Как ученик видит себя: только имя (без фамилии), а без имени — логин."""
+    if user is None:
+        return ""
+    return (getattr(user, "first_name", "") or user.username or "").strip()
+
+
+@register.filter
 def initials(user):
     name = (user.get_full_name() or user.username or "?").strip()
     parts = [part for part in name.replace(".", " ").split() if part]

@@ -1639,7 +1639,8 @@
       });
     });
 
-    // Перетаскивание: задания — внутри темы и между темами, темы — внутри блока и между классами (копия)
+    // Перетаскивание: задания — внутри темы и между темами; темы — внутри главы,
+    // между главами класса (перенос) и между классами (копия); главы — внутри класса.
     var drag = null;
 
     function rowOf(node) {
@@ -1650,12 +1651,16 @@
       return node && node.closest ? node.closest("[data-topic-panel]") : null;
     }
 
+    function chapterOf(node) {
+      return node && node.closest ? node.closest("[data-chapter-panel]") : null;
+    }
+
     function blockOf(node) {
-      return node && node.closest ? node.closest("[data-block-id]") : null;
+      return node && node.closest ? node.closest("[data-block-drop]") : null;
     }
 
     function topicsContainerOf(node) {
-      return node && node.closest ? node.closest("[data-block-topics]") : null;
+      return node && node.closest ? node.closest("[data-chapter-topics]") : null;
     }
 
     function clearMarkers() {
@@ -1672,10 +1677,15 @@
       return event.clientY - rect.top >= rect.height / 2;
     }
 
+    function topicTitle(el) {
+      var link = el.querySelector("a");
+      return link ? link.textContent.trim() : "тема";
+    }
+
     Array.prototype.forEach.call(boardEl.querySelectorAll("[data-dnd-handle]"), function (handle) {
       handle.addEventListener("dragstart", function (event) {
         var kind = handle.getAttribute("data-dnd-handle");
-        var el = kind === "assignment" ? rowOf(handle) : panelOf(handle);
+        var el = kind === "assignment" ? rowOf(handle) : kind === "chapter" ? chapterOf(handle) : panelOf(handle);
         if (!el || !el.getAttribute("data-move-url")) {
           event.preventDefault();
           return;
@@ -1683,7 +1693,8 @@
         drag = {
           kind: kind,
           el: el,
-          blockId: handle.getAttribute("data-block-id") || (el.getAttribute && el.getAttribute("data-block-id")) || "",
+          blockId: handle.getAttribute("data-block-id") || el.getAttribute("data-block-id") || "",
+          chapterId: handle.getAttribute("data-chapter-id") || el.getAttribute("data-chapter-id") || "",
           topicId: handle.getAttribute("data-topic-id") || el.getAttribute("data-topic-panel") || ""
         };
         el.classList.add("is-dragging");
@@ -1701,6 +1712,52 @@
       });
     });
 
+    // Куда упадёт тема: панель-ориентир, контейнер главы, пустой класс.
+    function topicTarget(event) {
+      var targetPanel = panelOf(event.target);
+      var container = topicsContainerOf(event.target);
+      var chapter = chapterOf(event.target);
+      var section = blockOf(event.target);
+      if (targetPanel && targetPanel !== drag.el) {
+        return {
+          panel: targetPanel,
+          container: targetPanel.parentNode,
+          blockId: targetPanel.getAttribute("data-block-id"),
+          chapterId: targetPanel.getAttribute("data-chapter-id"),
+          before: isBelowMiddle(event, targetPanel) ? targetPanel.nextElementSibling : targetPanel
+        };
+      }
+      if (container) {
+        return {
+          panel: null,
+          container: container,
+          blockId: container.getAttribute("data-block-topics"),
+          chapterId: container.getAttribute("data-chapter-topics"),
+          before: null
+        };
+      }
+      if (chapter) {
+        var list = chapter.querySelector("[data-chapter-topics]");
+        return {
+          panel: null,
+          container: list,
+          blockId: chapter.getAttribute("data-block-id"),
+          chapterId: chapter.getAttribute("data-chapter-panel"),
+          before: null
+        };
+      }
+      if (section) {
+        return {
+          panel: null,
+          container: null,
+          blockId: section.getAttribute("data-block-id"),
+          chapterId: "",
+          before: null
+        };
+      }
+      return null;
+    }
+
     boardEl.addEventListener("dragover", function (event) {
       if (!drag) return;
       clearMarkers();
@@ -1712,33 +1769,29 @@
         if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
         if (row) row.classList.add(isBelowMiddle(event, row) ? "drop-below" : "drop-above");
         else if (panel) panel.classList.add("drop-block-active");
+        return;
+      }
+      if (drag.kind === "chapter") {
+        var targetChapter = chapterOf(event.target);
+        if (!targetChapter || targetChapter === drag.el) return;
+        if (targetChapter.getAttribute("data-block-id") !== drag.blockId) return;
+        event.preventDefault();
+        if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+        targetChapter.classList.add(isBelowMiddle(event, targetChapter) ? "drop-below" : "drop-above");
+        return;
+      }
+      var target = topicTarget(event);
+      if (!target) return;
+      event.preventDefault();
+      var crossBlock = target.blockId && drag.blockId && target.blockId !== drag.blockId;
+      if (event.dataTransfer) event.dataTransfer.dropEffect = crossBlock ? "copy" : "move";
+      if (target.panel) {
+        target.panel.classList.add(isBelowMiddle(event, target.panel) ? "drop-below" : "drop-above");
+      } else if (target.container) {
+        target.container.classList.add("drop-block-active");
       } else {
-        // topic: allow drop on any panel (even other block) and on block container
-        var targetPanel = panelOf(event.target);
-        var targetBlockContainer = topicsContainerOf(event.target);
-        var targetBlockSection = blockOf(event.target);
-        if (targetPanel && targetPanel !== drag.el) {
-          event.preventDefault();
-          if (event.dataTransfer) {
-            var srcBlock = drag.blockId;
-            var tgtBlock = targetPanel.getAttribute("data-block-id") || "";
-            event.dataTransfer.dropEffect = srcBlock && tgtBlock && srcBlock !== tgtBlock ? "copy" : "move";
-          }
-          targetPanel.classList.add(isBelowMiddle(event, targetPanel) ? "drop-below" : "drop-above");
-        } else if (targetBlockContainer) {
-          event.preventDefault();
-          if (event.dataTransfer) {
-            var srcB = drag.blockId;
-            var tgtB = targetBlockContainer.getAttribute("data-block-topics") || "";
-            event.dataTransfer.dropEffect = srcB && tgtB && srcB !== tgtB ? "copy" : "move";
-          }
-          targetBlockContainer.classList.add("drop-block-active");
-        } else if (targetBlockSection && targetBlockSection.hasAttribute("data-block-drop")) {
-          // drop on empty block section
-          event.preventDefault();
-          if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
-          targetBlockSection.classList.add("drop-block-active");
-        }
+        var section = blockOf(event.target);
+        if (section) section.classList.add("drop-block-active");
       }
     });
 
@@ -1776,72 +1829,154 @@
             window.alert(error.message || "Не удалось переместить задание");
             window.location.reload();
           });
-      } else {
-        // TOPIC drop — reorder within same block or copy to other block
-        var targetPanel = panelOf(event.target);
-        var targetContainer = topicsContainerOf(event.target);
-        var targetSection = blockOf(event.target);
-        var srcBlockId = drag.blockId;
-        var tgtBlockId = null;
-        var beforePanel = null;
-        var container = null;
+        return;
+      }
 
-        if (targetPanel) {
-          tgtBlockId = targetPanel.getAttribute("data-block-id");
-          container = targetPanel.parentNode;
-          beforePanel = isBelowMiddle(event, targetPanel) ? targetPanel.nextElementSibling : targetPanel;
-          if (beforePanel === drag.el && srcBlockId === tgtBlockId) return;
-        } else if (targetContainer) {
-          tgtBlockId = targetContainer.getAttribute("data-block-topics");
-          container = targetContainer;
-          beforePanel = null;
-        } else if (targetSection) {
-          tgtBlockId = targetSection.getAttribute("data-block-id");
-          container = targetSection.querySelector("[data-block-topics]") || targetSection;
-          beforePanel = null;
-        } else {
+      if (drag.kind === "chapter") {
+        // Порядок глав внутри класса.
+        var targetChapter = chapterOf(event.target);
+        if (!targetChapter || targetChapter === drag.el) return;
+        if (targetChapter.getAttribute("data-block-id") !== drag.blockId) return;
+        event.preventDefault();
+        var beforeChapter = isBelowMiddle(event, targetChapter) ? targetChapter.nextElementSibling : targetChapter;
+        if (beforeChapter === drag.el) return;
+        var chapterContainer = targetChapter.parentNode;
+        if (!beforeChapter && chapterContainer.lastElementChild === drag.el) return;
+        var chapterParams = new FormData();
+        chapterParams.set(
+          "before",
+          beforeChapter && beforeChapter.getAttribute("data-chapter-panel")
+            ? beforeChapter.getAttribute("data-chapter-panel")
+            : ""
+        );
+        chapterContainer.insertBefore(drag.el, beforeChapter);
+        postForm(drag.el.getAttribute("data-move-url"), chapterParams).catch(function (error) {
+          window.alert(error.message || "Не удалось переместить главу");
+          window.location.reload();
+        });
+        return;
+      }
+
+      // TOPIC drop — порядок в главе, перенос в другую главу класса, копия в другой класс.
+      var target = topicTarget(event);
+      if (!target) return;
+      event.preventDefault();
+      var beforeId = target.before && target.before.getAttribute("data-topic-panel")
+        ? target.before.getAttribute("data-topic-panel")
+        : "";
+
+      if (target.blockId && drag.blockId && target.blockId !== drag.blockId) {
+        // COPY between classes
+        if (!window.confirm("Скопировать тему «" + topicTitle(drag.el) + "» в другой класс? Оригинал сохранится, копия будет с черновиками заданий.")) {
           return;
         }
-
-        event.preventDefault();
-
-        if (srcBlockId && tgtBlockId && srcBlockId !== tgtBlockId) {
-          // COPY between classes
-          if (!window.confirm("Скопировать тему «" + (drag.el.querySelector("a") ? drag.el.querySelector("a").textContent.trim() : "тема") + "» в другой класс? Оригинал сохранится, копия будет с черновиками заданий.")) {
-            return;
-          }
-          var copyParams = new FormData();
-          copyParams.set("target_block", tgtBlockId);
-          if (beforePanel) copyParams.set("before", beforePanel.getAttribute("data-topic-panel") || "");
-          // visual feedback
-          drag.el.style.opacity = "0.5";
-          postForm(drag.el.getAttribute("data-move-url"), copyParams)
-            .then(function (data) {
-              window.location.reload();
-            })
-            .catch(function (error) {
-              window.alert(error.message || "Не удалось скопировать тему");
-              window.location.reload();
-            });
-        } else {
-          // MOVE within same block
-          if (!targetPanel) return;
-          if (!container) return;
-          if (beforePanel === drag.el) return;
-          if (!beforePanel && container.lastElementChild === drag.el) return;
-          var topicParams = new FormData();
-          topicParams.set(
-            "before",
-            beforePanel && beforePanel.getAttribute("data-topic-panel")
-              ? beforePanel.getAttribute("data-topic-panel")
-              : ""
-          );
-          container.insertBefore(drag.el, beforePanel);
-          postForm(drag.el.getAttribute("data-move-url"), topicParams).catch(function (error) {
-            window.alert(error.message || "Не удалось переместить тему");
+        var copyParams = new FormData();
+        copyParams.set("target_block", target.blockId);
+        if (target.chapterId) copyParams.set("target_chapter", target.chapterId);
+        if (beforeId) copyParams.set("before", beforeId);
+        drag.el.style.opacity = "0.5";
+        postForm(drag.el.getAttribute("data-move-url"), copyParams)
+          .then(function () {
+            window.location.reload();
+          })
+          .catch(function (error) {
+            window.alert(error.message || "Не удалось скопировать тему");
             window.location.reload();
           });
+        return;
+      }
+
+      // MOVE within the same class (same or another chapter)
+      if (!target.container) return;
+      if (target.before === drag.el) return;
+      var sameChapter = target.chapterId === drag.chapterId;
+      if (sameChapter && !target.before && target.container.lastElementChild === drag.el) return;
+      var topicParams = new FormData();
+      topicParams.set("before", beforeId);
+      if (target.chapterId) topicParams.set("target_chapter", target.chapterId);
+      target.container.insertBefore(drag.el, target.before);
+      postForm(drag.el.getAttribute("data-move-url"), topicParams)
+        .then(function () {
+          if (!sameChapter) window.location.reload();
+        })
+        .catch(function (error) {
+          window.alert(error.message || "Не удалось переместить тему");
+          window.location.reload();
+        });
+    });
+  }
+
+  // Форма темы: список глав фильтруется по выбранному классу.
+  function chapterSelectFilter() {
+    var blockSelect = document.querySelector("select[data-block-select]");
+    var chapterSelect = document.querySelector("select[data-chapter-select]");
+    if (!blockSelect || !chapterSelect) return;
+    function apply() {
+      var blockId = blockSelect.value;
+      var current = chapterSelect.value;
+      var keepCurrent = false;
+      Array.prototype.forEach.call(chapterSelect.options, function (option) {
+        var owner = option.getAttribute("data-block");
+        if (!owner) {
+          option.hidden = false;
+          return;
         }
+        var visible = !blockId || owner === blockId;
+        option.hidden = !visible;
+        option.disabled = !visible;
+        if (visible && option.value === current) keepCurrent = true;
+      });
+      if (!keepCurrent) chapterSelect.value = "";
+    }
+    blockSelect.addEventListener("change", apply);
+    apply();
+  }
+
+  // Скрытое значение с «глазом»: показать/скрыть и скопировать.
+  function secretFields() {
+    Array.prototype.forEach.call(document.querySelectorAll("[data-secret]"), function (box) {
+      var input = box.querySelector("[data-secret-input]");
+      var toggle = box.querySelector("[data-secret-toggle]");
+      var copy = box.querySelector("[data-secret-copy]");
+      if (!input) return;
+      if (toggle) {
+        toggle.addEventListener("click", function () {
+          var reveal = input.type === "password";
+          input.type = reveal ? "text" : "password";
+          toggle.setAttribute("aria-pressed", reveal ? "true" : "false");
+          var label = reveal ? "Скрыть пароль" : "Показать пароль";
+          toggle.setAttribute("title", label);
+          toggle.setAttribute("aria-label", label);
+          var use = toggle.querySelector("use");
+          if (use) use.setAttribute("href", reveal ? "#i-eye-off" : "#i-eye");
+        });
+      }
+      if (copy) {
+        copy.addEventListener("click", function () {
+          var value = input.value;
+          var done = function () {
+            var previous = copy.getAttribute("title");
+            copy.setAttribute("title", "Скопировано");
+            copy.classList.add("is-active");
+            window.setTimeout(function () {
+              copy.setAttribute("title", previous || "Скопировать");
+              copy.classList.remove("is-active");
+            }, 1500);
+          };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(value).then(done, function () {
+              input.type = "text";
+              input.select();
+              document.execCommand && document.execCommand("copy");
+              done();
+            });
+          } else {
+            input.type = "text";
+            input.select();
+            document.execCommand && document.execCommand("copy");
+            done();
+          }
+        });
       }
     });
   }
@@ -1868,6 +2003,8 @@
     assignmentTypeForm();
     typeahead();
     uploadDropzones();
+    chapterSelectFilter();
+    secretFields();
     descriptionEditors();
     curriculumBoard();
   });

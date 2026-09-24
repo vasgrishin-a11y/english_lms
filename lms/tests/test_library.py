@@ -228,7 +228,7 @@ class FormPresetsTests(LMSCase):
 
     def test_block_and_topic_forms_offer_suggestions(self):
         block_page = self.teacher_client.get(reverse("teacher_block_new")).content.decode()
-        self.assertIn("Готовые варианты блоков", block_page)
+        self.assertIn("Готовые варианты классов", block_page)
         self.assertIn('id="block-suggestions"', block_page)
         self.assertIn(BLOCK_SUGGESTIONS[0]["name"], block_page)
 

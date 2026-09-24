@@ -59,13 +59,14 @@
     <ol class="crumbs">
         <li><a href="{% url 'teacher_curriculum' %}">Классы</a></li>
         <li><span class="sep">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_curriculum' %}#block-{{ block.pk }}">{{ block.name }}</a></li>
+        <li><span class="sep">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_curriculum' %}#chapter-{{ topic.chapter_id }}">{{ topic.chapter.title }}</a></li>
         <li><span class="sep">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">{{ topic.title }}</span></li>
     </ol>
 </nav>
 
 <div class="classes-head" style="margin-bottom:12px">
     <div>
-        <h1 class="classes-title" style="font-size:22px">{{ topic.title }}</h1>
+        <h1 class="classes-title" style="font-size:22px">{{ topic.title }} {% url 'teacher_topic_edit' topic.pk as topic_edit_url %}{% include "lms/parts/audience_badge.html" with audience=topic_audience href=topic_edit_url %}</h1>
     </div>
     <div class="classes-toolbar">
         <span class="badge badge-turquoise">{{ assignments|length }} из {{ all_assignments|length }}</span>
@@ -84,6 +85,7 @@
                     <span class="badge badge-{{ assignment.status }}">{{ assignment.get_status_display }}</span>
                     <span class="badge badge-turquoise">{% icon assignment.assignment_type|type_icon "icon icon-sm" %}{{ assignment.get_assignment_type_display }}</span>
                     {% if assignment.deadline %}<span class="badge badge-outline">{{ assignment.deadline|date:"d.m.Y H:i" }}</span>{% endif %}
+                    {% url 'teacher_assignment_form' assignment.pk as assignment_edit_url %}{% include "lms/parts/audience_badge.html" with audience=assignment.audience href=assignment_edit_url %}
                 </div>
                 <div class="row row-tight" style="margin-top:6px;gap:6px;flex-wrap:wrap">
                     {% for skill in assignment.skills.all %}<span class="tag tag-skill">{{ skill.name }}</span>{% empty %}<span class="tiny muted">без навыка</span>{% endfor %}

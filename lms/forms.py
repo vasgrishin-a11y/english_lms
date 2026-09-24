@@ -10,6 +10,7 @@ from . import ai
 from .models import (
     Assignment,
     Block,
+    Chapter,
     Choice,
     CommentSnippet,
     Feedback,
@@ -231,30 +232,136 @@ class SluglessModelForm(forms.ModelForm):
         return None
 
 
-class BlockForm(SluglessModelForm):
+class AudienceFormMixin(forms.Form):
+    """Поля «Кому доступно» — одинаковые у класса, главы, темы и задания.
+
+    Пустые поля значат «как у родителя»: назначения по иерархии складываются,
+    а если нигде ничего не выбрано — материал видят все ученики.
+    """
+
+    groups = forms.ModelMultipleChoiceField(
+        queryset=Group.objects.none(),
+        required=False,
+        label="Группы",
+        help_text="Назначить целиком группам. Пусто — как у родителя.",
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "audience-list"}),
+    )
+    students = forms.ModelMultipleChoiceField(
+        queryset=User.objects.none(),
+        required=False,
+        label="Ученики персонально",
+        help_text="Открыть отдельным ученикам помимо групп.",
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "audience-list"}),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["groups"].queryset = Group.objects.filter(is_active=True).order_by("name")
+        self.fields["students"].queryset = User.objects.filter(
+            profile__role=Profile.Role.STUDENT, is_active=True
+        ).order_by("last_name", "first_name", "username")
+        self.fields["students"].label_from_instance = lambda user: (
+            user.get_full_name() or user.username
+        )
+
+
+class BlockForm(AudienceFormMixin, SluglessModelForm):
     slug_source = "name"
 
     class Meta:
         model = Block
-        fields = ["name", "cefr_level", "description", "order", "is_active"]
+        fields = ["name", "cefr_level", "description", "order", "is_active", "groups", "students"]
         widgets = {
             "name": forms.TextInput(attrs={"placeholder": "Например: A2 — Базовый курс"}),
             "description": forms.Textarea(attrs={"rows": 3}),
         }
 
 
-class TopicForm(SluglessModelForm):
+class ChapterForm(AudienceFormMixin, SluglessModelForm):
+    """Глава: тот же подход, что у темы, только на уровень выше."""
+
+    slug_source = "title"
+
+    class Meta:
+        model = Chapter
+        fields = ["block", "title", "description", "order", "is_active", "groups", "students"]
+        labels = {"block": "Класс"}
+        widgets = {
+            "title": forms.TextInput(attrs={"placeholder": "Например: Хобби"}),
+            "description": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["block"].queryset = Block.objects.order_by("order", "name")
+        self.fields["block"].empty_label = "— выберите класс —"
+
+    def slug_parent(self):
+        block = self.cleaned_data.get("block")
+        return {"block": block} if block else None
+
+
+class ChapterSelect(forms.Select):
+    """Select глав: каждая option знает свой класс, чтобы lms.js фильтровал список."""
+
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        option = super().create_option(name, value, label, selected, index, subindex, attrs)
+        instance = getattr(value, "instance", None)
+        if instance is not None:
+            option["attrs"]["data-block"] = str(instance.block_id)
+        return option
+
+
+class TopicForm(AudienceFormMixin, SluglessModelForm):
     slug_source = "title"
 
     class Meta:
         model = Topic
-        fields = ["block", "title", "description", "order", "is_active"]
+        fields = [
+            "block",
+            "chapter",
+            "title",
+            "description",
+            "order",
+            "is_active",
+            "groups",
+            "students",
+        ]
+        labels = {"block": "Класс", "chapter": "Глава"}
         widgets = {
             "title": forms.TextInput(
                 attrs={"placeholder": "Например: Present Simple vs Continuous"}
             ),
             "description": forms.Textarea(attrs={"rows": 3}),
+            "chapter": ChapterSelect,
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["block"].queryset = Block.objects.order_by("order", "name")
+        self.fields["block"].empty_label = "— выберите класс —"
+        chapter = self.fields["chapter"]
+        chapter.required = False
+        chapter.queryset = Chapter.objects.select_related("block").order_by(
+            "block__order", "block__name", "order", "title"
+        )
+        chapter.empty_label = "— без главы: попадёт в «Общее» —"
+        chapter.label_from_instance = lambda item: f"{item.block.name} → {item.title}"
+        chapter.help_text = (
+            "Список фильтруется по выбранному классу. Без главы тема попадёт в «Общее»."
+        )
+        # data-атрибуты для фильтрации списка глав по классу на клиенте
+        chapter.widget.attrs["data-chapter-select"] = "1"
+        self.fields["block"].widget.attrs["data-block-select"] = "1"
+
+    def clean(self):
+        cleaned = super().clean()
+        block, chapter = cleaned.get("block"), cleaned.get("chapter")
+        if block and chapter and chapter.block_id != block.pk:
+            self.add_error(
+                "chapter", "Глава относится к другому классу. Выберите главу этого класса."
+            )
+        return cleaned
 
     def slug_parent(self):
         block = self.cleaned_data.get("block")
@@ -334,12 +441,22 @@ class MaterialFileInput(forms.ClearableFileInput):
 
 
 class AssignmentForm(forms.ModelForm):
+    groups = forms.ModelMultipleChoiceField(
+        queryset=Group.objects.none(),
+        required=False,
+        label="Группы",
+        help_text=(
+            "Назначить задание целиком группам. Пусто — как у темы/главы/класса; "
+            "если нигде ничего не выбрано, задание видят все ученики."
+        ),
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "audience-list"}),
+    )
     assigned_students = forms.ModelMultipleChoiceField(
         queryset=None,
         required=False,
-        label="Персонально ученикам",
-        help_text="Если нужно открыть доступ конкретным ученикам помимо группы",
-        widget=forms.CheckboxSelectMultiple,
+        label="Ученики персонально",
+        help_text="Открыть задание отдельным ученикам помимо групп",
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "audience-list"}),
     )
     new_attachments = forms.FileField(
         required=False,
@@ -357,7 +474,7 @@ class AssignmentForm(forms.ModelForm):
         model = Assignment
         fields = [
             "topic",
-            "group",
+            "groups",
             "assigned_students",
             "title",
             "description",
@@ -391,7 +508,6 @@ class AssignmentForm(forms.ModelForm):
             "publish_at": _datetime_widget(),
             "assignment_type": forms.RadioSelect(attrs={"class": "type-picker"}),
             "skills": forms.CheckboxSelectMultiple(attrs={"class": "skill-chips"}),
-            "group": forms.Select(attrs={"class": "form-select"}),
             "status": forms.Select(attrs={"class": "form-select"}),
         }
 
@@ -442,18 +558,14 @@ class AssignmentForm(forms.ModelForm):
             ]
         )
 
-        # Улучшаем отображение поля группы
-        self.fields["group"].label = "Группа назначения"
-        self.fields[
-            "group"
-        ].help_text = "Если не выбрано, задание доступно всем ученикам (или только выбранным персонально ниже)."
-        self.fields["group"].empty_label = "Все ученики (общее задание)"
-        self.fields["group"].queryset = Group.objects.filter(is_active=True).order_by("name")
-
-        # Настройка персональных учеников
+        # Кому доступно: группы и персональные ученики
+        self.fields["groups"].queryset = Group.objects.filter(is_active=True).order_by("name")
         self.fields["assigned_students"].queryset = User.objects.filter(
             profile__role=Profile.Role.STUDENT, is_active=True
         ).order_by("last_name", "first_name", "username")
+        self.fields["assigned_students"].label_from_instance = lambda user: (
+            user.get_full_name() or user.username
+        )
 
         # Материалы можно прикрепить к заданию любого типа
         accept_str = ",".join(f".{ext}" for ext in sorted(ALLOWED_FILE_EXTENSIONS))
@@ -476,13 +588,15 @@ class AssignmentForm(forms.ModelForm):
             "Что нужно сделать, объём, критерии, пример ответа. Можно вставить картинку Ctrl+V — она добавится как вложение."
         )
 
-        # Улучшаем выпадающий список тем: показываем Блок - Тема
+        # Улучшаем выпадающий список тем: показываем Класс · Глава — Тема
         self.fields["topic"].queryset = (
-            Topic.objects.select_related("block")
+            Topic.objects.select_related("block", "chapter")
             .filter(is_active=True)
-            .order_by("block__order", "block__name", "order", "title")
+            .order_by("block__order", "block__name", "chapter__order", "order", "title")
         )
-        self.fields["topic"].label_from_instance = lambda obj: f"[{obj.block.name}] {obj.title}"
+        self.fields["topic"].label_from_instance = lambda obj: (
+            f"[{obj.block.name} · {obj.chapter.title}] {obj.title}"
+        )
         self.fields["topic"].empty_label = "Выберите тему курса"
 
         # Скрываем is_active из формы, так как это техническое поле
@@ -894,8 +1008,13 @@ class GroupForm(forms.ModelForm):
 class StudentCreateForm(forms.ModelForm):
     """Форма создания нового ученика с генерацией пароля или ручным вводом."""
 
-    first_name = forms.CharField(max_length=150, required=True, label="Имя")
-    last_name = forms.CharField(max_length=150, required=True, label="Фамилия")
+    first_name = forms.CharField(
+        max_length=150,
+        required=False,
+        label="Имя",
+        help_text="Необязательно. Без имени ученик видит у себя только логин.",
+    )
+    last_name = forms.CharField(max_length=150, required=False, label="Фамилия")
     email = forms.EmailField(required=False, label="Email")
     username = forms.CharField(max_length=150, required=True, label="Логин")
 
@@ -955,8 +1074,8 @@ class StudentCreateForm(forms.ModelForm):
 
         user = User(
             username=self.cleaned_data["username"],
-            first_name=self.cleaned_data["first_name"],
-            last_name=self.cleaned_data["last_name"],
+            first_name=(self.cleaned_data.get("first_name") or "").strip(),
+            last_name=(self.cleaned_data.get("last_name") or "").strip(),
             email=self.cleaned_data.get("email", ""),
         )
         user.set_password(raw_password)
@@ -966,6 +1085,8 @@ class StudentCreateForm(forms.ModelForm):
             profile.role = Profile.Role.STUDENT
             profile.telegram = self.cleaned_data.get("telegram", "")
             profile.comment = self.cleaned_data.get("comment", "")
+            # Учитель сможет увидеть выданный пароль снова на странице ученика.
+            profile.remember_password(raw_password, save=False)
             profile.save()
 
             if self.cleaned_data.get("group_ids"):
@@ -977,8 +1098,13 @@ class StudentCreateForm(forms.ModelForm):
 class StudentEditForm(forms.ModelForm):
     """Форма редактирования ученика."""
 
-    first_name = forms.CharField(max_length=150, required=True, label="Имя")
-    last_name = forms.CharField(max_length=150, required=True, label="Фамилия")
+    first_name = forms.CharField(
+        max_length=150,
+        required=False,
+        label="Имя",
+        help_text="Необязательно. Без имени ученик видит у себя только логин.",
+    )
+    last_name = forms.CharField(max_length=150, required=False, label="Фамилия")
     email = forms.EmailField(required=False, label="Email")
 
     group_ids = forms.ModelMultipleChoiceField(
@@ -1050,7 +1176,7 @@ class AIMaterialForm(forms.Form):
             attrs={
                 "rows": 3,
                 "placeholder": (
-                    "Например: сделай блок B1 по теме Travel, три темы, тест на Present "
+                    "Например: сделай класс B1 по теме Travel, три темы, тест на Present "
                     "Perfect и набор карточек"
                 ),
             }
@@ -1091,7 +1217,7 @@ class AIMaterialForm(forms.Form):
         queryset=Topic.objects.none(),
         required=False,
         label="Добавить в существующую тему",
-        empty_label="Нет — создать новые блоки и темы",
+        empty_label="Нет — создать новые классы и темы",
         help_text="Если выбрано, задания и карточки попадут прямо в эту тему.",
         widget=forms.Select(attrs={"class": "form-select"}),
     )
@@ -1099,12 +1225,12 @@ class AIMaterialForm(forms.Form):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["target_topic"].queryset = (
-            Topic.objects.select_related("block")
-            .filter(is_active=True, block__is_active=True)
-            .order_by("block__order", "block__name", "order", "title")
+            Topic.objects.select_related("block", "chapter")
+            .filter(is_active=True, chapter__is_active=True, block__is_active=True)
+            .order_by("block__order", "block__name", "chapter__order", "order", "title")
         )
         self.fields["target_topic"].label_from_instance = lambda obj: (
-            f"[{obj.block.name}] {obj.title}"
+            f"[{obj.block.name} → {obj.chapter.title}] {obj.title}"
         )
 
     def clean_upload(self):

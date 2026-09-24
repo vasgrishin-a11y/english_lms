@@ -1,0 +1,84 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}{% if form.instance.pk %}Глава: {{ form.instance.title }}{% else %}Новая глава{% endif %} — English LMS{% endblock %}
+{% block workspace_class %}workspace-plain{% endblock %}
+
+{% block content %}
+<nav aria-label="Хлебные крошки">
+    <ol class="crumbs">
+        <li><a href="{% url 'teacher_curriculum' %}">{% t "Карта курса" %}</a></li>
+        {% if form.instance.pk %}<li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_curriculum' %}#block-{{ form.instance.block_id }}">{{ form.instance.block.name }}</a></li>{% endif %}
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">{% if form.instance.pk %}{{ form.instance.title }}{% else %}Новая глава{% endif %}</span></li>
+    </ol>
+</nav>
+
+<div class="split">
+    <div class="split-main">
+        <section class="card">
+            <h1 class="card-title">{% if form.instance.pk %}Изменить главу{% else %}Новая глава{% endif %}</h1>
+            <form method="post" novalidate>
+                {% csrf_token %}
+                {% include "lms/form_fields.html" %}
+                {% include "lms/parts/audience_fields.html" with groups_field=form.groups students_field=form.students %}
+                <div class="form-actions">
+                    <button class="btn" type="submit">{% icon "save" %}{% t "Сохранить главу" %}</button>
+                    <a class="btn btn-secondary" href="{% url 'teacher_curriculum' %}{% if form.instance.pk %}#block-{{ form.instance.block_id }}{% endif %}">{% t "Отмена" %}</a>
+                    {% if form.instance.pk %}
+                        <a class="btn btn-ghost" href="{% url 'teacher_topic_new' %}?chapter={{ form.instance.pk }}">{% icon "plus" %}{% t "Добавить тему" %}</a>
+                    {% endif %}
+                </div>
+            </form>
+        </section>
+
+        {% if chapter %}
+        <section class="card" style="margin-top:16px">
+            <div class="card-head"><h2 class="card-title">{% icon "book" %}Темы в главе</h2></div>
+            {% with topics=chapter.topics.all %}
+                {% if topics %}
+                    <div class="rows">
+                    {% for topic in topics|dictsort:"order" %}
+                        <div class="row-item">
+                            <span class="row-main">
+                                <a class="row-title" href="{% url 'teacher_topic_board' topic.pk %}">{{ topic.title }}</a>
+                                <span class="row-meta"><span>{{ topic.assignments.count }} {{ topic.assignments.count|pluralize_ru:"задание,задания,заданий" }}</span>{% if not topic.is_active %}<span class="badge badge-outline">скрыта</span>{% endif %}</span>
+                            </span>
+                            <span class="row-side">
+                                <a class="btn btn-ghost btn-sm" href="{% url 'teacher_topic_edit' topic.pk %}" title="Изменить тему">{% icon "pencil" "icon icon-sm" %}</a>
+                            </span>
+                        </div>
+                    {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="muted small mb-0">В главе пока нет тем. <a href="{% url 'teacher_topic_new' %}?chapter={{ chapter.pk }}">Создать тему</a></p>
+                {% endif %}
+            {% endwith %}
+        </section>
+        {% endif %}
+    </div>
+    <div class="split-side">
+        <div class="card card-pad-sm">
+            <p class="rail-title">Подсказка</p>
+            <p class="small muted">Глава — раздел внутри класса для систематизации: например, класс «ОГЭ» → глава «Хобби» → тема «Reading» → задание «Ответь на вопросы».</p>
+            <p class="small muted">У главы нет своей страницы: она живёт на карте курса, группирует темы и архивируется/публикуется скопом.</p>
+            <p class="small muted mb-0">Темы без главы автоматически попадают в главу «Общее» своего класса.</p>
+        </div>
+        {% if chapter %}
+        <div class="card card-pad-sm">
+            <p class="rail-title">Действия</p>
+            <div class="col" style="gap:8px">
+                <form method="post" action="{% url 'teacher_chapter_assignments_publish' chapter.pk %}">
+                    {% csrf_token %}<input type="hidden" name="publish" value="1"><input type="hidden" name="next" value="{% url 'teacher_chapter_edit' chapter.pk %}"><button class="btn btn-ghost btn-sm btn-block" type="submit">{% icon "check" %}Опубликовать все задания</button>
+                </form>
+                <form method="post" action="{% url 'teacher_chapter_assignments_publish' chapter.pk %}">
+                    {% csrf_token %}<input type="hidden" name="publish" value="0"><input type="hidden" name="next" value="{% url 'teacher_chapter_edit' chapter.pk %}"><button class="btn btn-ghost btn-sm btn-block" type="submit">{% icon "pencil" %}Все задания в черновики</button>
+                </form>
+                <form method="post" action="{% url 'teacher_archive_item' 'chapter' chapter.pk %}" data-confirm="В архив главу «{{ chapter.title }}» вместе с темами и заданиями?">
+                    {% csrf_token %}<button class="btn btn-ghost btn-sm btn-block" type="submit">{% icon "archive" %}{% t "В архив" %}</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

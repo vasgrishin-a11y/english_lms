@@ -57,7 +57,7 @@
                     <span class="pill-note tnum">максимум {{ submission.max_points_snapshot }}</span>
                 </span>
             </div>
-            <p class="tiny muted">{{ submission.assignment.topic.block.name }} · {{ submission.assignment.topic.title }}</p>
+            <p class="tiny muted">{{ submission.assignment.topic.block.name }} · {{ submission.assignment.topic.chapter.title }} · {{ submission.assignment.topic.title }}</p>
             <h1 class="mb-0" style="font-size:var(--fs-20)">{{ submission.assignment.title }}</h1>
             {{ submission.assignment.description|linebreaks }}
             {% if submission.assignment.material_file %}
@@ -184,7 +184,7 @@
         <section class="card card-pad-sm">
             <p class="rail-title">Контекст</p>
             <p class="small mb-0"><strong>{{ submission.assignment.title }}</strong></p>
-            <p class="tiny muted">{{ submission.assignment.topic.block.name }} · {{ submission.assignment.topic.title }}</p>
+            <p class="tiny muted">{{ submission.assignment.topic.block.name }} · {{ submission.assignment.topic.chapter.title }} · {{ submission.assignment.topic.title }}</p>
             {% if submission.deadline_snapshot %}
                 <p class="tiny muted mb-0">Дедлайн попытки: {{ submission.deadline_snapshot|date:"d.m.Y H:i" }}</p>
             {% endif %}

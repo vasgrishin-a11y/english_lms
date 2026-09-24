@@ -1,0 +1,39 @@
+{% load lms_tags %}
+{# Блок «Кому доступно»: одинаков у класса, главы, темы и задания. #}
+{# Контекст: groups_field, students_field, inherited_audience (или None). #}
+<fieldset class="form-section audience-section" data-audience>
+    <legend class="section-title">{% icon "users" %}{% t "Кому доступно" %}</legend>
+    {% if inherited_audience and not inherited_audience.open %}
+        <p class="callout callout-info audience-note">
+            {% icon "info" "icon icon-sm" %}
+            <span>Уже назначено выше по иерархии: <strong>{{ inherited_audience.label }}</strong> — они видят всё внутри. Здесь можно добавить ещё группы или учеников: назначения складываются.</span>
+        </p>
+    {% else %}
+        <p class="help-text audience-note">Пусто — как у родителя. Если ни на одном уровне ничего не выбрано, материал видят все ученики. Как только выбраны группы или ученики, доступ получают только они (плюс назначенные выше или ниже по иерархии).</p>
+    {% endif %}
+    <div class="form-grid">
+        <div class="form-field form-field-wide{% if groups_field.errors %} field-error{% endif %}">
+            <label>{{ groups_field.label }}</label>
+            {% if groups_field.field.queryset %}
+                {{ groups_field }}
+            {% else %}
+                <p class="tiny muted mb-0">Групп пока нет — <a href="{% url 'teacher_group_new' %}">создать группу</a>.</p>
+            {% endif %}
+            {% if groups_field.help_text %}<div class="help-text">{{ groups_field.help_text }}</div>{% endif %}
+            {{ groups_field.errors }}
+        </div>
+        <div class="form-field form-field-wide{% if students_field.errors %} field-error{% endif %}">
+            <label>{{ students_field.label }}</label>
+            {% if students_field.field.queryset %}
+                <details class="audience-details"{% if students_field.value %} open{% endif %}>
+                    <summary class="tiny">Выбрать учеников{% if students_field.value %} · выбрано {{ students_field.value|length }}{% endif %}</summary>
+                    {{ students_field }}
+                </details>
+            {% else %}
+                <p class="tiny muted mb-0">Учеников пока нет.</p>
+            {% endif %}
+            {% if students_field.help_text %}<div class="help-text">{{ students_field.help_text }}</div>{% endif %}
+            {{ students_field.errors }}
+        </div>
+    </div>
+</fieldset>

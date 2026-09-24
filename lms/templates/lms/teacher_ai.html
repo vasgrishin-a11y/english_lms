@@ -16,7 +16,7 @@
 <div class="content-head">
     <div>
         <h1>{% icon "sparkles" %}{% t "ИИ-помощник" %}</h1>
-        <p class="page-note">Загрузите фото страницы, документ Word, таблицу Excel или PDF — помощник соберёт из материала структуру курса: блоки, темы, задания, тесты и карточки. Всё создаётся <strong>черновиками</strong>: публикует только преподаватель.</p>
+        <p class="page-note">Загрузите фото страницы, документ Word, таблицу Excel или PDF — помощник соберёт из материала структуру курса: классы, темы, задания, тесты и карточки. Всё создаётся <strong>черновиками</strong>: публикует только преподаватель.</p>
     </div>
     <span class="badge badge-wrap {% if mode == 'online' %}badge-turquoise{% else %}badge-outline{% endif %}">{{ mode_label }}</span>
 </div>
@@ -59,7 +59,7 @@
                         </span>
                     </div>
                     <div class="stats" style="margin-bottom:16px">
-                        <div class="stat"><div class="stat-value tnum">{{ summary.blocks }}</div><div class="stat-label">блоков</div></div>
+                        <div class="stat"><div class="stat-value tnum">{{ summary.blocks }}</div><div class="stat-label">классов</div></div>
                         <div class="stat"><div class="stat-value tnum">{{ summary.topics }}</div><div class="stat-label">тем</div></div>
                         <div class="stat"><div class="stat-value tnum">{{ summary.assignments }}</div><div class="stat-label">заданий</div></div>
                         <div class="stat"><div class="stat-value tnum">{{ summary.questions }}</div><div class="stat-label">вопросов теста</div></div>
@@ -114,7 +114,7 @@
             <section class="card card-pad-sm">
                 <p class="rail-title">Как это работает</p>
                 <ol class="small muted" style="padding-left:18px">
-                    <li>Материал разбирается в структуру: блок → темы → задания → вопросы → карточки.</li>
+                    <li>Материал разбирается в структуру: класс → темы (в главе «Общее») → задания → вопросы → карточки.</li>
                     <li>Локальная vision-модель понимает фото страницы; Word, Excel и PDF читаются офлайн.</li>
                     <li>Импорт создаёт только черновики — ученики ничего не видят до публикации.</li>
                     <li>Черновики дальше правятся вручную: как обычные задания курса.</li>
@@ -139,7 +139,7 @@
                 <p class="rail-title">Лимиты</p>
                 <ul class="small muted" style="padding-left:18px">
                     <li>файл — до {{ max_upload_mb }} МБ, текста — до {{ limits.text_chars }} знаков;</li>
-                    <li>блоков {{ limits.blocks }}, тем {{ limits.topics }}, заданий {{ limits.assignments }};</li>
+                    <li>классов {{ limits.blocks }}, тем {{ limits.topics }}, заданий {{ limits.assignments }};</li>
                     <li>вопросов на задание {{ limits.questions }}, карточек {{ limits.cards }}.</li>
                 </ul>
             </section>

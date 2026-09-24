@@ -127,8 +127,15 @@ def student_home(request):
     now = timezone.now()
     assignments = list(
         annotate_student_states(
-            visible_assignments().select_related("topic__block"), student
-        ).order_by("topic__block__order", "topic__block__name", "topic__order", "order", "pk")
+            visible_assignments(student).select_related("topic__block", "topic__chapter"), student
+        ).order_by(
+            "topic__block__order",
+            "topic__block__name",
+            "topic__chapter__order",
+            "topic__order",
+            "order",
+            "pk",
+        )
     )
     drafts = {draft.assignment_id: draft for draft in AnswerDraft.objects.filter(student=student)}
     total = len(assignments)
@@ -156,7 +163,7 @@ def student_home(request):
     due_soon.sort(key=lambda item: item[0])
     recent = list(
         Submission.objects.filter(student=student, feedback__isnull=False)
-        .select_related("feedback", "assignment__topic__block")
+        .select_related("feedback", "assignment__topic__block", "assignment__topic__chapter")
         .order_by("-feedback__updated_at", "-pk")[:5]
     )
     card_sets = card_set_stats(student)
@@ -199,18 +206,22 @@ def student_assignments(request):
     """
     query = request.GET.get("q", "").strip()[:200]
     assignments = annotate_student_states(
-        visible_assignments().select_related("topic__block"), request.user
+        visible_assignments(request.user).select_related("topic__block", "topic__chapter"),
+        request.user,
     ).annotate(card_total=Count("cards"))
     if query:
         assignments = assignments.filter(
             Q(title__icontains=query)
             | Q(description__icontains=query)
             | Q(topic__title__icontains=query)
+            | Q(topic__chapter__title__icontains=query)
             | Q(topic__block__name__icontains=query)
         )
     assignments = assignments.order_by(
         "topic__block__order",
         "topic__block__name",
+        "topic__chapter__order",
+        "topic__chapter__title",
         "topic__order",
         "topic__title",
         "order",
@@ -220,7 +231,7 @@ def student_assignments(request):
     for assignment in page:
         assignment.state = state_of(assignment)
         assignment.cards_count = assignment.card_total or 0
-    summary = annotate_student_states(visible_assignments(), request.user).aggregate(
+    summary = annotate_student_states(visible_assignments(request.user), request.user).aggregate(
         total=Count("pk"),
         done=Count("pk", filter=Q(latest_status=Submission.Status.CHECKED)),
         waiting=Count("pk", filter=Q(latest_status__in=WAITING_STATUSES)),
@@ -251,7 +262,10 @@ def student_assignments(request):
 def assignment_detail(request, pk):
     """Страница задания: условия, ответ или тест, черновик, история попыток."""
     assignment = get_object_or_404(
-        Assignment.objects.visible().select_related("topic__block"), pk=pk
+        Assignment.objects.visible(user=request.user).select_related(
+            "topic__block", "topic__chapter"
+        ),
+        pk=pk,
     )
     if assignment.is_flashcards or assignment.is_material:
         return _flashcards_detail(request, assignment)
@@ -309,7 +323,7 @@ def assignment_detail(request, pk):
             "draft": draft,
             "page_obj": history,
             "conflict": status == 409,
-            "trainer_cards": _topic_trainer_cards(assignment),
+            "trainer_cards": _topic_trainer_cards(assignment, request.user),
             "workspace": "curriculum",
             **skill_ctx,
         },
@@ -397,7 +411,7 @@ def _quiz_detail(request, assignment, attempts, submission):
             "page_obj": history,
             "conflict": status == 409,
             "quiz_error": quiz_error,
-            "trainer_cards": _topic_trainer_cards(assignment),
+            "trainer_cards": _topic_trainer_cards(assignment, request.user),
             "workspace": "curriculum",
             **skill_ctx,
         }
@@ -425,7 +439,7 @@ def _item_response(request, assignment, question_id, *, error="", status=200, fl
 
 
 def _item_action(request, pk, question_id, action):
-    assignment = get_object_or_404(Assignment.objects.visible(), pk=pk)
+    assignment = get_object_or_404(Assignment.objects.visible(user=request.user), pk=pk)
     if not assignment.is_quiz:
         raise Http404
     expected_round = _parse_int(request.POST.get("round"), None)
@@ -509,7 +523,7 @@ def item_reset(request, pk, question_id):
 @require_POST
 def quiz_finish(request, pk):
     """Отправить работу со свободными/голосовыми пунктами преподавателю."""
-    assignment = get_object_or_404(Assignment.objects.visible(), pk=pk)
+    assignment = get_object_or_404(Assignment.objects.visible(user=request.user), pk=pk)
     try:
         finish_round(
             student=request.user,
@@ -531,7 +545,7 @@ def quiz_finish(request, pk):
 @student_required
 @require_POST
 def quiz_retake(request, pk):
-    assignment = get_object_or_404(Assignment.objects.visible(), pk=pk)
+    assignment = get_object_or_404(Assignment.objects.visible(user=request.user), pk=pk)
     try:
         start_retake(student=request.user, assignment_id=assignment.pk)
     except PermissionDenied as exc:
@@ -540,10 +554,10 @@ def quiz_retake(request, pk):
     return redirect("assignment_detail", pk=assignment.pk)
 
 
-def _topic_trainer_cards(assignment):
+def _topic_trainer_cards(assignment, student):
     """Соседние задания-тренажёры той же темы — для перехода из карточки задания."""
     return list(
-        Assignment.objects.visible()
+        Assignment.objects.visible(user=student)
         .filter(
             topic_id=assignment.topic_id,
             assignment_type=Assignment.Type.FLASHCARDS,
@@ -564,7 +578,7 @@ def _flashcards_detail(request, assignment):
     if request.method == "POST" and assignment.is_flashcards:
         return redirect("trainer_session", pk=assignment.pk)
     cards = list(assignment.cards.order_by("order", "pk")) if assignment.is_flashcards else []
-    trainer_cards = _topic_trainer_cards(assignment)
+    trainer_cards = _topic_trainer_cards(assignment, request.user)
     skill_ctx = _skill_context(assignment)
     attachments = list(assignment.attachments.all()) if hasattr(assignment, "attachments") else []
     return render(
@@ -602,7 +616,7 @@ def _parse_int(value, default=0):
 @require_POST
 def save_draft(request, pk):
     """Автосохранение черновика ответа (htmx). Попытки при этом не создаются."""
-    assignment = get_object_or_404(Assignment.objects.visible(), pk=pk)
+    assignment = get_object_or_404(Assignment.objects.visible(user=request.user), pk=pk)
     if assignment.is_quiz or assignment.is_flashcards or assignment.is_material:
         return render(request, "lms/parts/draft_state.html", {"draft": None, "denied": True})
     try:
@@ -691,14 +705,12 @@ def _trainer_session(request, *, cards, session_key, back_url, title, subtitle, 
 def trainer_session(request, pk):
     """Сессия тренажёра по заданию с карточками."""
     assignment = get_object_or_404(
-        Assignment.objects.visible()
+        Assignment.objects.visible(user=request.user)
         .filter(assignment_type=Assignment.Type.FLASHCARDS)
-        .select_related("topic__block"),
+        .select_related("topic__block", "topic__chapter"),
         pk=pk,
     )
-    if not (
-        assignment.is_active and assignment.topic.is_active and assignment.topic.block.is_active
-    ):
+    if not (assignment.is_active and assignment.topic.is_reachable):
         raise Http404
     cards = list(assignment.cards.order_by("order", "pk"))
     return _trainer_session(
@@ -707,7 +719,10 @@ def trainer_session(request, pk):
         session_key=f"assignment:{assignment.pk}",
         back_url=reverse("trainer_session", args=[assignment.pk]),
         title=assignment.title,
-        subtitle=f"{assignment.topic.block.name} · {assignment.topic.title}",
+        subtitle=(
+            f"{assignment.topic.block.name} · {assignment.topic.chapter.title} · "
+            f"{assignment.topic.title}"
+        ),
     )
 
 
@@ -784,7 +799,7 @@ def student_grades(request):
     attempts = (
         Submission.objects.filter(student=request.user)
         .latest_attempts()
-        .select_related("feedback", "assignment__topic__block")
+        .select_related("feedback", "assignment__topic__block", "assignment__topic__chapter")
         .order_by("-submitted_at", "-pk")
     )
     page = Paginator(attempts, settings.LMS_PAGE_SIZE).get_page(request.GET.get("page"))
@@ -816,7 +831,9 @@ def upcoming(request):
     now = timezone.now()
     assignments = list(
         annotate_student_states(
-            visible_assignments().select_related("topic__block").filter(deadline__isnull=False),
+            visible_assignments(request.user)
+            .select_related("topic__block", "topic__chapter")
+            .filter(deadline__isnull=False),
             request.user,
         ).order_by("deadline")
     )
