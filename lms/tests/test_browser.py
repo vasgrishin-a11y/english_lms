@@ -98,6 +98,21 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
                 )
                 page.set_viewport_size({"width": 320, "height": 800})
                 overflow = page.evaluate("document.documentElement.scrollWidth > innerWidth")
+                overflow_info = ""
+                if overflow:
+                    overflow_info = page.evaluate(
+                        """() => {
+                          const vw = innerWidth;
+                          const els = Array.from(document.querySelectorAll('*'))
+                            .filter(el => el.scrollWidth > vw + 1)
+                            .map(el => {
+                              const r = el.getBoundingClientRect();
+                              return `${el.tagName}${el.id ? '#'+el.id : ''}${el.className ? '.'+String(el.className).split(' ').slice(0,3).join('.') : ''} scrollW=${el.scrollWidth} rectW=${Math.round(r.width)} left=${Math.round(r.left)}`;
+                            }).slice(0,30);
+                          return `docScroll=${document.documentElement.scrollWidth} inner=${innerWidth} bodyScroll=${document.body.scrollWidth}\\n` + els.join('\\n');
+                        }"""
+                    )
+                    print(f"OVERFLOW {name}:\\n{overflow_info}")
                 missing_help = page.evaluate(
                     "Array.from(document.querySelectorAll('[aria-describedby]')).some(el => el.getAttribute('aria-describedby').split(/\\s+/).some(id => !document.getElementById(id)))"
                 )
@@ -105,7 +120,7 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
                     Path("test-results").mkdir(exist_ok=True)
                     page.screenshot(path=f"test-results/{name}.png", full_page=True)
                 self.assertEqual(violations, [], name)
-                self.assertFalse(overflow, name)
+                self.assertFalse(overflow, f"{name} overflow:\\n{overflow_info}")
                 self.assertFalse(missing_help, name)
                 page.set_viewport_size({"width": 1280, "height": 900})
 
