@@ -3569,6 +3569,72 @@ tr.row-bad td:first-child {
     border-left-color: var(--info-ink);
 }
 
+/* Прогресс ученика: темы раскрываются, внутри — задания с ответами. */
+.topic-progress {
+    margin-top: 6px;
+    border-radius: var(--r-md);
+}
+
+.topic-progress__head {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--r-md);
+    cursor: pointer;
+    list-style: none;
+}
+
+.topic-progress__head::-webkit-details-marker {
+    display: none;
+}
+
+.topic-progress__head:hover {
+    background: var(--surface-sunken);
+}
+
+.topic-progress__head .row-main {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.topic-chevron {
+    flex: none;
+    margin-top: 2px;
+    color: var(--text-muted);
+    transition: transform var(--dur-2) var(--ease);
+}
+
+.topic-progress:not([open]) .topic-chevron {
+    transform: rotate(-90deg);
+}
+
+.topic-progress__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    padding: var(--sp-2) var(--sp-3) var(--sp-3) calc(var(--sp-3) + 18px);
+}
+
+.assignment-progress {
+    border-top: 1px dashed var(--border);
+    padding-top: var(--sp-2);
+    min-width: 0;
+}
+
+.assignment-progress__head {
+    flex-wrap: wrap;
+}
+
+.assignment-progress .answer-body,
+.assignment-progress .media-frame {
+    margin-top: var(--sp-2);
+}
+
+.assignment-items {
+    margin-top: var(--sp-2);
+}
+
 .try-list {
     display: flex;
     flex-direction: column;

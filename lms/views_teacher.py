@@ -2310,6 +2310,75 @@ def students_list(request):
     )
 
 
+def _attach_progress_details(blocks_data):
+    """Сдачи ученика и разбор теста по пунктам прямо в дереве прогресса.
+
+    Фиксированные +3 запроса: сдачи, вопросы с вариантами, ответы по пунктам.
+    Каждой записи задания добавляются ``attempt`` (последняя сдача или None)
+    и ``items`` (разбор пунктов теста, для остальных типов — пусто).
+    """
+    entries = [
+        entry
+        for block_item in blocks_data
+        for chapter_item in block_item["chapters"]
+        for topic_item in chapter_item["topics"]
+        for entry in topic_item["assignments"]
+    ]
+    for entry in entries:
+        entry["attempt"] = None
+        entry["items"] = []
+    attempt_ids = [
+        entry["state"]["attempt_id"]
+        for entry in entries
+        if entry["state"] and entry["state"]["attempt_id"]
+    ]
+    if not attempt_ids:
+        return
+    attempts = {
+        attempt.pk: attempt
+        for attempt in Submission.objects.filter(pk__in=attempt_ids).select_related(
+            "feedback", "quiz_attempt"
+        )
+    }
+    for entry in entries:
+        state = entry["state"]
+        if state and state["attempt_id"]:
+            entry["attempt"] = attempts.get(state["attempt_id"])
+    quiz_entries = [
+        entry for entry in entries if entry["attempt"] is not None and entry["assignment"].is_quiz
+    ]
+    if not quiz_entries:
+        return
+    questions_by_assignment = {}
+    questions = (
+        Question.objects.filter(
+            assignment_id__in=[entry["assignment"].pk for entry in quiz_entries]
+        )
+        .prefetch_related("choices")
+        .order_by("assignment_id", "order", "pk")
+    )
+    for question in questions:
+        questions_by_assignment.setdefault(question.assignment_id, []).append(question)
+    responses_by_submission = {}
+    responses = QuestionResponse.objects.filter(
+        submission_id__in=[entry["attempt"].pk for entry in quiz_entries]
+    )
+    for response in responses:
+        responses_by_submission.setdefault(response.submission_id, {})[response.question_id] = (
+            response
+        )
+    for entry in quiz_entries:
+        attempt = entry["attempt"]
+        quiz = getattr(attempt, "quiz_attempt", None)
+        entry["items"] = build_items(
+            entry["assignment"],
+            questions_by_assignment.get(entry["assignment"].pk, []),
+            responses_by_submission.get(attempt.pk, {}),
+            closed_round=True,
+            legacy=quiz.answers if quiz else None,
+        )
+
+
 @teacher_required
 @require_GET
 def student_detail(request, pk):
@@ -2317,6 +2386,7 @@ def student_detail(request, pk):
         User.objects.select_related("profile"), pk=pk, profile__role=Profile.Role.STUDENT
     )
     blocks_data, totals = course_tree(student=student)
+    _attach_progress_details(blocks_data)
     attempts = (
         Submission.objects.filter(student=student)
         .exclude(assignment__assignment_type__in=Assignment.NO_SUBMISSION_TYPES)

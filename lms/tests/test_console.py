@@ -30,6 +30,7 @@ from lms.models import (
     Submission,
     Topic,
 )
+from lms.services import finish_round, save_item_answer, submit_quiz
 
 from .base import LMSCase
 
@@ -1028,6 +1029,99 @@ class StudentDirectoryTests(LMSCase):
         self.assertRedirects(resp, "/teacher/curriculum/")
         self.topic.refresh_from_db()
         self.assertFalse(self.topic.is_active)
+
+
+class StudentProgressTreeTests(LMSCase):
+    """Прогресс ученика: темы раскрываются, внутри — задания с ответами."""
+
+    def detail(self):
+        return self.teacher_client.get(f"/teacher/students/{self.student.pk}/")
+
+    def test_topics_collapse_assignments_with_statuses(self):
+        page = self.detail()
+        self.assertContains(page, '<details class="topic-progress">')
+        self.assertContains(page, self.topic.title)
+        self.assertContains(page, "Past tense")
+        self.assertContains(page, "Не сдано")
+        self.assertNotContains(page, "<details open")
+
+    def test_text_attempt_shows_answer_grade_and_review_link(self):
+        attempt = self.submit()
+        self.review(attempt, grade=90)
+        page = self.detail()
+        self.assertContains(page, "A real answer")
+        self.assertContains(page, "Проверена")
+        self.assertContains(page, reverse("teacher_submission_review", args=[attempt.pk]))
+        self.assertContains(page, "Разбор")
+
+    def test_no_submission_assignments_are_marked(self):
+        self.card_assignment(topic=self.topic, title="Слова темы")
+        Assignment.objects.create(
+            topic=self.topic,
+            title="Читать к уроку",
+            description="x",
+            assignment_type=Assignment.Type.MATERIAL,
+        )
+        page = self.detail()
+        self.assertContains(page, "Слова темы")
+        self.assertContains(page, "Читать к уроку")
+        self.assertContains(page, "без сдачи")
+
+    def test_quiz_items_show_student_and_correct_answers(self):
+        quiz = Assignment.objects.create(
+            topic=self.topic,
+            title="Времена",
+            description="x",
+            assignment_type=Assignment.Type.QUIZ,
+            order=5,
+        )
+        question = Question.objects.create(
+            assignment=quiz, kind=Question.Kind.MCQ, text="I ___ done.", points=2, order=1
+        )
+        right = Choice.objects.create(question=question, text="have", is_correct=True)
+        Choice.objects.create(question=question, text="has")
+        quiz.max_points = 2
+        quiz.save()
+        submit_quiz(
+            student=self.student,
+            assignment_id=quiz.pk,
+            expected_version=0,
+            answers={str(question.pk): str(right.pk)},
+        )
+        page = self.detail()
+        self.assertContains(page, "Времена")
+        self.assertContains(page, "Ответ ученика:")
+        self.assertContains(page, "have")
+        self.assertContains(page, "Правильный ответ:")
+        self.assertContains(page, "Верно")
+
+    def test_manual_item_shows_student_text_without_correct_answer(self):
+        quiz = Assignment.objects.create(
+            topic=self.topic,
+            title="Эссе",
+            description="x",
+            assignment_type=Assignment.Type.QUIZ,
+            order=6,
+        )
+        question = Question.objects.create(
+            assignment=quiz,
+            kind=Question.Kind.TEXT,
+            text="Опишите поездку.",
+            points=5,
+            order=1,
+        )
+        save_item_answer(
+            student=self.student,
+            assignment_id=quiz.pk,
+            question_id=question.pk,
+            text="Мы ехали на поезде через всю страну.",
+        )
+        finish_round(student=self.student, assignment_id=quiz.pk)
+        page = self.detail()
+        self.assertContains(page, "Эссе")
+        self.assertContains(page, "Мы ехали на поезде через всю страну.")
+        self.assertContains(page, "Проверить")
+        self.assertNotContains(page, "Правильный ответ:")
 
 
 class AnalyticsTests(LMSCase):
