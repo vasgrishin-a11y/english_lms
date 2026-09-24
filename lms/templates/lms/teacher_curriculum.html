@@ -39,8 +39,8 @@
     </div>
     <div class="rail-card">
         <p class="rail-title">Как перетаскивать</p>
-        <p class="tiny muted">Тему можно перетащить внутри класса для смены порядка, или в другой класс — тогда создаётся копия со всеми заданиями (оригинал остаётся). Ищите иконку {% icon "sort" "icon icon-sm" %}.</p>
-        <p class="tiny muted" style="margin-top:6px">Также зайдите в «Изменить класс» — там можно выбрать тему из другого класса и скопировать.</p>
+        <p class="tiny muted">Тему — за {% icon "sort" "icon icon-sm" %} внутри класса для порядка, или в другой класс — создаётся копия (оригинал остаётся). Задания — внутри темы и между темами.</p>
+        <p class="tiny muted" style="margin-top:6px">Копировать тему можно и через меню {% icon "copy" "icon icon-sm" %} или в «Изменить класс».</p>
     </div>
 </aside>
 {% endblock %}
@@ -49,7 +49,7 @@
 <div class="classes-head">
     <div>
         <h1 class="classes-title">Классы</h1>
-        <p class="muted small mb-0" style="max-width:60ch">Минималистичная карта: классы и темы. Перетаскивайте темы между классами — копия создаётся автоматически. Нажмите на тему, чтобы открыть все задания.</p>
+        <p class="muted small mb-0" style="max-width:60ch">Минималистичная карта: классы и темы. Перетаскивайте темы между классами — копия создаётся автоматически. Нажмите на тему, чтобы открыть все задания. Задания можно перетаскивать внутри темы.</p>
     </div>
     <div class="classes-toolbar">
         <a class="btn btn-secondary btn-sm" href="{% url 'teacher_library' %}">{% icon "database" %}{% t "Библиотека" %}</a>
@@ -94,7 +94,7 @@
 <div data-curriculum-board style="display:flex;flex-direction:column;gap:20px">
 {% for block_item in blocks_data %}
     {% with block=block_item.block %}
-        <section class="card" id="block-{{ block.pk }}" data-block-id="{{ block.pk }}" data-block-drop aria-labelledby="block-{{ block.pk }}-title" style="padding:20px 24px;transition:box-shadow .2s, border-color .2s">
+        <section class="card" id="block-{{ block.pk }}" data-block-id="{{ block.pk }}" data-block-drop aria-labelledby="block-{{ block.pk }}-title" style="padding:20px 24px;transition:box-shadow .2s, border-color .2s;max-width:100%;box-sizing:border-box;overflow:hidden">
             <div class="card-head" style="margin-bottom:16px">
                 <div>
                     <div class="row row-tight" style="gap:8px">
@@ -106,7 +106,10 @@
                     {% if block.description %}<p class="muted small mb-0" style="margin-top:6px;max-width:70ch">{{ block.description }}</p>{% endif %}
                     <p class="tiny muted tnum" style="margin-top:6px">{{ block_item.topics|length }} тем · {{ block_item.assignments }} заданий{% if block_item.flashcards %} · {{ block_item.flashcards }} с карточками{% endif %}</p>
                 </div>
-                <div class="row row-tight" style="gap:6px">
+                <div class="row row-tight" style="gap:6px;flex-wrap:wrap">
+                    <form method="post" action="{% url 'teacher_block_assignments_publish' block.pk %}" style="display:inline">
+                        {% csrf_token %}<input type="hidden" name="publish" value="1"><input type="hidden" name="next" value="{% url 'teacher_curriculum' %}#block-{{ block.pk }}"><button class="btn btn-ghost btn-sm" type="submit" title="Опубликовать все задания блока">{% icon "check" "icon icon-sm" %}</button>
+                    </form>
                     <a class="btn btn-ghost btn-sm" href="{% url 'teacher_block_edit' block.pk %}" title="Изменить класс">{% icon "pencil" %}</a>
                     <form method="post" action="{% url 'teacher_archive_item' 'block' block.pk %}" data-confirm="Переместить класс «{{ block.name }}» в архив вместе со всеми темами и заданиями?">
                         {% csrf_token %}<button class="btn btn-ghost btn-sm" type="submit" title="В архив">{% icon "archive" %}</button>
@@ -126,46 +129,83 @@
                 </div>
             </div>
 
-            <div class="col" style="gap:8px" data-block-topics="{{ block.pk }}" data-topic-list-container="{{ block.pk }}">
+            <div class="col" style="gap:12px" data-block-topics="{{ block.pk }}" data-topic-list-container="{{ block.pk }}">
                 {% for topic_item in block_item.topics %}
                     {% with topic=topic_item.topic %}
-                    <div class="panel" data-topic-panel="{{ topic.pk }}" data-block-id="{{ block.pk }}" data-move-url="{% url 'teacher_topic_move' topic.pk %}" data-copy-url="{% url 'teacher_topic_copy' topic.pk %}" style="padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--surface);border:1px solid var(--border-subtle);border-radius:10px;transition:border-color .2s, box-shadow .2s, background .2s">
-                        <div class="row row-tight" style="flex:1 1 auto;min-width:0;gap:10px">
-                            <span class="row-grip" style="gap:4px">
-                                <span class="drag-handle" draggable="true" data-dnd-handle="topic" data-topic-id="{{ topic.pk }}" data-block-id="{{ block.pk }}" title="Перетащить тему внутри класса или в другой класс (копия)">{% icon "sort" %}</span>
-                            </span>
-                            <div style="min-width:0;flex:1">
-                                <a href="{% url 'teacher_topic_board' topic.pk %}" style="font-weight:600;color:var(--text);text-decoration:none;font-size:14px;display:inline-flex;align-items:center;gap:6px">
-                                    {{ topic.title }}
-                                    {% icon "chevron-right" "icon icon-sm" %}
-                                </a>
-                                <div class="tiny muted" style="margin-top:2px">{{ topic_item.assignments|length }} {{ topic_item.assignments|length|pluralize_ru:"задание,задания,заданий" }}{% if topic_item.flashcards %} · {{ topic_item.flashcards }} с карточками{% endif %}{% if topic_item.waiting %} · ждут {{ topic_item.waiting }}{% endif %}{% if not topic.is_active %} · скрыта{% endif %}</div>
-                            </div>
-                        </div>
-                        <div class="row row-tight" style="gap:4px;flex:0 0 auto;flex-wrap:wrap">
-                            <a class="btn btn-ghost btn-sm" href="{% url 'teacher_topic_board' topic.pk %}" title="Открыть задания">{% icon "eye" "icon icon-sm" %}</a>
-                            <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_new' %}?topic={{ topic.pk }}" title="Добавить задание">{% icon "plus" "icon icon-sm" %}</a>
-                            <a class="btn btn-ghost btn-sm" href="{% url 'teacher_topic_edit' topic.pk %}" title="Изменить тему">{% icon "pencil" "icon icon-sm" %}</a>
-                            <div class="dropdown" style="position:relative">
-                                <button class="btn btn-ghost btn-sm" type="button" data-copy-toggle title="Копировать в другой класс">{% icon "copy" "icon icon-sm" %}</button>
-                                <div class="panel" data-copy-panel hidden style="position:absolute;right:0;top:100%;z-index:20;min-width:220px;padding:8px;display:flex;flex-direction:column;gap:6px;box-shadow:var(--shadow-3)">
-                                    <p class="tiny strong mb-0">Копировать в класс:</p>
-                                    {% for b in blocks_data %}
-                                        {% if b.block.pk != block.pk %}
-                                        <form method="post" action="{% url 'teacher_topic_copy' topic.pk %}">
-                                            {% csrf_token %}
-                                            <input type="hidden" name="target_block" value="{{ b.block.pk }}">
-                                            <input type="hidden" name="next" value="{% url 'teacher_curriculum' %}#block-{{ b.block.pk }}">
-                                            <button class="btn btn-ghost btn-sm btn-block" type="submit" style="justify-content:flex-start">{{ b.block.name }} ({{ b.topics|length }} тем)</button>
-                                        </form>
-                                        {% endif %}
-                                    {% endfor %}
+                    <div class="panel" data-topic-panel="{{ topic.pk }}" data-block-id="{{ block.pk }}" data-move-url="{% url 'teacher_topic_move' topic.pk %}" data-copy-url="{% url 'teacher_topic_copy' topic.pk %}" style="padding:12px 16px;display:flex;flex-direction:column;gap:10px;background:var(--surface);border:1px solid var(--border-subtle);border-radius:10px;transition:border-color .2s, box-shadow .2s, background .2s;max-width:100%;box-sizing:border-box;overflow:hidden">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;max-width:100%">
+                            <div class="row row-tight" style="flex:1 1 auto;min-width:0;gap:10px">
+                                <span class="row-grip" style="gap:4px">
+                                    <span class="drag-handle" draggable="true" data-dnd-handle="topic" data-topic-id="{{ topic.pk }}" data-block-id="{{ block.pk }}" title="Перетащить тему внутри класса или в другой класс (копия)">{% icon "sort" %}</span>
+                                </span>
+                                <div style="min-width:0;flex:1">
+                                    <a href="{% url 'teacher_topic_board' topic.pk %}" style="font-weight:600;color:var(--text);text-decoration:none;font-size:14px;display:inline-flex;align-items:center;gap:6px">
+                                        {{ topic.title }}
+                                        {% icon "chevron-right" "icon icon-sm" %}
+                                    </a>
+                                    <div class="tiny muted" style="margin-top:2px">{{ topic_item.assignments|length }} {{ topic_item.assignments|length|pluralize_ru:"задание,задания,заданий" }}{% if topic_item.flashcards %} · {{ topic_item.flashcards }} с карточками{% endif %}{% if topic_item.waiting %} · ждут {{ topic_item.waiting }}{% endif %}{% if not topic.is_active %} · скрыта{% endif %}</div>
                                 </div>
                             </div>
-                            <form method="post" action="{% url 'teacher_archive_item' 'topic' topic.pk %}" data-confirm="В архив тему «{{ topic.title }}»?">
-                                {% csrf_token %}<button class="btn btn-ghost btn-sm" type="submit" title="Архив">{% icon "archive" "icon icon-sm" %}</button>
-                            </form>
+                            <div class="row row-tight" style="gap:4px;flex:0 0 auto;flex-wrap:wrap">
+                                <form method="post" action="{% url 'teacher_topic_assignments_publish' topic.pk %}" style="display:inline">
+                                    {% csrf_token %}<input type="hidden" name="publish" value="1"><input type="hidden" name="next" value="{% url 'teacher_curriculum' %}#block-{{ block.pk }}"><button class="btn btn-ghost btn-sm" type="submit" title="Опубликовать все задания темы">{% icon "check" "icon icon-sm" %}</button>
+                                </form>
+                                <a class="btn btn-ghost btn-sm" href="{% url 'teacher_topic_board' topic.pk %}" title="Открыть задания">{% icon "eye" "icon icon-sm" %}</a>
+                                <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_new' %}?topic={{ topic.pk }}" title="Добавить задание">{% icon "plus" "icon icon-sm" %}</a>
+                                <a class="btn btn-ghost btn-sm" href="{% url 'teacher_topic_edit' topic.pk %}" title="Изменить тему">{% icon "pencil" "icon icon-sm" %}</a>
+                                <div class="dropdown" style="position:relative">
+                                    <button class="btn btn-ghost btn-sm" type="button" data-copy-toggle title="Копировать в другой класс">{% icon "copy" "icon icon-sm" %}</button>
+                                    <div class="panel" data-copy-panel hidden style="position:absolute;right:0;top:100%;z-index:20;min-width:180px;max-width:min(280px, 85vw);padding:8px;display:flex;flex-direction:column;gap:6px;box-shadow:var(--shadow-3);background:var(--surface);box-sizing:border-box">
+                                        <p class="tiny strong mb-0">Копировать в класс:</p>
+                                        {% for b in blocks_data %}
+                                            {% if b.block.pk != block.pk %}
+                                            <form method="post" action="{% url 'teacher_topic_copy' topic.pk %}">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="target_block" value="{{ b.block.pk }}">
+                                                <input type="hidden" name="next" value="{% url 'teacher_curriculum' %}#block-{{ b.block.pk }}">
+                                                <button class="btn btn-ghost btn-sm btn-block" type="submit" style="justify-content:flex-start;white-space:normal;text-align:left">{{ b.block.name }} ({{ b.topics|length }} тем)</button>
+                                            </form>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                <form method="post" action="{% url 'teacher_archive_item' 'topic' topic.pk %}" data-confirm="В архив тему «{{ topic.title }}»?">
+                                    {% csrf_token %}<button class="btn btn-ghost btn-sm" type="submit" title="Архив">{% icon "archive" "icon icon-sm" %}</button>
+                                </form>
+                            </div>
                         </div>
+
+                        {# Assignments inside topic — quick controls for board #}
+                        {% if topic_item.assignments %}
+                        <div class="col" style="gap:6px;max-width:100%" data-topic-list="{{ topic.pk }}">
+                            {% for entry in topic_item.assignments %}
+                                {% with assignment=entry.assignment %}
+                                <div class="panel" data-assignment-row="{{ assignment.pk }}" data-move-url="{% url 'teacher_assignment_move' assignment.pk %}" style="padding:8px 10px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;background:var(--surface-sunken);border:1px solid var(--border-subtle);border-radius:8px;transition:border-color .2s;max-width:100%;box-sizing:border-box;overflow:hidden">
+                                    <div class="row row-tight" style="flex:1 1 auto;min-width:0;gap:8px">
+                                        <span class="drag-handle" draggable="true" data-dnd-handle="assignment" data-topic-id="{{ topic.pk }}" title="Перетащить задание">{% icon "sort" "icon icon-sm" %}</span>
+                                        <a href="{% url 'teacher_assignment_form' assignment.pk %}" style="font-size:13px;color:var(--text);text-decoration:none;flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" data-title title="{{ assignment.title }}">{{ assignment.title }}</a>
+                                        <span class="badge badge-{{ assignment.status }} tiny" data-status-badge style="font-size:10px">{{ assignment.get_status_display }}</span>
+                                    </div>
+                                    <div class="row row-tight" style="gap:2px;flex:0 0 auto">
+                                        <button class="btn btn-ghost btn-sm" type="button" data-rename data-rename-url="{% url 'teacher_assignment_rename' assignment.pk %}" title="Переименовать">{% icon "pencil" "icon icon-sm" %}</button>
+                                        <form method="post" action="{% url 'teacher_assignment_publish' assignment.pk %}" data-board-toggle data-label-publish="Опубликовать" data-label-unpublish="В черновики" style="display:inline">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="publish" value="{% if assignment.status == 'published' %}0{% else %}1{% endif %}">
+                                            <input type="hidden" name="next" value="{% url 'teacher_curriculum' %}#block-{{ block.pk }}">
+                                            <button class="btn btn-ghost btn-sm" type="submit" title="{% if assignment.status == 'published' %}В черновики{% else %}Опубликовать{% endif %}"><span data-toggle-label>{% if assignment.status == 'published' %}В черновики{% else %}Опубликовать{% endif %}</span></button>
+                                        </form>
+                                        <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_ai' assignment.pk %}" title="ИИ для задания">{% icon "sparkles" "icon icon-sm" %}</a>
+                                        <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_preview' assignment.pk %}" title="Превью">{% icon "eye" "icon icon-sm" %}</a>
+                                    </div>
+                                </div>
+                                {% endwith %}
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div class="col" style="gap:6px" data-topic-list="{{ topic.pk }}">
+                            <p class="tiny muted mb-0">Нет заданий — <a href="{% url 'teacher_assignment_new' %}?topic={{ topic.pk }}">добавить</a></p>
+                        </div>
+                        {% endif %}
                     </div>
                     {% endwith %}
                 {% empty %}
@@ -202,7 +242,7 @@
 {% block extra_js %}
 <script>
 (function(){
-  // Toggle copy dropdown
+  // Toggle copy dropdown — keep within viewport, no overflow
   document.addEventListener('click', function(e){
     const toggle = e.target.closest('[data-copy-toggle]');
     if(toggle){
@@ -211,7 +251,6 @@
       e.preventDefault();
       return;
     }
-    // close all copy panels when clicking outside
     document.querySelectorAll('[data-copy-panel]').forEach(p=>{
       if(!p.contains(e.target) && !e.target.closest('[data-copy-toggle]')) p.hidden = true;
     });

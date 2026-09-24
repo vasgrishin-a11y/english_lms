@@ -189,6 +189,7 @@ TEXTS_EN = {
     "Помню": "Remembered",
     "Не помню": "Forgotten",
     # Курс целиком и счётчики
+    "Классы": "Course",
     "Курс целиком": "Whole course",
     "Классов": "Classes",
     "Тем": "Topics",

@@ -41,12 +41,12 @@
                             <p class="mb-0 small">Ученик учит слова по интервалам повторения — сдавать ответ не нужно. После сохранения откроется страница карточек: добавьте слова вручную, списком или из готового шаблона.</p>
                             {% if assignment and assignment.is_flashcards %}
                                 <p class="mb-0 small"><a href="{% url 'teacher_assignment_cards' assignment.pk %}">Перейти к карточкам ({{ assignment.card_total|default:0 }})</a></p>
-                        <div class="callout" data-show-types="material" style="margin-top:12px;border-left:3px solid var(--accent)">
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="callout" data-show-types="material" style="margin-top:12px;border-left:3px solid var(--accent)">
                         {% icon "file-text" %}
                         <div><p class="mb-0 strong">Материалы для занятий</p><p class="mb-0 small">Загрузите файл, картинку или фото учебника. ИИ может распознать текст и перенести его в Условия задания — нажмите «Распознать текст с файла» ниже. Оценок и сдачи нет, ученик просто видит материалы.</p></div>
-                    </div>
-                        {% endif %}
-                        </div>
                     </div>
                 </fieldset>
 
@@ -348,6 +348,7 @@
         </div>
     </div>
 </div>
+{% endblock %}
 
 {% block extra_js %}
 <script>
