@@ -320,6 +320,10 @@ class DurationLimitField(forms.MultiValueField):
         return seconds
 
 
+class MultipleFileInput(forms.FileInput):
+    allow_multiple_selected = True
+
+
 class AssignmentForm(forms.ModelForm):
     assigned_students = forms.ModelMultipleChoiceField(
         queryset=None,
@@ -331,9 +335,8 @@ class AssignmentForm(forms.ModelForm):
     new_attachments = forms.FileField(
         required=False,
         label="Дополнительные файлы",
-        widget=forms.ClearableFileInput(
+        widget=MultipleFileInput(
             attrs={
-                "multiple": True,
                 "data-dropzone": "1",
                 "data-dropzone-hint": "Перетащите файлы сюда или вставьте скриншот Ctrl+V",
             }
