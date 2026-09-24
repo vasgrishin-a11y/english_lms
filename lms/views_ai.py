@@ -130,7 +130,9 @@ def ai_import(request):
 @require_http_methods(["GET", "POST"])
 def assignment_ai(request, pk):
     """Правка готового задания с ИИ: инструкция → версия-предложение к применению."""
-    assignment = get_object_or_404(Assignment.objects.select_related("topic__block"), pk=pk)
+    assignment = get_object_or_404(
+        Assignment.objects.select_related("topic__block", "topic__chapter"), pk=pk
+    )
     mode = ai.ai_mode()
     stored = request.session.get(SESSION_REVISION)
     if stored and stored.get("assignment") != assignment.pk:

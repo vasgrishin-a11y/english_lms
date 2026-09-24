@@ -482,10 +482,12 @@ class CurriculumTreeTests(LMSCase):
             f"/teacher/curriculum/topics/new/?block={self.block.pk}",
             {"block": self.block.pk, "title": "Vocabulary", "description": "", "order": 2},
         )
-        self.assertRedirects(response, "/teacher/curriculum/")
+        self.assertRedirects(response, f"/teacher/curriculum/#block-{self.block.pk}")
         topic = Topic.objects.get(title="Vocabulary")
         self.assertEqual(topic.block, self.block)
         self.assertTrue(topic.slug)
+        # глава не выбрана — тема попадает в «Общее» своего класса
+        self.assertEqual(topic.chapter, self.block.default_chapter())
 
         third = Topic.objects.create(block=self.block, title="Third", slug="third", order=3)
         self.teacher_client.post(
@@ -927,11 +929,64 @@ class StudentDirectoryTests(LMSCase):
                 "telegram": "@new_student",
             },
         )
-        self.assertRedirects(response, "/teacher/students/")
         new_user = User.objects.get(username="new_student")
+        self.assertRedirects(response, f"/teacher/students/{new_user.pk}/")
         self.assertEqual(new_user.first_name, "New")
         self.assertTrue(new_user.check_password("CustomSecretPassword123!"))
         self.assertEqual(new_user.profile.role, Profile.Role.STUDENT)
+        # выданный пароль сохранён и показывается учителю на карточке ученика
+        self.assertEqual(new_user.profile.reveal_password(), "CustomSecretPassword123!")
+        detail = self.teacher_client.get(f"/teacher/students/{new_user.pk}/")
+        self.assertContains(detail, 'value="CustomSecretPassword123!"')
+        self.assertContains(detail, "data-secret-toggle")
+
+    def test_student_created_without_name_sees_only_login(self):
+        response = self.teacher_client.post(
+            "/teacher/students/create/",
+            {"username": "nameless", "password": "CustomSecretPassword123!"},
+        )
+        nameless = User.objects.get(username="nameless")
+        self.assertRedirects(response, f"/teacher/students/{nameless.pk}/")
+        self.assertEqual(nameless.first_name, "")
+        home = self.client_for(nameless).get("/my/")
+        self.assertContains(home, "nameless")
+
+    def test_student_sees_first_name_only_and_teacher_sees_full_name(self):
+        self.student.first_name = "Anna"
+        self.student.last_name = "Petrova"
+        self.student.save()
+        home = self.student_client.get("/my/").content.decode()
+        self.assertIn("Anna", home)
+        self.assertNotIn("Petrova", home)
+        detail = self.teacher_client.get(f"/teacher/students/{self.student.pk}/")
+        self.assertContains(detail, "Anna Petrova")
+
+    def test_issued_password_is_forgotten_when_student_changes_it(self):
+        self.student.profile.remember_password(self.password)
+        self.assertEqual(self.student.profile.reveal_password(), self.password)
+        response = self.student_client.post(
+            reverse("password_change"),
+            {
+                "old_password": self.password,
+                "new_password1": "BrandNewSecret!9081",
+                "new_password2": "BrandNewSecret!9081",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.student.profile.refresh_from_db()
+        self.assertIsNone(self.student.profile.reveal_password())
+        detail = self.teacher_client.get(f"/teacher/students/{self.student.pk}/")
+        self.assertTrue(detail.context["password_changed_by_student"])
+        self.assertContains(detail, "Ученик сменил пароль сам")
+
+    def test_reset_password_remembers_new_value(self):
+        response = self.teacher_client.post(f"/teacher/students/{self.student.pk}/reset-password/")
+        self.assertRedirects(response, f"/teacher/students/{self.student.pk}/")
+        self.student.profile.refresh_from_db()
+        revealed = self.student.profile.reveal_password()
+        self.assertTrue(revealed)
+        self.student.refresh_from_db()
+        self.assertTrue(self.student.check_password(revealed))
 
     def test_teacher_can_manage_groups(self):
         # 1. Create group

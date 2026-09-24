@@ -8,14 +8,15 @@
 from django.db.models import Avg, Count, OuterRef, Q, Subquery
 from django.utils import timezone
 
-from .models import Assignment, Block, Submission, Topic
+from . import audience
+from .models import Assignment, Block, Chapter, Submission, Topic
 
 WAITING_STATUSES = [Submission.Status.SUBMITTED, Submission.Status.IN_REVIEW]
 
 
-def visible_assignments(at=None):
-    """Задания, которые видит ученик: активные, опубликованные, срок публикации наступил."""
-    return Assignment.objects.visible(at)
+def visible_assignments(student=None, at=None):
+    """Задания, которые видит ученик: активные, опубликованные, назначенные ему (или общие)."""
+    return Assignment.objects.visible(user=student, at=at)
 
 
 def annotate_student_states(queryset, student):
@@ -63,11 +64,20 @@ def ordered_blocks(active_only=False):
     return blocks.order_by("order", "name", "pk")
 
 
-def ordered_topics(active_only=False):
-    topics = Topic.objects.select_related("block")
+def ordered_chapters(active_only=False):
+    chapters = Chapter.objects.select_related("block")
     if active_only:
-        topics = topics.filter(is_active=True, block__is_active=True)
-    return topics.order_by("block__order", "block__name", "order", "title", "pk")
+        chapters = chapters.filter(is_active=True, block__is_active=True)
+    return chapters.order_by("block__order", "block__name", "order", "title", "pk")
+
+
+def ordered_topics(active_only=False):
+    topics = Topic.objects.select_related("block", "chapter")
+    if active_only:
+        topics = topics.filter(is_active=True, chapter__is_active=True, block__is_active=True)
+    return topics.order_by(
+        "block__order", "block__name", "chapter__order", "chapter__title", "order", "title", "pk"
+    )
 
 
 def teacher_assignment_stats():
@@ -106,17 +116,28 @@ def course_tree(
     Архив намеренно вынесен в отдельный экран и не смешивается с рабочей картой.
     """
     show_active_only = not teacher_view or not include_archived
-    blocks = list(ordered_blocks(active_only=show_active_only))
-    topics = list(ordered_topics(active_only=show_active_only))
+    blocks_queryset = ordered_blocks(active_only=show_active_only)
+    chapters_queryset = ordered_chapters(active_only=show_active_only)
+    topics_queryset = ordered_topics(active_only=show_active_only)
     assignments_queryset = Assignment.objects.select_related("topic")
+    if teacher_view:
+        # Бейджи «кому доступно» на карте курса — без лишних запросов.
+        blocks_queryset = blocks_queryset.prefetch_related("groups", "students")
+        chapters_queryset = chapters_queryset.prefetch_related("groups", "students")
+        topics_queryset = topics_queryset.prefetch_related("groups", "students")
+        assignments_queryset = assignments_queryset.prefetch_related("groups", "assigned_students")
+    blocks = list(blocks_queryset)
+    chapters = list(chapters_queryset)
+    topics = list(topics_queryset)
     if student is not None:
         assignments_queryset = annotate_student_states(
-            Assignment.objects.visible(at).select_related("topic"), student
+            Assignment.objects.visible(user=student, at=at).select_related("topic"), student
         )
     elif not teacher_view or not include_archived:
         assignments_queryset = assignments_queryset.filter(
             is_active=True,
             topic__is_active=True,
+            topic__chapter__is_active=True,
             topic__block__is_active=True,
         )
     if include_skills:
@@ -129,11 +150,13 @@ def course_tree(
     stats = teacher_assignment_stats() if teacher_view else None
     return _assemble(
         blocks,
+        chapters,
         topics,
         assignments,
         stats=stats,
         student_view=student is not None,
         query=query,
+        with_audience=teacher_view,
     )
 
 
@@ -144,86 +167,145 @@ def _matches(query, *values):
     return any(needle in str(value or "").casefold() for value in values)
 
 
-def _assemble(blocks, topics, assignments, *, stats, student_view, query):
-    topics_by_block = {}
+def _topic_entry(topic, assignments, *, stats, student_view, query, parent_audience=None):
+    """Собрать узел темы: задания с состоянием/статистикой и счётчики темы."""
+    entries = []
+    topic_total = topic_done = topic_waiting = topic_revision = 0
+    flashcard_count = 0
+    topic_audience = (
+        audience.accumulate(topic, parent_audience) if parent_audience is not None else None
+    )
+    for assignment in assignments:
+        if not _matches(query, assignment.title, assignment.description):
+            continue
+        entry = {"assignment": assignment, "state": None, "stats": None, "audience": None}
+        if topic_audience is not None:
+            entry["audience"] = audience.accumulate(assignment, topic_audience)
+        if assignment.is_flashcards:
+            flashcard_count += 1
+        if student_view and not assignment.is_flashcards:
+            state = state_of(assignment)
+            entry["state"] = state
+            topic_total += 1
+            if state["status"] == Submission.Status.CHECKED:
+                topic_done += 1
+            elif state["status"] == Submission.Status.NEEDS_REVISION:
+                topic_revision += 1
+        if stats is not None:
+            row = stats.get(assignment.pk, {})
+            entry["stats"] = {
+                "waiting": row.get("waiting", 0),
+                "revision": row.get("revision", 0),
+                "checked": row.get("checked", 0),
+                "students": row.get("students", 0),
+                "average": row.get("average"),
+            }
+            topic_waiting += row.get("waiting", 0)
+            topic_revision += row.get("revision", 0)
+        entries.append(entry)
+    return {
+        "topic": topic,
+        "audience": topic_audience,
+        "assignments": entries,
+        "flashcards": flashcard_count,
+        "total": topic_total,
+        "done": topic_done,
+        "waiting": topic_waiting,
+        "revision": topic_revision,
+        "progress": _percent(topic_done, topic_total),
+    }
+
+
+def _chapter_entry(chapter, topic_items, chapter_audience=None):
+    """Узел главы: темы и суммы по ним (для карты курса и прогресса ученика)."""
+    total = sum(item["total"] for item in topic_items)
+    done = sum(item["done"] for item in topic_items)
+    return {
+        "chapter": chapter,
+        "audience": chapter_audience,
+        "topics": topic_items,
+        "assignments": sum(len(item["assignments"]) for item in topic_items),
+        "flashcards": sum(item["flashcards"] for item in topic_items),
+        "total": total,
+        "done": done,
+        "waiting": sum(item["waiting"] for item in topic_items),
+        "revision": sum(item["revision"] for item in topic_items),
+        "progress": _percent(done, total),
+    }
+
+
+def _assemble(
+    blocks, chapters, topics, assignments, *, stats, student_view, query, with_audience=False
+):
+    """Класс → главы → темы → задания.
+
+    У каждого класса два представления одних и тех же тем: ``chapters`` —
+    вложенное (карта курса учителя), ``topics`` — плоский список в порядке
+    глав (прогресс ученика, счётчики, старые шаблоны). Тема без активной
+    главы наружу не попадает — как и тема без активного класса.
+    """
+    chapters_by_block = {}
+    for chapter in chapters:
+        chapters_by_block.setdefault(chapter.block_id, []).append(chapter)
+    topics_by_chapter = {}
     for topic in topics:
-        topics_by_block.setdefault(topic.block_id, []).append(topic)
+        topics_by_chapter.setdefault(topic.chapter_id, []).append(topic)
     assignments_by_topic = {}
     for assignment in assignments:
         assignments_by_topic.setdefault(assignment.topic_id, []).append(assignment)
 
     result = []
     for block in blocks:
+        block_chapters = []
         block_topics = []
-        block_total = block_done = block_waiting = block_count = block_revision = 0
-        block_flashcards = 0
-        for topic in topics_by_block.get(block.pk, []):
-            entries = []
-            topic_total = topic_done = topic_waiting = topic_revision = 0
-            flashcard_count = 0
-            for assignment in assignments_by_topic.get(topic.pk, []):
-                if not _matches(query, assignment.title, assignment.description):
-                    continue
-                entry = {"assignment": assignment, "state": None, "stats": None}
-                if assignment.is_flashcards:
-                    flashcard_count += 1
-                if student_view and not assignment.is_flashcards:
-                    state = state_of(assignment)
-                    entry["state"] = state
-                    topic_total += 1
-                    if state["status"] == Submission.Status.CHECKED:
-                        topic_done += 1
-                    elif state["status"] == Submission.Status.NEEDS_REVISION:
-                        topic_revision += 1
-                if stats is not None:
-                    row = stats.get(assignment.pk, {})
-                    entry["stats"] = {
-                        "waiting": row.get("waiting", 0),
-                        "revision": row.get("revision", 0),
-                        "checked": row.get("checked", 0),
-                        "students": row.get("students", 0),
-                        "average": row.get("average"),
-                    }
-                    topic_waiting += row.get("waiting", 0)
-                    topic_revision += row.get("revision", 0)
-                entries.append(entry)
-            if query and not entries and not _matches(query, topic.title, block.name):
-                continue
-            block_total += topic_total
-            block_done += topic_done
-            block_waiting += topic_waiting
-            block_revision += topic_revision
-            block_count += len(entries)
-            block_flashcards += flashcard_count
-            block_topics.append(
-                {
-                    "topic": topic,
-                    "assignments": entries,
-                    "flashcards": flashcard_count,
-                    "total": topic_total,
-                    "done": topic_done,
-                    "waiting": topic_waiting,
-                    "revision": topic_revision,
-                    "progress": _percent(topic_done, topic_total),
-                }
+        block_audience = audience.accumulate(block) if with_audience else None
+        for chapter in chapters_by_block.get(block.pk, []):
+            topic_items = []
+            chapter_audience = (
+                audience.accumulate(chapter, block_audience) if with_audience else None
             )
-        if query and not block_topics:
+            for topic in topics_by_chapter.get(chapter.pk, []):
+                item = _topic_entry(
+                    topic,
+                    assignments_by_topic.get(topic.pk, []),
+                    stats=stats,
+                    student_view=student_view,
+                    query=query,
+                    parent_audience=chapter_audience,
+                )
+                if (
+                    query
+                    and not item["assignments"]
+                    and not _matches(query, topic.title, chapter.title, block.name)
+                ):
+                    continue
+                topic_items.append(item)
+            if query and not topic_items and not _matches(query, chapter.title, block.name):
+                continue
+            block_chapters.append(_chapter_entry(chapter, topic_items, chapter_audience))
+            block_topics.extend(topic_items)
+        if query and not block_chapters:
             continue
+        block_total = sum(item["total"] for item in block_topics)
+        block_done = sum(item["done"] for item in block_topics)
         result.append(
             {
                 "block": block,
+                "audience": block_audience,
+                "chapters": block_chapters,
                 "topics": block_topics,
                 "total": block_total,
                 "done": block_done,
-                "waiting": block_waiting,
-                "revision": block_revision,
-                "assignments": block_count,
-                "flashcards": block_flashcards,
+                "waiting": sum(item["waiting"] for item in block_topics),
+                "revision": sum(item["revision"] for item in block_topics),
+                "assignments": sum(len(item["assignments"]) for item in block_topics),
+                "flashcards": sum(item["flashcards"] for item in block_topics),
                 "progress": _percent(block_done, block_total),
             }
         )
     totals = {
         "blocks": len(result),
+        "chapters": sum(len(item["chapters"]) for item in result),
         "topics": sum(len(item["topics"]) for item in result),
         "assignments": sum(item["assignments"] for item in result),
         "flashcards": sum(item["flashcards"] for item in result),
@@ -266,6 +348,7 @@ def teacher_overview():
         quizzes=Count("pk", filter=Q(assignment_type=Assignment.Type.QUIZ)),
         overdue=Count("pk", filter=Q(deadline__lt=timezone.now(), is_active=True)),
         topics=Count("topic", distinct=True),
+        chapters=Count("topic__chapter", distinct=True),
         blocks=Count("topic__block", distinct=True),
     )
     averages = Submission.objects.latest_attempts().aggregate(
@@ -286,12 +369,21 @@ def gradebook(block=None, topic=None):
 
     from .models import Profile, Topic
 
-    assignments = visible_assignments().select_related("topic__block")
+    assignments = (
+        visible_assignments()
+        .select_related("topic__block", "topic__chapter")
+        .prefetch_related(*audience.ASSIGNMENT_PREFETCH)
+    )
     if topic:
         assignments = assignments.filter(topic=topic)
     if block:
         assignments = assignments.filter(topic__block=block)
-    assignments = list(assignments.order_by("topic__block__order", "topic__order", "order", "pk"))
+    assignments = list(
+        assignments.order_by(
+            "topic__block__order", "topic__chapter__order", "topic__order", "order", "pk"
+        )
+    )
+    expected = audience.expected_ids_map(assignments)
     User = get_user_model()
     students = list(
         User.objects.filter(profile__role=Profile.Role.STUDENT, is_active=True)
@@ -310,9 +402,13 @@ def gradebook(block=None, topic=None):
     rows = []
     for student in students:
         row_cells = []
-        graded = possible = submitted = checked = 0
+        graded = possible = submitted = checked = assigned_total = 0
         for assignment in assignments:
             attempt = cells.get((student.pk, assignment.pk))
+            allowed = expected[assignment.pk]
+            assigned = allowed is None or student.pk in allowed or attempt is not None
+            if assigned:
+                assigned_total += 1
             feedback = getattr(attempt, "feedback", None) if attempt else None
             grade = feedback.grade if feedback else None
             maximum = attempt.max_points_snapshot if attempt else assignment.max_points
@@ -331,6 +427,7 @@ def gradebook(block=None, topic=None):
                     "maximum": maximum,
                     "status": attempt.status if attempt else None,
                     "percent": _percent(grade, maximum) if grade is not None else None,
+                    "assigned": assigned,
                 }
             )
         rows.append(
@@ -342,10 +439,12 @@ def gradebook(block=None, topic=None):
                 "percent": _percent(graded, possible),
                 "submitted": submitted,
                 "checked": checked,
-                "total": len(assignments),
+                "total": assigned_total,
             }
         )
-    topics = Topic.objects.select_related("block").order_by("block__order", "order", "title")
+    topics = Topic.objects.select_related("block", "chapter").order_by(
+        "block__order", "chapter__order", "order", "title"
+    )
     return {
         "assignments": assignments,
         "rows": rows,

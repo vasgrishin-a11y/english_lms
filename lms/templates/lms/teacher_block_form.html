@@ -1,26 +1,38 @@
 {% extends "lms/base.html" %}
 {% load lms_tags %}
 
-{% block title %}{% if form.instance.pk %}Блок: {{ form.instance.name }}{% else %}Новый блок{% endif %} — English LMS{% endblock %}
+{% block title %}{% if form.instance.pk %}Класс: {{ form.instance.name }}{% else %}Новый класс{% endif %} — English LMS{% endblock %}
 {% block workspace_class %}workspace-plain{% endblock %}
 
 {% block content %}
 <nav aria-label="Хлебные крошки">
     <ol class="crumbs">
         <li><a href="{% url 'teacher_curriculum' %}">{% t "Карта курса" %}</a></li>
-        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">{% if form.instance.pk %}{{ form.instance.name }}{% else %}Новый блок{% endif %}</span></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">{% if form.instance.pk %}{{ form.instance.name }}{% else %}{% t "Новый класс" %}{% endif %}</span></li>
     </ol>
 </nav>
 
 <div class="split">
     <div class="split-main">
         <section class="card">
-            <h1 class="card-title">{% if form.instance.pk %}Изменить блок{% else %}Новый блок{% endif %}</h1>
+            <h1 class="card-title">{% if form.instance.pk %}{% t "Изменить класс" %}{% else %}{% t "Новый класс" %}{% endif %}</h1>
             <form method="post" novalidate data-preset-form>
                 {% csrf_token %}
                 {% include "lms/form_fields.html" %}
+                {% include "lms/parts/audience_fields.html" with groups_field=form.groups students_field=form.students %}
+                {% if not form.instance.pk %}
+                <fieldset class="form-section" data-topic-copy-form style="margin-top:16px">
+                    <legend>Добавить темы из других классов <span class="badge badge-turquoise">{{ other_topics|length }} доступно</span></legend>
+                    <p class="small muted">Отметьте темы — после сохранения они скопируются в новый класс вместе с заданиями (копии станут черновиками, оригиналы останутся на месте). Позже темы можно перетаскивать между классами на странице Классов.</p>
+                    {% if other_topics %}
+                        {% include "lms/parts/topic_copy_list.html" %}
+                    {% else %}
+                        <p class="muted small mb-0">В других классах пока нет тем для копирования.</p>
+                    {% endif %}
+                </fieldset>
+                {% endif %}
                 <div class="form-actions">
-                    <button class="btn" type="submit">{% icon "save" %}{% t "Сохранить блок" %}</button>
+                    <button class="btn" type="submit">{% icon "save" %}{% t "Сохранить класс" %}</button>
                     <a class="btn btn-secondary" href="{% url 'teacher_curriculum' %}">{% t "Отмена" %}</a>
                     {% if form.instance.pk %}
                         <a class="btn btn-ghost" href="{% url 'teacher_topic_new' %}?block={{ form.instance.pk }}">{% icon "plus" %}{% t "Добавить тему" %}</a>
@@ -29,37 +41,19 @@
             </form>
         </section>
 
-        {% if block %}
+        {% if form.instance.pk %}
         <section class="card" style="margin-top:16px">
             <div class="card-head">
                 <h2 class="card-title">{% icon "layers" %}Добавить тему из другого класса</h2>
                 <span class="badge badge-turquoise">{{ other_topics|length }} доступно</span>
             </div>
-            <p class="small muted">Выберите темы из других классов — они скопируются в «{{ block.name }}» вместе со всеми заданиями (копии станут черновиками, оригинал не удаляется). Можно также перетаскивать темы между классами прямо на странице Классов.</p>
+            <p class="small muted">Выберите темы из других классов — они скопируются в «{{ form.instance.name }}» вместе со всеми заданиями (копии станут черновиками, оригинал не удаляется). Можно также перетаскивать темы между классами прямо на странице Классов.</p>
             {% if other_topics %}
                 <form method="post" data-topic-copy-form>
                 {% csrf_token %}
                 <input type="hidden" name="copy_topics" value="1">
-                <p><label><input type="checkbox" data-select-all-topics> Выбрать все темы в списке</label></p>
-                <div class="rows" style="max-height:420px;overflow:auto">
-                    {% for t in other_topics %}
-                    <div class="row-item">
-                        <span class="row-main">
-                            <label class="row-title"><input type="checkbox" name="copy_topic_ids" value="{{ t.pk }}"> {{ t.title }}</label>
-                            <span class="row-meta">
-                                <span>{{ t.block.name }}</span>
-                                <span>{{ t.assignment_count }} {{ t.assignment_count|pluralize_ru:"задание,задания,заданий" }}</span>
-                            </span>
-                        </span>
-                        <span class="row-side">
-
-                            <a class="btn btn-ghost btn-sm" href="{% url 'teacher_topic_board' t.pk %}" title="Открыть исходную тему">{% icon "eye" "icon icon-sm" %}</a>
-                        </span>
-                    </div>
-                    {% endfor %}
-                </div>
-                <button class="btn btn-secondary" type="submit">Копировать выбранные темы</button>
-                <p class="help-text" data-copy-selection aria-live="polite">Выберите темы для копирования.</p>
+                {% include "lms/parts/topic_copy_list.html" %}
+                <button class="btn btn-secondary" type="submit" data-copy-submit>Копировать выбранные темы</button>
                 </form>
             {% else %}
                 <p class="muted small">Нет тем в других классах для копирования. Создайте новую тему или скопируйте из библиотеки.</p>
@@ -68,7 +62,7 @@
 
         <section class="card" style="margin-top:16px">
             <div class="card-head"><h2 class="card-title">{% icon "book" %}Текущие темы в классе</h2></div>
-            {% with topics=block.topics.all %}
+            {% with topics=form.instance.topics.all %}
                 {% if topics %}
                     <div class="rows">
                     {% for topic in topics|dictsort:"order" %}
@@ -93,7 +87,7 @@
     </div>
     <div class="split-side">
         <div class="card card-pad-sm">
-            <p class="rail-title">Готовые варианты блоков</p>
+            <p class="rail-title">Готовые варианты классов</p>
             <p class="tiny muted">Нажмите — название, уровень CEFR и описание подставятся в форму.</p>
             <div class="col">
                 {% for group in suggestion_groups %}
@@ -116,12 +110,12 @@
         </div>
         <div class="card card-pad-sm">
             <p class="rail-title">{% icon "sparkles" %}{% t "ИИ-помощник" %}</p>
-            <p class="small muted">Загрузите страницу учебника, документ Word, таблицу или видео — помощник соберёт блок с темами, заданиями и карточками черновиками.</p>
-            <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_ai' %}?target=mixed">{% t "Собрать блок из материала" %}</a>
+            <p class="small muted">Загрузите страницу учебника, документ Word, таблицу или видео — помощник соберёт класс с темами, заданиями и карточками черновиками.</p>
+            <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_ai' %}?target=mixed">{% t "Собрать класс из материала" %}</a>
         </div>
         <div class="card card-pad-sm">
             <p class="rail-title">Подсказка</p>
-            <p class="small muted">Блок — крупный раздел курса (например, «Reading B2» или «Модуль 1 ОГЭ»). Порядок блоков задаёт последовательность дорожной карты у учеников.</p>
+            <p class="small muted">Класс — крупный раздел курса (например, «ОГЭ» или «Reading B2»). Внутри класса — главы («Хобби», «Путешествия»), в главах — темы с заданиями. Порядок классов задаёт последовательность дорожной карты у учеников.</p>
             <p class="small muted mb-0">Уровень CEFR показывает ученику сложность раздела и используется в аналитике. Перетаскивайте темы между классами на странице Классов — оригинал сохраняется, создаётся копия со всеми заданиями.</p>
         </div>
     </div>
@@ -135,12 +129,15 @@
   if(!form) return;
   const all = form.querySelector('[data-select-all-topics]');
   const boxes = Array.from(form.querySelectorAll('[name="copy_topic_ids"]'));
+  const submit = form.querySelector('[data-copy-submit]');
+  const note = form.querySelector('[data-copy-selection]');
+  if(!all || !boxes.length) return;
   function update(){
     const count = boxes.filter(box => box.checked).length;
     all.checked = count === boxes.length;
     all.indeterminate = count > 0 && count < boxes.length;
-    form.querySelector('[type="submit"]').disabled = count === 0;
-    form.querySelector('[data-copy-selection]').textContent = 'Выбрано тем: ' + count;
+    if(submit) submit.disabled = count === 0;
+    if(note) note.textContent = 'Выбрано тем: ' + count;
   }
   all.addEventListener('change', () => { boxes.forEach(box => box.checked = all.checked); update(); });
   boxes.forEach(box => box.addEventListener('change', update));

@@ -9,6 +9,7 @@
     <ol class="crumbs">
         <li><a href="{% url 'student_assignments' %}">{% t "Курс" %}</a></li>
         <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'student_assignments' %}?q={{ assignment.topic.block.name|urlencode }}">{{ assignment.topic.block.name }}</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'student_assignments' %}?q={{ assignment.topic.chapter.title|urlencode }}">{{ assignment.topic.chapter.title }}</a></li>
         <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'student_assignments' %}?q={{ assignment.topic.title|urlencode }}">{{ assignment.topic.title }}</a></li>
         <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">{{ assignment.title }}</span></li>
     </ol>
@@ -215,7 +216,7 @@
         <div class="card card-pad-sm">
             <p class="rail-title">Тема и словарь</p>
             <p class="small mb-0"><strong>{{ assignment.topic.title }}</strong></p>
-            <p class="tiny muted mb-0">{{ assignment.topic.block.name }}{% if assignment.topic.block.cefr_level %} · {{ assignment.topic.block.cefr_level }}{% endif %}</p>
+            <p class="tiny muted mb-0">{{ assignment.topic.block.name }}{% if assignment.topic.block.cefr_level %} · {{ assignment.topic.block.cefr_level }}{% endif %} · {{ assignment.topic.chapter.title }}</p>
             {% if trainer_cards %}
                 {% for item in trainer_cards %}
                     <a class="chip chip-wrap" style="margin-top:8px" href="{% url 'trainer_session' item.pk %}">{% icon "cards" "icon icon-sm" %}{{ item.title }}</a>

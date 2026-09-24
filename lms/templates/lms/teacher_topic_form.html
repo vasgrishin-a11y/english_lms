@@ -8,7 +8,8 @@
 <nav aria-label="Хлебные крошки">
     <ol class="crumbs">
         <li><a href="{% url 'teacher_curriculum' %}">{% t "Карта курса" %}</a></li>
-        {% if form.instance.pk %}<li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span>{{ form.instance.block.name }}</span></li>{% endif %}
+        {% if form.instance.pk %}<li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_curriculum' %}#block-{{ form.instance.block_id }}">{{ form.instance.block.name }}</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_curriculum' %}#chapter-{{ form.instance.chapter_id }}">{{ form.instance.chapter.title }}</a></li>{% endif %}
         <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">{% if form.instance.pk %}{{ form.instance.title }}{% else %}Новая тема{% endif %}</span></li>
     </ol>
 </nav>
@@ -20,12 +21,14 @@
             <form method="post" novalidate data-preset-form>
                 {% csrf_token %}
                 {% include "lms/form_fields.html" %}
+                {% include "lms/parts/audience_fields.html" with groups_field=form.groups students_field=form.students %}
                 <div class="form-actions">
                     <button class="btn" type="submit">{% icon "save" %}{% t "Сохранить тему" %}</button>
                     <a class="btn btn-secondary" href="{% url 'teacher_curriculum' %}">{% t "Отмена" %}</a>
                     {% if form.instance.pk %}
                         <a class="btn btn-ghost" href="{% url 'teacher_assignment_new' %}?topic={{ form.instance.pk }}">{% icon "plus" %}{% t "Добавить задание" %}</a>
                     {% endif %}
+                    <a class="btn btn-ghost" href="{% url 'teacher_chapter_new' %}{% if form.instance.pk %}?block={{ form.instance.block_id }}{% elif form.initial.block %}?block={{ form.initial.block }}{% endif %}">{% icon "plus" %}{% t "Новая глава" %}</a>
                 </div>
             </form>
         </section>
@@ -57,8 +60,9 @@
         </div>
         <div class="card card-pad-sm">
             <p class="rail-title">Подсказка</p>
-            <p class="small muted">Тема — раздел внутри блока. В теме живут задания, включая задания с карточками для тренировки слов.</p>
-            <p class="small muted mb-0">Порядок тем внутри блока влияет на дорожную карту.</p>
+            <p class="small muted">Тема — раздел внутри главы класса. В теме живут задания, включая задания с карточками для тренировки слов.</p>
+            <p class="small muted">Иерархия: Класс → Глава → Тема → Задания. Если главу не выбрать, тема попадёт в главу «Общее» своего класса.</p>
+            <p class="small muted mb-0">Порядок тем внутри главы влияет на дорожную карту.</p>
         </div>
     </div>
 </div>

@@ -31,6 +31,7 @@ from lms.models import (
     Assignment,
     Block,
     CefrLevel,
+    Chapter,
     Choice,
     CommentSnippet,
     Flashcard,
@@ -202,7 +203,7 @@ class Command(BaseCommand):
             skills[kind] = skill
         return skills
 
-    # ── Курс: блоки → темы → задания ────────────────────────────────
+    # ── Курс: классы → главы → темы → задания ───────────────────────
     def _course(self, skills):
         now = timezone.now()
         plan = [
@@ -210,23 +211,26 @@ class Command(BaseCommand):
                 "Грамматика: времена группы Perfect",
                 CefrLevel.B1,
                 "Система времён, типичные ошибки ЕГЭ/ОГЭ.",
-                [("Present Perfect и Past Simple", 1), ("Условные предложения", 2)],
+                [
+                    ("Времена", [("Present Perfect и Past Simple", 1)]),
+                    ("Conditionals", [("Условные предложения", 1)]),
+                ],
             ),
             (
                 "Лексика и говорение",
                 CefrLevel.B2,
                 "Темы travel, work, technology + устная практика.",
-                [("Travel vocabulary", 1), ("Speaking: describe a trip", 2)],
+                [("Travel", [("Travel vocabulary", 1), ("Speaking: describe a trip", 2)])],
             ),
             (
                 "Подготовка к IELTS: Writing",
                 CefrLevel.B2,
                 "Task 1 и Task 2 по официальным band descriptors.",
-                [("IELTS Task 1: line graph", 1), ("IELTS Task 2: essay", 2)],
+                [("Writing", [("IELTS Task 1: line graph", 1), ("IELTS Task 2: essay", 2)])],
             ),
         ]
         blocks = {}
-        for block_name, level, description, topics in plan:
+        for block_name, level, description, chapters in plan:
             block, _ = Block.objects.get_or_create(
                 slug=slugify(block_name),
                 defaults={
@@ -236,12 +240,18 @@ class Command(BaseCommand):
                     "order": len(blocks) + 1,
                 },
             )
-            for topic_name, order in topics:
-                Topic.objects.get_or_create(
+            for chapter_order, (chapter_name, topics) in enumerate(chapters, start=1):
+                chapter, _ = Chapter.objects.get_or_create(
                     block=block,
-                    slug=slugify(topic_name),
-                    defaults={"title": topic_name, "order": order},
+                    slug=slugify(chapter_name),
+                    defaults={"title": chapter_name, "order": chapter_order},
                 )
+                for topic_name, order in topics:
+                    Topic.objects.get_or_create(
+                        block=block,
+                        slug=slugify(topic_name),
+                        defaults={"title": topic_name, "chapter": chapter, "order": order},
+                    )
             blocks[block_name] = block
         self._assignments(blocks, skills, now)
         return blocks
@@ -401,15 +411,11 @@ class Command(BaseCommand):
         b1_group = Group.objects.filter(slug="b1-intermediate-evening").first()
         b2_group = Group.objects.filter(slug="b2-ielts-prep").first()
         if b1_group:
-            conditionals.group = b1_group
-            conditionals.save(update_fields=["group", "updated_at"])
-            gaps.group = b1_group
-            gaps.save(update_fields=["group", "updated_at"])
+            conditionals.groups.add(b1_group)
+            gaps.groups.add(b1_group)
         if b2_group:
-            task1.group = b2_group
-            task1.save(update_fields=["group", "updated_at"])
-            task2.group = b2_group
-            task2.save(update_fields=["group", "updated_at"])
+            task1.groups.add(b2_group)
+            task2.groups.add(b2_group)
 
         self._card_assignment(topic(lexis, "Travel vocabulary"))
         self._card_assignment(topic(grammar, "Present Perfect и Past Simple"))

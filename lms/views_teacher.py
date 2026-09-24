@@ -25,13 +25,14 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from . import xlsx
+from . import audience, xlsx
 from .curriculum import course_tree, gradebook, queue_counts, teacher_overview
 from .decorators import get_user_role, teacher_required
 from .forms import (
     AssignmentForm,
     AssignmentQuickForm,
     BlockForm,
+    ChapterForm,
     CommentSnippetForm,
     FlashcardBulkForm,
     FlashcardForm,
@@ -58,6 +59,7 @@ from .models import (
     Assignment,
     Block,
     CardReview,
+    Chapter,
     Choice,
     CommentSnippet,
     Flashcard,
@@ -116,10 +118,24 @@ def _delete(request, obj, redirect_to, protected_message, blocked=False):
 
 
 def block_tree_stats(block):
-    """Сколько вложенного уйдёт вместе с блоком: темы, задания, вопросы, карточки."""
+    """Сколько вложенного уйдёт вместе с классом: главы, темы, задания, вопросы, карточки."""
     assignments = Assignment.objects.filter(topic__block=block)
     return {
+        "chapters": block.chapters.count(),
         "topics": block.topics.count(),
+        "assignments": assignments.count(),
+        "questions": Question.objects.filter(assignment__in=assignments).count(),
+        "cards": Flashcard.objects.filter(assignment__in=assignments).count(),
+        "submissions": Submission.objects.filter(assignment__in=assignments).count(),
+    }
+
+
+def chapter_tree_stats(chapter):
+    """Сколько вложенного уйдёт вместе с главой: темы, задания, вопросы, карточки."""
+    assignments = Assignment.objects.filter(topic__chapter=chapter)
+    return {
+        "chapters": 1,
+        "topics": chapter.topics.count(),
         "assignments": assignments.count(),
         "questions": Question.objects.filter(assignment__in=assignments).count(),
         "cards": Flashcard.objects.filter(assignment__in=assignments).count(),
@@ -130,6 +146,7 @@ def block_tree_stats(block):
 def topic_tree_stats(topic):
     assignments = topic.assignments.all()
     return {
+        "chapters": 0,
         "topics": 1,
         "assignments": assignments.count(),
         "questions": Question.objects.filter(assignment__in=assignments).count(),
@@ -139,7 +156,7 @@ def topic_tree_stats(topic):
 
 
 def _delete_cascade(request, obj, redirect_to, kind, stats):
-    """Удалить блок или тему целиком: вместе с темами, заданиями и карточками.
+    """Удалить класс, главу или тему целиком: вместе с темами, заданиями и карточками.
 
     Работы учеников неприкосновенны: если в поддереве есть сдачи, удаление
     запрещено и предлагается архив — иначе пропали бы оценки и история попыток.
@@ -175,10 +192,13 @@ def _delete_cascade(request, obj, redirect_to, kind, stats):
         f"вопросов {stats['questions']}",
         f"карточек {stats['cards']}",
     ]
+    if stats.get("chapters"):
+        parts.insert(0, f"глав {stats['chapters']}")
     logger.info(
-        "curriculum_delete kind=%s pk=%s topics=%s assignments=%s questions=%s cards=%s",
+        "curriculum_delete kind=%s pk=%s chapters=%s topics=%s assignments=%s questions=%s cards=%s",
         kind,
         pk,
+        stats.get("chapters", 0),
         stats["topics"],
         stats["assignments"],
         stats["questions"],
@@ -199,11 +219,11 @@ def console_home(request):
     waiting = (
         Submission.objects.latest_attempts()
         .filter(status__in=QUEUE_FILTERS["pending"])
-        .select_related("student", "assignment__topic__block")
+        .select_related("student", "assignment__topic__block", "assignment__topic__chapter")
         .order_by("submitted_at", "pk")[:6]
     )
     drafts = Assignment.objects.filter(status=Assignment.Publication.DRAFT).select_related(
-        "topic__block"
+        "topic__block", "topic__chapter"
     )[:5]
     blocks_data, _ = course_tree(query="", teacher_view=True)
     request.session["_queue_counts"] = {"ts": timezone.now().timestamp(), **overview["queue"]}
@@ -230,7 +250,9 @@ def _queue_queryset(request):
         order = "fifo"
     submissions = (
         Submission.objects.latest_attempts()
-        .select_related("student", "assignment__topic__block", "feedback")
+        .select_related(
+            "student", "assignment__topic__block", "assignment__topic__chapter", "feedback"
+        )
         .order_by(ORDER_CHOICES[order][0], "pk")
     )
     if queue in QUEUE_FILTERS:
@@ -429,7 +451,7 @@ def _neighbour(request, submission, direction):
 @teacher_required
 @require_GET
 def curriculum(request):
-    """Карта курса: блоки → темы → задания и наборы карточек со счётчиками."""
+    """Карта курса: классы → главы → темы → задания и наборы карточек со счётчиками."""
     query = request.GET.get("q", "").strip()[:200]
     blocks_data, totals = course_tree(query=query, teacher_view=True)
     return render(
@@ -489,18 +511,50 @@ def _place_assignment(assignment, target_topic, before):
     return index
 
 
-def _place_topic(topic, before):
-    """Поставить тему на точное место внутри её блока (перетаскивание)."""
-    siblings = [item for item in topic.block.topics.order_by("order", "pk") if item.pk != topic.pk]
+def _place_topic(topic, before, target_chapter=None):
+    """Поставить тему на точное место внутри главы (перетаскивание).
+
+    ``target_chapter`` — глава-приёмник того же класса (может совпадать с
+    текущей); ``before`` — тема, перед которой вставить; ``None`` — в конец.
+    """
+    target_chapter = target_chapter or topic.chapter
+    moved_across = target_chapter.pk != topic.chapter_id
+    with transaction.atomic():
+        source = [
+            item for item in topic.chapter.topics.order_by("order", "pk") if item.pk != topic.pk
+        ]
+        siblings = list(target_chapter.topics.order_by("order", "pk")) if moved_across else source
+        index = len(siblings)
+        if before is not None:
+            index = next(
+                (position for position, item in enumerate(siblings) if item.pk == before.pk),
+                len(siblings),
+            )
+        siblings.insert(index, topic)
+        if moved_across:
+            topic.chapter = target_chapter
+            topic.block_id = target_chapter.block_id
+            topic.save(update_fields=["chapter", "block", "updated_at"])
+        _renumber(siblings, force_pks={topic.pk})
+        if moved_across:
+            _renumber(source)
+    return index
+
+
+def _place_chapter(chapter, before):
+    """Поставить главу на точное место внутри её класса (перетаскивание)."""
+    siblings = [
+        item for item in chapter.block.chapters.order_by("order", "pk") if item.pk != chapter.pk
+    ]
     index = len(siblings)
     if before is not None:
         index = next(
             (position for position, item in enumerate(siblings) if item.pk == before.pk),
             len(siblings),
         )
-    siblings.insert(index, topic)
+    siblings.insert(index, chapter)
     with transaction.atomic():
-        _renumber(siblings, force_pks={topic.pk})
+        _renumber(siblings, force_pks={chapter.pk})
     return index
 
 
@@ -541,11 +595,11 @@ def _clone_assignment_full(source, target_topic, order=None):
         order=new_order,
         is_active=source.is_active,
         status=Assignment.Publication.DRAFT,
-        group=source.group,
         publish_at=None,
     )
     copy.save()
     copy.skills.set(source.skills.all())
+    copy.groups.set(source.groups.all())
     copy.assigned_students.set(source.assigned_students.all())
     # attachments
     for att in source.attachments.order_by("order", "pk"):
@@ -585,14 +639,18 @@ def _clone_assignment_full(source, target_topic, order=None):
     return copy
 
 
-def _clone_topic_to_block(source_topic, target_block, before=None):
-    """Скопировать тему в другой блок вместе со всеми заданиями (оригинал не удаляется)."""
+def _clone_topic_to_block(source_topic, target_block, before=None, target_chapter=None):
+    """Скопировать тему в другой класс вместе со всеми заданиями (оригинал не удаляется).
+
+    Копия попадает в ``target_chapter`` (глава целевого класса) или, если глава
+    не указана, — в главу «Общее» целевого класса.
+    """
     with transaction.atomic():
-        # order
-        max_order = target_block.topics.aggregate(m=Max("order"))["m"] or 0
-        # slug
+        if target_chapter is None or target_chapter.block_id != target_block.pk:
+            target_chapter = target_block.default_chapter()
+        max_order = target_chapter.topics.aggregate(m=Max("order"))["m"] or 0
         new_slug = _generate_unique_topic_slug(target_block, source_topic.slug)
-        # если в целевом блоке уже есть тема с таким же title, добавим (копия)
+        # если в целевом классе уже есть тема с таким же title, добавим (копия)
         title = source_topic.title
         if target_block.topics.filter(title=title).exists():
             title = f"{title} (копия)"
@@ -600,21 +658,21 @@ def _clone_topic_to_block(source_topic, target_block, before=None):
                 title = title[:200]
         new_topic = Topic.objects.create(
             block=target_block,
+            chapter=target_chapter,
             title=title,
             slug=new_slug,
             description=source_topic.description,
             order=max_order + 1,
             is_active=source_topic.is_active,
         )
-        # clone assignments
+        new_topic.groups.set(source_topic.groups.all())
+        new_topic.students.set(source_topic.students.all())
         for assignment in source_topic.assignments.order_by("order", "pk"):
             _clone_assignment_full(assignment, new_topic)
-        # если указан before, ставим копию перед ним
-        if before:
+        if before is not None and before.chapter_id == target_chapter.pk:
             _place_topic(new_topic, before)
         else:
-            # перенумеровать чтобы порядок был последовательным
-            _renumber(list(target_block.topics.order_by("order", "pk")), force_pks={new_topic.pk})
+            _renumber(list(target_chapter.topics.order_by("order", "pk")), force_pks={new_topic.pk})
         return new_topic
 
 
@@ -680,7 +738,7 @@ def library_import(request, slug):
         raise Http404("Неизвестный набор библиотеки")
     created, skipped = result["created"], result["skipped"]
     parts = [
-        f"блоков {created['blocks']}",
+        f"классов {created['blocks']}",
         f"тем {created['topics']}",
         f"заданий {created['assignments']}",
     ]
@@ -714,45 +772,65 @@ def archive(request):
     archived_blocks = (
         Block.objects.filter(is_active=False)
         .annotate(
+            chapter_total=Count("chapters", distinct=True),
             topic_total=Count("topics", distinct=True),
             assignment_total=Count("topics__assignments", distinct=True),
         )
         .order_by("order", "name", "pk")
     )
-    archived_topics = (
-        Topic.objects.filter(is_active=False, block__is_active=True)
+    archived_chapters = (
+        Chapter.objects.filter(is_active=False, block__is_active=True)
         .select_related("block")
-        .annotate(assignment_total=Count("assignments"))
+        .annotate(
+            topic_total=Count("topics", distinct=True),
+            assignment_total=Count("topics__assignments", distinct=True),
+        )
         .order_by("block__order", "order", "title", "pk")
+    )
+    archived_topics = (
+        Topic.objects.filter(is_active=False, chapter__is_active=True, block__is_active=True)
+        .select_related("block", "chapter")
+        .annotate(assignment_total=Count("assignments"))
+        .order_by("block__order", "chapter__order", "order", "title", "pk")
     )
     archived_assignments = (
         Assignment.objects.filter(
             is_active=False,
             topic__is_active=True,
+            topic__chapter__is_active=True,
             topic__block__is_active=True,
         )
-        .select_related("topic__block", "topic")
+        .select_related("topic__block", "topic__chapter", "topic")
         .annotate(submission_total=Count("submissions"))
-        .order_by("topic__block__order", "topic__order", "order", "title", "pk")
+        .order_by(
+            "topic__block__order", "topic__chapter__order", "topic__order", "order", "title", "pk"
+        )
     )
     return render(
         request,
         "lms/teacher_archive.html",
         {
             "archived_blocks": archived_blocks,
+            "archived_chapters": archived_chapters,
             "archived_topics": archived_topics,
             "archived_assignments": archived_assignments,
             "archive_total": (
-                archived_blocks.count() + archived_topics.count() + archived_assignments.count()
+                archived_blocks.count()
+                + archived_chapters.count()
+                + archived_topics.count()
+                + archived_assignments.count()
             ),
             "workspace": "archive",
         },
     )
 
 
+ARCHIVE_KINDS = {"block": Block, "chapter": Chapter, "topic": Topic, "assignment": Assignment}
+ARCHIVE_LABELS = {"block": "Класс", "chapter": "Глава", "topic": "Тема", "assignment": "Задание"}
+
+
 def _archive_queryset(kind, pk):
-    models = {"block": Block, "topic": Topic, "assignment": Assignment}
-    model = models.get(kind)
+    model = ARCHIVE_KINDS.get(kind)
     if model is None:
         raise Http404("Неизвестный тип элемента архива")
     return get_object_or_404(model, pk=pk)
@@ -762,37 +840,36 @@ def _set_archived(item, archived, restore_tree=False):
     """Скрыть/восстановить элемент и, при необходимости, его дочерние узлы."""
     now = timezone.now()
     active = not archived
+    item.is_active = active
+    item.save(update_fields=["is_active", "updated_at"])
+    if not (archived or restore_tree):
+        return
     if isinstance(item, Block):
-        item.is_active = active
-        item.save(update_fields=["is_active", "updated_at"])
-        if archived or restore_tree:
-            Topic.objects.filter(block=item).update(is_active=active, updated_at=now)
-            Assignment.objects.filter(topic__block=item).update(is_active=active, updated_at=now)
+        Chapter.objects.filter(block=item).update(is_active=active, updated_at=now)
+        Topic.objects.filter(block=item).update(is_active=active, updated_at=now)
+        Assignment.objects.filter(topic__block=item).update(is_active=active, updated_at=now)
+    elif isinstance(item, Chapter):
+        Topic.objects.filter(chapter=item).update(is_active=active, updated_at=now)
+        Assignment.objects.filter(topic__chapter=item).update(is_active=active, updated_at=now)
     elif isinstance(item, Topic):
-        item.is_active = active
-        item.save(update_fields=["is_active", "updated_at"])
-        if archived or restore_tree:
-            Assignment.objects.filter(topic=item).update(is_active=active, updated_at=now)
-    else:
-        item.is_active = active
-        item.save(update_fields=["is_active", "updated_at"])
+        Assignment.objects.filter(topic=item).update(is_active=active, updated_at=now)
 
 
 @teacher_required
 @require_POST
 @transaction.atomic
 def archive_item(request, kind, pk):
-    """Переместить блок, тему или задание в архив либо восстановить его."""
+    """Переместить класс, главу, тему или задание в архив либо восстановить."""
     item = _archive_queryset(kind, pk)
     restore = request.POST.get("action") == "restore"
     restore_tree = request.POST.get("restore_tree") == "1"
     _set_archived(item, archived=not restore, restore_tree=restore_tree)
-    label = "Блок" if kind == "block" else "Тема" if kind == "topic" else "Задание"
+    label = ARCHIVE_LABELS[kind]
     title = str(item)
     if restore:
         message = (
             f"{label} «{title}» восстановлен вместе с содержимым."
-            if restore_tree and kind in {"block", "topic"}
+            if restore_tree and kind in {"block", "chapter", "topic"}
             else f"{label} «{title}» восстановлен."
         )
     else:
@@ -866,13 +943,7 @@ def _submission_progress(assignment):
     """
     if not assignment.pk:
         return None
-    expected = User.objects.filter(profile__role=Profile.Role.STUDENT, is_active=True)
-    if assignment.group_id:
-        expected = expected.filter(student_groups=assignment.group_id)
-    expected_ids = set(expected.values_list("pk", flat=True))
-    expected_ids |= set(
-        assignment.assigned_students.filter(is_active=True).values_list("pk", flat=True)
-    )
+    expected_ids = set(audience.expected_students(assignment).values_list("pk", flat=True))
     submitted_ids = set(
         Submission.objects.filter(assignment=assignment).values_list("student_id", flat=True)
     )
@@ -893,6 +964,48 @@ def _flat_presets(groups):
     return [item for group in groups for item in group["items"]]
 
 
+def _copy_topics_into_block(request, block, ids):
+    """Скопировать темы ``ids`` из других классов в ``block``; вернуть число копий.
+
+    Ошибки выбора (пусто, слишком много, список устарел) сообщаются через
+    ``messages`` — вызывающему остаётся только решить, куда перенаправить.
+    """
+    if not ids:
+        messages.error(request, "Выберите хотя бы одну тему.")
+        return 0
+    if len(ids) > 100 or any(not str(value).isdigit() for value in ids):
+        messages.error(request, "Выберите не более 100 тем из списка.")
+        return 0
+    ids = set(map(int, ids))
+    with transaction.atomic():
+        Block.objects.select_for_update().get(pk=block.pk)
+        sources = list(
+            Topic.objects.filter(pk__in=ids, is_active=True)
+            .exclude(block=block)
+            .select_related("block")
+            .order_by("block__order", "order", "pk")
+        )
+        if len(sources) != len(ids):
+            messages.error(request, "Список тем изменился. Выберите темы из других классов заново.")
+            return 0
+        for source in sources:
+            _clone_topic_to_block(source, block)
+    messages.success(request, f"Скопировано тем: {len(sources)}. Задания сохранены как черновики.")
+    return len(sources)
+
+
+def _copyable_topics(block=None):
+    """Активные темы других классов — кандидаты на копирование в ``block``."""
+    qs = Topic.objects.filter(is_active=True)
+    if block is not None:
+        qs = qs.exclude(block=block)
+    return (
+        qs.select_related("block", "chapter")
+        .annotate(assignment_count=Count("assignments"))
+        .order_by("block__order", "chapter__order", "order", "title")[:100]
+    )
+
+
 @teacher_required
 @require_http_methods(["GET", "POST"])
 def block_form(request, pk=None):
@@ -905,49 +1018,20 @@ def block_form(request, pk=None):
             messages.error(request, "Сначала сохраните класс, затем копируйте темы.")
             return redirect("teacher_block_new")
         ids = request.POST.getlist("copy_topic_ids") or request.POST.getlist("copy_topic_id")
-        if not ids:
-            messages.error(request, "Выберите хотя бы одну тему.")
-        elif len(ids) > 100 or any(not value.isdigit() for value in ids):
-            messages.error(request, "Выберите не более 100 тем из списка.")
-        else:
-            ids = set(map(int, ids))
-            with transaction.atomic():
-                Block.objects.select_for_update().get(pk=block.pk)
-                sources = list(
-                    Topic.objects.filter(pk__in=ids, is_active=True)
-                    .exclude(block=block)
-                    .select_related("block")
-                    .order_by("block__order", "order", "pk")
-                )
-                if len(sources) != len(ids):
-                    messages.error(
-                        request, "Список тем изменился. Выберите темы из других классов заново."
-                    )
-                else:
-                    for source in sources:
-                        _clone_topic_to_block(source, block)
-                    messages.success(
-                        request,
-                        f"Скопировано тем: {len(sources)}. Задания сохранены как черновики.",
-                    )
+        _copy_topics_into_block(request, block, ids)
         return redirect("teacher_block_edit", pk=block.pk)
     form = BlockForm(request.POST or None, instance=block)
     if request.method == "POST" and form.is_valid():
         instance = form.save()
-        messages.success(request, f"Блок сохранён: {instance.name}")
+        messages.success(request, f"Класс сохранён: {instance.name}")
+        # При создании класса темы других классов выбираются сразу в той же форме:
+        # не нужно сохранять пустой класс и возвращаться за копированием.
+        if block is None and request.POST.getlist("copy_topic_ids"):
+            _copy_topics_into_block(request, instance, request.POST.getlist("copy_topic_ids"))
         return redirect("teacher_curriculum")
     groups = block_suggestion_groups()
-    # Темы из других классов для быстрого копирования
-    other_topics = []
-    all_blocks = []
+    other_topics = _copyable_topics(block)
     if block:
-        other_topics = (
-            Topic.objects.filter(is_active=True)
-            .exclude(block=block)
-            .select_related("block")
-            .annotate(assignment_count=Count("assignments"))
-            .order_by("block__order", "order", "title")[:100]
-        )
         all_blocks = Block.objects.exclude(pk=block.pk).order_by("order", "name")
     else:
         all_blocks = Block.objects.order_by("order", "name")
@@ -969,39 +1053,143 @@ def block_form(request, pk=None):
 @teacher_required
 @require_POST
 def block_delete(request, pk):
-    """Удалить блок целиком: темы, задания, вопросы теста и карточки — вместе с ним."""
+    """Удалить класс целиком: главы, темы, задания, вопросы теста и карточки — вместе с ним."""
     block = get_object_or_404(Block, pk=pk)
     target = "teacher_archive" if request.POST.get("from_archive") == "1" else "teacher_curriculum"
-    if not block.topics.exists():  # пустой блок: прежнее простое удаление
-        return _delete(request, block, target, "Блок нельзя удалить: есть связанные данные.")
-    return _delete_cascade(request, block, target, "блок", block_tree_stats(block))
+    if not block.topics.exists():  # пустой класс: прежнее простое удаление
+        return _delete(request, block, target, "Класс нельзя удалить: есть связанные данные.")
+    return _delete_cascade(request, block, target, "класс", block_tree_stats(block))
 
 
 @teacher_required
 @require_POST
 def block_move(request, pk):
-    """Переместить блок в дорожной карте: порядок виден и ученикам, и в журнале."""
+    """Переместить класс в дорожной карте: порядок виден и ученикам, и в журнале."""
     block = get_object_or_404(Block, pk=pk)
     if _reorder(Block.objects.all(), block, request.POST.get("direction")):
-        messages.success(request, f"Порядок блока изменён: {block.name}")
+        messages.success(request, f"Порядок класса изменён: {block.name}")
     else:
-        messages.info(request, "Крайний блок: перемещать некуда.")
+        messages.info(request, "Крайний класс: перемещать некуда.")
     return redirect("teacher_curriculum")
+
+
+# ── Главы ──────────────────────────────────────────────────────────────────
+@teacher_required
+@require_http_methods(["GET", "POST"])
+def chapter_form(request, pk=None):
+    """Создать или изменить главу — подход тот же, что у темы, уровнем выше."""
+    chapter = get_object_or_404(Chapter.objects.select_related("block"), pk=pk) if pk else None
+    initial = {}
+    if request.GET.get("block", "").isdigit():
+        initial["block"] = request.GET["block"]
+    form = ChapterForm(request.POST or None, instance=chapter, initial=initial or None)
+    if request.method == "POST" and form.is_valid():
+        instance = form.save()
+        messages.success(request, f"Глава сохранена: {instance.title}")
+        return redirect(reverse("teacher_curriculum") + f"#block-{instance.block_id}")
+    parent = chapter.block if chapter else _block_from_query(request)
+    return render(
+        request,
+        "lms/teacher_chapter_form.html",
+        {
+            "form": form,
+            "chapter": chapter,
+            "blocks": Block.objects.order_by("order", "name"),
+            "inherited_audience": audience.describe(parent) if parent else None,
+            "workspace": "curriculum",
+        },
+    )
+
+
+def _block_from_query(request):
+    raw = request.GET.get("block", "")
+    return Block.objects.filter(pk=int(raw)).first() if raw.isdigit() else None
+
+
+@teacher_required
+@require_POST
+def chapter_delete(request, pk):
+    """Удалить главу целиком вместе с темами, заданиями, вопросами и карточками."""
+    chapter = get_object_or_404(Chapter, pk=pk)
+    target = "teacher_archive" if request.POST.get("from_archive") == "1" else "teacher_curriculum"
+    if not chapter.topics.exists():
+        return _delete(request, chapter, target, "Главу нельзя удалить: есть связанные данные.")
+    return _delete_cascade(request, chapter, target, "главу", chapter_tree_stats(chapter))
+
+
+@teacher_required
+@require_POST
+def chapter_move(request, pk):
+    """Порядок глав внутри класса: кнопками (direction) или перетаскиванием (before)."""
+    chapter = get_object_or_404(Chapter.objects.select_related("block"), pk=pk)
+    if "before" in request.POST:
+        before = None
+        if request.POST.get("before"):
+            before = get_object_or_404(Chapter, pk=request.POST["before"], block=chapter.block)
+        _place_chapter(chapter, before)
+        return _quick_outcome(request, True, f"Порядок главы изменён: {chapter.title}", "")
+    done = _reorder(
+        Chapter.objects.filter(block=chapter.block), chapter, request.POST.get("direction")
+    )
+    return _quick_outcome(
+        request,
+        done,
+        f"Порядок главы изменён: {chapter.title}",
+        "Крайняя глава в классе: перемещать некуда.",
+    )
+
+
+@teacher_required
+@require_POST
+def chapter_publish(request, pk):
+    chapter = get_object_or_404(Chapter, pk=pk)
+    active = request.POST.get("active") == "1"
+    chapter.is_active = active
+    chapter.save(update_fields=["is_active", "updated_at"])
+    messages.success(
+        request,
+        f"Глава «{chapter.title}» опубликована." if active else f"Глава «{chapter.title}» скрыта.",
+    )
+    return redirect(request.POST.get("next") or "teacher_curriculum")
+
+
+@teacher_required
+@require_POST
+def chapter_assignments_publish(request, pk):
+    """Скопом: статус всех заданий главы (все её темы разом)."""
+    chapter = get_object_or_404(Chapter, pk=pk)
+    return _bulk_publish_assignments(
+        request, Assignment.objects.filter(topic__chapter=chapter), f"главы «{chapter.title}»"
+    )
 
 
 @teacher_required
 @require_http_methods(["GET", "POST"])
 def topic_form(request, pk=None):
-    topic = get_object_or_404(Topic.objects.select_related("block"), pk=pk) if pk else None
+    topic = (
+        get_object_or_404(Topic.objects.select_related("block", "chapter"), pk=pk) if pk else None
+    )
     initial = {}
-    if request.GET.get("block"):
+    if request.GET.get("chapter", "").isdigit():
+        chapter = Chapter.objects.filter(pk=int(request.GET["chapter"])).first()
+        if chapter is not None:
+            initial["chapter"] = chapter.pk
+            initial["block"] = chapter.block_id
+    if request.GET.get("block", "").isdigit():
         initial["block"] = request.GET["block"]
     form = TopicForm(request.POST or None, instance=topic, initial=initial or None)
     if request.method == "POST" and form.is_valid():
         instance = form.save()
         messages.success(request, f"Тема сохранена: {instance.title}")
-        return redirect("teacher_curriculum")
+        return redirect(reverse("teacher_curriculum") + f"#block-{instance.block_id}")
     groups = topic_suggestion_groups()
+    if topic is not None:
+        parent = topic.chapter
+    else:
+        parent = None
+        if request.GET.get("chapter", "").isdigit():
+            parent = Chapter.objects.filter(pk=int(request.GET["chapter"])).first()
+        parent = parent or _block_from_query(request)
     return render(
         request,
         "lms/teacher_topic_form.html",
@@ -1011,6 +1199,7 @@ def topic_form(request, pk=None):
             "blocks": Block.objects.order_by("order", "name"),
             "suggestion_groups": groups,
             "suggestion_payload": _flat_presets(groups),
+            "inherited_audience": audience.describe(parent) if parent else None,
             "workspace": "curriculum",
         },
     )
@@ -1027,43 +1216,76 @@ def topic_delete(request, pk):
     return _delete_cascade(request, topic, target, "тему", topic_tree_stats(topic))
 
 
+def _target_chapter(request, block):
+    """Глава-приёмник из запроса (``chapter``/``target_chapter``) — только из ``block``."""
+    raw = request.POST.get("target_chapter") or request.POST.get("chapter") or ""
+    if not str(raw).isdigit():
+        return None
+    return Chapter.objects.filter(pk=int(raw), block=block).first()
+
+
 @teacher_required
 @require_POST
 def topic_move(request, pk):
-    """Переместить тему внутри блока или скопировать в другой блок (дрэг между классами с копированием)."""
-    topic = get_object_or_404(Topic.objects.select_related("block"), pk=pk)
-    # Копирование между классами: если target_block отличается — создаём копию, оригинал не удаляем
+    """Переместить тему: порядок в главе, перенос между главами класса, копия в другой класс.
+
+    Внутри класса тема именно переезжает (в ту же или другую главу); в другой
+    класс — копируется, оригинал остаётся, как и раньше.
+    """
+    topic = get_object_or_404(Topic.objects.select_related("block", "chapter"), pk=pk)
     target_block_id = request.POST.get("target_block") or request.POST.get("block")
-    if target_block_id and target_block_id.isdigit():
+    if target_block_id and str(target_block_id).isdigit():
         target_block = get_object_or_404(Block, pk=int(target_block_id))
         if target_block.pk != topic.block_id:
+            target_chapter = _target_chapter(request, target_block)
             before = None
-            if request.POST.get("before") and request.POST.get("before").isdigit():
-                # before принадлежит целевому блоку
+            if str(request.POST.get("before", "")).isdigit():
                 before = Topic.objects.filter(
                     pk=int(request.POST["before"]), block=target_block
                 ).first()
-            new_topic = _clone_topic_to_block(topic, target_block, before=before)
-            msg = f"Тема скопирована в класс «{target_block.name}»: {new_topic.title} ({new_topic.assignments.count()} заданий)"
+            if before is not None and target_chapter is None:
+                target_chapter = before.chapter
+            new_topic = _clone_topic_to_block(
+                topic, target_block, before=before, target_chapter=target_chapter
+            )
+            msg = (
+                f"Тема скопирована в класс «{target_block.name}»: {new_topic.title} "
+                f"({new_topic.assignments.count()} заданий)"
+            )
             logger.info(
                 "topic_copy src=%s -> block=%s new=%s", topic.pk, target_block.pk, new_topic.pk
             )
             return _quick_outcome(request, True, msg, "")
-        # если target_block совпадает с исходным — это обычный reorder внутри блока (fallthrough)
+        # target_block совпадает с исходным — перенос внутри класса (ниже)
 
-    if "before" in request.POST:
+    target_chapter = _target_chapter(request, topic.block)
+    if "before" in request.POST or target_chapter is not None:
         before = None
         if request.POST.get("before"):
-            # before может быть из того же блока (reorder) или уже обработан выше как copy
             before = get_object_or_404(Topic, pk=request.POST["before"], block=topic.block)
-        _place_topic(topic, before)
-        return _quick_outcome(request, True, f"Порядок темы изменён: {topic.title}", "")
-    done = _reorder(Topic.objects.filter(block=topic.block), topic, request.POST.get("direction"))
+            if target_chapter is None:
+                target_chapter = before.chapter
+        target_chapter = target_chapter or topic.chapter
+        if before is not None and before.chapter_id != target_chapter.pk:
+            return _quick_outcome(request, False, "", "Тема-ориентир из другой главы.")
+        moved = target_chapter.pk != topic.chapter_id
+        _place_topic(topic, before, target_chapter=target_chapter)
+        return _quick_outcome(
+            request,
+            True,
+            f"Тема перенесена в главу «{target_chapter.title}»: {topic.title}"
+            if moved
+            else f"Порядок темы изменён: {topic.title}",
+            "",
+        )
+    done = _reorder(
+        Topic.objects.filter(chapter=topic.chapter), topic, request.POST.get("direction")
+    )
     return _quick_outcome(
         request,
         done,
         f"Порядок темы изменён: {topic.title}",
-        "Крайняя тема в блоке: перемещать некуда.",
+        "Крайняя тема в главе: перемещать некуда.",
     )
 
 
@@ -1071,7 +1293,7 @@ def topic_move(request, pk):
 @require_POST
 def topic_copy(request, pk):
     """Скопировать тему в другой класс: оригинал остаётся, копия — черновиками."""
-    topic = get_object_or_404(Topic.objects.select_related("block"), pk=pk)
+    topic = get_object_or_404(Topic.objects.select_related("block", "chapter"), pk=pk)
     target_block_id = request.POST.get("target_block") or request.POST.get("block")
     if not target_block_id or not str(target_block_id).isdigit():
         messages.error(request, "Не выбран целевой класс для копирования темы.")
@@ -1080,7 +1302,9 @@ def topic_copy(request, pk):
     before = None
     if request.POST.get("before") and str(request.POST["before"]).isdigit():
         before = Topic.objects.filter(pk=int(request.POST["before"]), block=target_block).first()
-    new_topic = _clone_topic_to_block(topic, target_block, before=before)
+    new_topic = _clone_topic_to_block(
+        topic, target_block, before=before, target_chapter=_target_chapter(request, target_block)
+    )
     messages.success(
         request,
         f"Тема «{topic.title}» скопирована в класс «{target_block.name}» как «{new_topic.title}». "
@@ -1096,7 +1320,11 @@ def topic_copy(request, pk):
 @require_http_methods(["GET", "POST"])
 def assignment_form(request, pk=None):
     assignment = (
-        get_object_or_404(Assignment.objects.select_related("topic__block"), pk=pk) if pk else None
+        get_object_or_404(
+            Assignment.objects.select_related("topic__block", "topic__chapter"), pk=pk
+        )
+        if pk
+        else None
     )
     initial = {}
     if request.GET.get("topic"):
@@ -1168,8 +1396,8 @@ def assignment_form(request, pk=None):
         {
             "form": form,
             "assignment": assignment,
-            "topics": Topic.objects.select_related("block").order_by(
-                "block__order", "order", "title"
+            "topics": Topic.objects.select_related("block", "chapter").order_by(
+                "block__order", "chapter__order", "order", "title"
             ),
             "groups": Group.objects.filter(is_active=True).order_by("name"),
             "preset_groups": preset_groups,
@@ -1177,6 +1405,7 @@ def assignment_form(request, pk=None):
             "skill_ids": skill_payload["ids"],
             "skills_by_type": skill_payload["by_type"],
             "progress": _submission_progress(assignment) if assignment else None,
+            "inherited_audience": audience.describe(assignment.topic) if assignment else None,
             "questions": question_items,
             "question_form": question_form,
             "total_points": sum(item.points for item in question_items),
@@ -1389,10 +1618,10 @@ def topic_assignments_publish(request, pk):
 @teacher_required
 @require_POST
 def block_assignments_publish(request, pk):
-    """Скопом: статус всех заданий блока (все его темы разом)."""
+    """Скопом: статус всех заданий класса (все его главы и темы разом)."""
     block = get_object_or_404(Block, pk=pk)
     return _bulk_publish_assignments(
-        request, Assignment.objects.filter(topic__block=block), f"блока «{block.name}»"
+        request, Assignment.objects.filter(topic__block=block), f"класса «{block.name}»"
     )
 
 
@@ -1404,7 +1633,7 @@ def block_publish(request, pk):
     block.is_active = active
     block.save(update_fields=["is_active", "updated_at"])
     messages.success(
-        request, f"Блок «{block.name}» опубликован." if active else f"Блок «{block.name}» скрыт."
+        request, f"Класс «{block.name}» опубликован." if active else f"Класс «{block.name}» скрыт."
     )
     return redirect(request.POST.get("next") or "teacher_curriculum")
 
@@ -1439,7 +1668,9 @@ def assignment_delete(request, pk):
 @require_GET
 def assignment_preview(request, pk):
     """Предпросмотр глазами ученика: условия, требования, тест без ответов."""
-    assignment = get_object_or_404(Assignment.objects.select_related("topic__block"), pk=pk)
+    assignment = get_object_or_404(
+        Assignment.objects.select_related("topic__block", "topic__chapter"), pk=pk
+    )
     questions = list(assignment.questions.prefetch_related("choices").order_by("order", "pk"))
     return render(
         request,
@@ -1465,14 +1696,18 @@ def _render_topic_board(request, pk, edit_errors=None):
     Открывается при клике на тему в разделе Курс. Справа — навигация по навыкам на английском.
     Не добавляется в главное меню, выход — кнопка Назад в Курс.
     """
-    topic = get_object_or_404(Topic.objects.select_related("block"), pk=pk)
+    topic = get_object_or_404(Topic.objects.select_related("block", "chapter"), pk=pk)
     assignments = list(
         Assignment.objects.filter(topic=topic)
-        .select_related("topic__block")
-        .prefetch_related("skills", "questions__choices", "cards", "attachments")
+        .select_related("topic__block", "topic__chapter")
+        .prefetch_related(
+            "skills", "questions__choices", "cards", "attachments", "groups", "assigned_students"
+        )
         .order_by("order", "pk")
     )
+    topic_audience = audience.describe(topic)
     for assignment in assignments:
+        assignment.audience = audience.accumulate(assignment, topic_audience)
         assignment.quick_form = AssignmentQuickForm(
             instance=assignment, auto_id=f"assignment-{assignment.pk}-%s"
         )
@@ -1587,6 +1822,7 @@ def _render_topic_board(request, pk, edit_errors=None):
         {
             "topic": topic,
             "block": topic.block,
+            "topic_audience": topic_audience,
             "assignments": assignments_filtered,
             "all_assignments": assignments,
             "skill_menu": skill_menu_visible,
@@ -1677,7 +1913,9 @@ def ai_extract_text(request):
 @require_http_methods(["GET", "POST"])
 def questions(request, pk):
     """Редактор вопросов теста. Баллы задания синхронизируются с суммой вопросов."""
-    assignment = get_object_or_404(Assignment.objects.select_related("topic__block"), pk=pk)
+    assignment = get_object_or_404(
+        Assignment.objects.select_related("topic__block", "topic__chapter"), pk=pk
+    )
     form = QuestionForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         question = form.save(commit=False)
@@ -1776,7 +2014,9 @@ def item_results(request, pk):
     В ячейке — ✓ (с какой попытки), ✗ или отметка ручной проверки; сверху —
     доля верных по каждому пункту, чтобы сразу видеть трудные места.
     """
-    assignment = get_object_or_404(Assignment.objects.select_related("topic__block"), pk=pk)
+    assignment = get_object_or_404(
+        Assignment.objects.select_related("topic__block", "topic__chapter"), pk=pk
+    )
     columns, rows = _item_results_data(assignment)
     return render(
         request,
@@ -1892,7 +2132,7 @@ def question_delete(request, pk):
 # ── Карточки-тренажёр: разновидность задания, а не отдельная сущность ──────
 def _flashcard_assignment(pk):
     return get_object_or_404(
-        Assignment.objects.select_related("topic__block"),
+        Assignment.objects.select_related("topic__block", "topic__chapter"),
         pk=pk,
         assignment_type=Assignment.Type.FLASHCARDS,
     )
@@ -2074,7 +2314,7 @@ def student_detail(request, pk):
     blocks_data, totals = course_tree(student=student)
     attempts = (
         Submission.objects.filter(student=student)
-        .select_related("feedback", "assignment__topic__block")
+        .select_related("feedback", "assignment__topic__block", "assignment__topic__chapter")
         .order_by("-submitted_at", "-pk")[:30]
     )
     skill_rows = (
@@ -2098,11 +2338,14 @@ def student_detail(request, pk):
             int(round(100 * bucket["scored"] / bucket["possible"])) if bucket["possible"] else 0
         )
     cards_due = CardReview.objects.filter(student=student, due_at__lte=timezone.now()).count()
+    issued_password = student.profile.reveal_password()
     return render(
         request,
         "lms/teacher_student_detail.html",
         {
             "student": student,
+            "issued_password": issued_password,
+            "password_changed_by_student": not student.profile.issued_password,
             "blocks_data": blocks_data,
             "totals": totals,
             "attempts": list(attempts),
@@ -2365,11 +2608,11 @@ def student_create(request):
             user = form.save()
             messages.success(
                 request,
-                f"Ученик «{user.first_name} {user.last_name}» успешно создан. "
-                f"Логин: {user.username}, Пароль: {form.saved_password}. "
-                "Сохраните пароль и передайте его ученику!",
+                f"Ученик «{user.get_full_name() or user.username}» создан. "
+                f"Логин: {user.username}. Пароль показан на странице ученика — "
+                "передайте его ученику.",
             )
-            return redirect("teacher_students")
+            return redirect("teacher_student_detail", pk=user.pk)
     else:
         form = StudentCreateForm()
 
@@ -2396,9 +2639,10 @@ def student_edit(request, pk):
         if form.is_valid():
             form.save()
             messages.success(
-                request, f"Данные ученика «{student.first_name} {student.last_name}» обновлены."
+                request,
+                f"Данные ученика «{student.get_full_name() or student.username}» обновлены.",
             )
-            return redirect("teacher_students")
+            return redirect("teacher_student_detail", pk=student.pk)
     else:
         form = StudentEditForm(instance=student)
 
@@ -2446,10 +2690,12 @@ def student_reset_password(request, pk):
     new_password = secrets.token_urlsafe(12)
     student.set_password(new_password)
     student.save()
+    profile, _ = Profile.objects.get_or_create(user=student)
+    profile.remember_password(new_password)
 
     messages.success(
         request,
         f"Пароль ученика «{student.get_full_name() or student.username}» сброшен. "
-        f"Новый пароль: {new_password}",
+        "Новый пароль показан на странице ученика.",
     )
-    return redirect("teacher_students")
+    return redirect("teacher_student_detail", pk=student.pk)

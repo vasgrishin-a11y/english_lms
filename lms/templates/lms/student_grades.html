@@ -25,7 +25,7 @@
             <span class="row-main">
                 <a class="row-title" href="{% url 'assignment_detail' attempt.assignment_id %}">{{ attempt.assignment.title }}</a>
                 <span class="row-meta">
-                    <span>{{ attempt.assignment.topic.block.name }} · {{ attempt.assignment.topic.title }}</span>
+                    <span>{{ attempt.assignment.topic.block.name }} · {{ attempt.assignment.topic.chapter.title }} · {{ attempt.assignment.topic.title }}</span>
                     <span>Попытка {{ attempt.version }} · {{ attempt.submitted_at|date:"d.m.Y H:i" }}</span>
                     {% if attempt.is_late %}<span class="badge badge-needs_revision">после дедлайна</span>{% endif %}
                 </span>

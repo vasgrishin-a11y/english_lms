@@ -88,14 +88,10 @@ def submit_assignment(*, student, assignment_id, expected_version, text_answer, 
                 raise PermissionDenied
             assignment = (
                 Assignment.objects.select_for_update(of=("self",))
-                .select_related("topic__block")
+                .select_related("topic__block", "topic__chapter")
                 .get(pk=assignment_id)
             )
-            if not (
-                assignment.is_active
-                and assignment.topic.is_active
-                and assignment.topic.block.is_active
-            ):
+            if not (assignment.is_active and assignment.topic.is_reachable):
                 raise PermissionDenied
             latest = (
                 Submission.objects.filter(student=student, assignment=assignment)
@@ -350,7 +346,7 @@ def _student_and_quiz(student, assignment_id):
         raise PermissionDenied
     assignment = (
         Assignment.objects.select_for_update(of=("self",))
-        .select_related("topic__block")
+        .select_related("topic__block", "topic__chapter")
         .get(pk=assignment_id)
     )
     if not assignment.is_visible or not assignment.is_quiz:
@@ -756,7 +752,11 @@ def review_flashcard(*, student, card_id, rating):
         raise ValidationError({"rating": "Недопустимая оценка повторения."})
     if not student.is_active or get_user_role(student) != Profile.Role.STUDENT:
         raise PermissionDenied
-    card = Flashcard.objects.select_related("assignment__topic__block").filter(pk=card_id).first()
+    card = (
+        Flashcard.objects.select_related("assignment__topic__block", "assignment__topic__chapter")
+        .filter(pk=card_id)
+        .first()
+    )
     if not card:
         raise PermissionDenied
     if not card_available(card, student):
@@ -802,10 +802,7 @@ def card_available(card, student=None):
     assignment = card.assignment
     if assignment is not None:
         return bool(
-            assignment.is_visible
-            and assignment.is_active
-            and assignment.topic.is_active
-            and assignment.topic.block.is_active
+            assignment.is_visible and assignment.is_active and assignment.topic.is_reachable
         )
     if card.owner_id is not None:
         return student is not None and card.owner_id == getattr(student, "pk", student)
@@ -820,15 +817,16 @@ def personal_cards(student):
 def visible_card_sets(student):
     """Задания-тренажёры активного курса, доступные ученику прямо сейчас."""
     return (
-        Assignment.objects.visible()
+        Assignment.objects.visible(user=student)
         .filter(
             assignment_type=Assignment.Type.FLASHCARDS,
             is_active=True,
             topic__is_active=True,
+            topic__chapter__is_active=True,
             topic__block__is_active=True,
         )
-        .select_related("topic__block")
-        .order_by("topic__block__order", "topic__order", "order", "pk")
+        .select_related("topic__block", "topic__chapter")
+        .order_by("topic__block__order", "topic__chapter__order", "topic__order", "order", "pk")
     )
 
 

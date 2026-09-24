@@ -11,6 +11,7 @@ import tempfile
 from pathlib import Path
 
 from django.conf import settings
+from django.contrib.auth import views as auth_views
 from django.contrib.auth.decorators import login_required
 from django.db import connection
 from django.http import FileResponse, Http404, JsonResponse
@@ -23,6 +24,22 @@ from .models import Assignment, Profile, QuestionResponse, Submission
 from .search import student_suggest, teacher_suggest
 
 logger = logging.getLogger(__name__)
+
+
+class PasswordChangeView(auth_views.PasswordChangeView):
+    """Смена пароля самим пользователем.
+
+    Пароль, который учитель выдал ученику, после этого больше не действует —
+    и не должен показываться учителю как актуальный, поэтому запись стирается.
+    """
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        profile = getattr(self.request.user, "profile", None)
+        if profile is not None:
+            profile.forget_password()
+        return response
+
 
 IMAGE_TYPES = {
     ".png": "image/png",

@@ -26,9 +26,9 @@
 <section class="card card-pad-sm">
     <form method="get" class="row row-tight">
         <div class="form-field" style="min-width:200px">
-            <label for="id_block">{% t "Блок" %}</label>
+            <label for="id_block">{% t "Класс" %}</label>
             <select id="id_block" name="block">
-                <option value="">Все блоки</option>
+                <option value="">Все классы</option>
                 {% for block in blocks %}
                     <option value="{{ block.pk }}"{% if selected_block == block.pk|stringformat:"s" %} selected{% endif %}>{{ block.name }}</option>
                 {% endfor %}
@@ -39,7 +39,7 @@
             <select id="id_topic" name="topic">
                 <option value="">Все темы</option>
                 {% for topic in topics %}
-                    <option value="{{ topic.pk }}"{% if selected_topic == topic.pk|stringformat:"s" %} selected{% endif %}>{{ topic.block.name }} — {{ topic.title }}</option>
+                    <option value="{{ topic.pk }}"{% if selected_topic == topic.pk|stringformat:"s" %} selected{% endif %}>{{ topic.block.name }} → {{ topic.chapter.title }} — {{ topic.title }}</option>
                 {% endfor %}
             </select>
         </div>
@@ -79,8 +79,10 @@
                                title="{{ cell.assignment.title }} — {{ cell.attempt.get_status_display }}">
                                 {% if cell.grade != None %}{{ cell.grade }}<small>/{{ cell.maximum }}</small>{% else %}…{% endif %}
                             </a>
-                        {% else %}
+                        {% elif cell.assigned %}
                             <span class="tiny muted" aria-hidden="true">—</span>
+                        {% else %}
+                            <span class="tiny muted" title="Задание не назначено этому ученику" style="opacity:.45">·</span>
                         {% endif %}
                     </td>
                 {% endfor %}

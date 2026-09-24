@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.urls import reverse
 
-from .models import Assignment, Block, Group, Profile, Topic
+from .models import Assignment, Block, Chapter, Group, Profile, Topic
 
 User = get_user_model()
 
@@ -89,16 +89,51 @@ def _groups(query, limit=LIMIT):
     ]
 
 
-def _topics(query, *, teacher=True, student=None, limit=LIMIT):
-    topics = Topic.objects.select_related("block").filter(
+def _chapters(query, *, teacher=True, student=None, limit=LIMIT):
+    chapters = Chapter.objects.select_related("block").filter(
         Q(title__icontains=query) | Q(block__name__icontains=query)
     )
     if teacher:
-        topics = topics.filter(is_active=True, block__is_active=True)
+        chapters = chapters.filter(is_active=True, block__is_active=True)
+    else:
+        visible = Assignment.objects.visible(user=student).values_list(
+            "topic__chapter_id", flat=True
+        )
+        chapters = chapters.filter(pk__in=visible, is_active=True, block__is_active=True)
+    chapters = chapters.order_by("block__order", "order", "title")[:limit]
+    items = []
+    for chapter in chapters:
+        url = (
+            reverse("teacher_curriculum") + f"#chapter-{chapter.pk}"
+            if teacher
+            else reverse("student_assignments") + "?" + urlencode({"q": chapter.title})
+        )
+        items.append(
+            {
+                "type": "chapter",
+                "label": chapter.title,
+                "hint": f"{chapter.block.name} · глава",
+                "url": url,
+                "value": str(chapter.pk),
+            }
+        )
+    return items
+
+
+def _topics(query, *, teacher=True, student=None, limit=LIMIT):
+    topics = Topic.objects.select_related("block", "chapter").filter(
+        Q(title__icontains=query)
+        | Q(chapter__title__icontains=query)
+        | Q(block__name__icontains=query)
+    )
+    if teacher:
+        topics = topics.filter(is_active=True, chapter__is_active=True, block__is_active=True)
     else:
         visible = Assignment.objects.visible(user=student).values_list("topic_id", flat=True)
-        topics = topics.filter(pk__in=visible, is_active=True, block__is_active=True)
-    topics = topics.order_by("block__order", "order", "title")[:limit]
+        topics = topics.filter(
+            pk__in=visible, is_active=True, chapter__is_active=True, block__is_active=True
+        )
+    topics = topics.order_by("block__order", "chapter__order", "order", "title")[:limit]
     items = []
     for topic in topics:
         url = (
@@ -110,7 +145,7 @@ def _topics(query, *, teacher=True, student=None, limit=LIMIT):
             {
                 "type": "topic",
                 "label": topic.title,
-                "hint": topic.block.name,
+                "hint": f"{topic.block.name} · {topic.chapter.title}",
                 "url": url,
                 "value": str(topic.pk),
             }
@@ -119,7 +154,7 @@ def _topics(query, *, teacher=True, student=None, limit=LIMIT):
 
 
 def _assignments(query, *, teacher, student=None, limit=LIMIT):
-    assignments = Assignment.objects.select_related("topic__block")
+    assignments = Assignment.objects.select_related("topic__block", "topic__chapter")
     if teacher:
         assignments = assignments.filter(is_active=True)
     else:
@@ -127,8 +162,11 @@ def _assignments(query, *, teacher, student=None, limit=LIMIT):
     assignments = assignments.filter(
         Q(title__icontains=query)
         | Q(topic__title__icontains=query)
+        | Q(topic__chapter__title__icontains=query)
         | Q(topic__block__name__icontains=query)
-    ).order_by("topic__block__order", "topic__order", "order", "title")[:limit]
+    ).order_by("topic__block__order", "topic__chapter__order", "topic__order", "order", "title")[
+        :limit
+    ]
     items = []
     for assignment in assignments:
         url = (
@@ -140,7 +178,10 @@ def _assignments(query, *, teacher, student=None, limit=LIMIT):
             {
                 "type": "assignment",
                 "label": assignment.title,
-                "hint": f"{assignment.topic.block.name} · {assignment.topic.title}",
+                "hint": (
+                    f"{assignment.topic.block.name} · {assignment.topic.chapter.title} · "
+                    f"{assignment.topic.title}"
+                ),
                 "url": url,
                 "value": str(assignment.pk),
             }
@@ -167,7 +208,7 @@ def _blocks(query, *, teacher, student=None, limit=4):
             {
                 "type": "block",
                 "label": block.name,
-                "hint": block.get_cefr_level_display() if block.cefr_level else "блок курса",
+                "hint": block.get_cefr_level_display() if block.cefr_level else "класс",
                 "url": url,
                 "value": str(block.pk),
             }
@@ -177,7 +218,8 @@ def _blocks(query, *, teacher, student=None, limit=4):
 
 def _curriculum(query, *, teacher, student=None):
     return (
-        _blocks(query, teacher=teacher, student=student, limit=3)
+        _blocks(query, teacher=teacher, student=student, limit=2)
+        + _chapters(query, teacher=teacher, student=student, limit=2)
         + _topics(query, teacher=teacher, student=student, limit=3)
         + _assignments(query, teacher=teacher, student=student, limit=4)
     )[:LIMIT]

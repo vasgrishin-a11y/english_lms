@@ -13,7 +13,7 @@ urlpatterns = [
     path("accounts/logout/", auth_views.LogoutView.as_view(), name="logout"),
     path(
         "accounts/password/change/",
-        auth_views.PasswordChangeView.as_view(
+        views.PasswordChangeView.as_view(
             template_name="lms/password_change.html",
             success_url=reverse_lazy("password_change_done"),
         ),
@@ -115,6 +115,34 @@ urlpatterns = [
         "teacher/curriculum/blocks/<int:pk>/assignments/publish/",
         views_teacher.block_assignments_publish,
         name="teacher_block_assignments_publish",
+    ),
+    path(
+        "teacher/curriculum/chapters/new/", views_teacher.chapter_form, name="teacher_chapter_new"
+    ),
+    path(
+        "teacher/curriculum/chapters/<int:pk>/",
+        views_teacher.chapter_form,
+        name="teacher_chapter_edit",
+    ),
+    path(
+        "teacher/curriculum/chapters/<int:pk>/move/",
+        views_teacher.chapter_move,
+        name="teacher_chapter_move",
+    ),
+    path(
+        "teacher/curriculum/chapters/<int:pk>/delete/",
+        views_teacher.chapter_delete,
+        name="teacher_chapter_delete",
+    ),
+    path(
+        "teacher/curriculum/chapters/<int:pk>/publish/",
+        views_teacher.chapter_publish,
+        name="teacher_chapter_publish",
+    ),
+    path(
+        "teacher/curriculum/chapters/<int:pk>/assignments/publish/",
+        views_teacher.chapter_assignments_publish,
+        name="teacher_chapter_assignments_publish",
     ),
     path("teacher/curriculum/topics/new/", views_teacher.topic_form, name="teacher_topic_new"),
     path(

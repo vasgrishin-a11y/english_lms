@@ -7,7 +7,7 @@
 {% block content %}
 <section class="hero">
     <div>
-        <h1>Привет, {{ user.first_name|default:user.username }} 👋</h1>
+        <h1>Привет, {{ user|own_name }} 👋</h1>
         <p class="muted mb-0">
             Выполнено {{ totals.done }} из {{ totals.total }} заданий
             {% if totals.waiting %}· {{ totals.waiting }} на проверке{% endif %}
@@ -42,7 +42,7 @@
         <div style="flex:1 1 auto;display:flex;flex-direction:column">
         {% if continue_item %}
             <p class="strong mb-0">{{ continue_item.title }}</p>
-            <p class="muted small">{{ continue_item.topic.block.name }} · {{ continue_item.topic.title }}</p>
+            <p class="muted small">{{ continue_item.topic.block.name }} · {{ continue_item.topic.chapter.title }} · {{ continue_item.topic.title }}</p>
             {% if continue_draft and continue_draft.text %}
                 <p class="pill-note">{% icon "save" "icon icon-sm" %}Черновик сохранён: {{ continue_draft.updated_at|date:"d.m.Y H:i" }}</p>
                 <p class="small muted draft-excerpt">{{ continue_draft.text|truncatechars:160 }}</p>
@@ -172,7 +172,7 @@
                     <span class="row-main">
                         <a class="row-title" href="{% url 'assignment_detail' attempt.assignment_id %}">{{ attempt.assignment.title }}</a>
                         <span class="row-meta">
-                            <span>{{ attempt.assignment.topic.block.name }} · {{ attempt.assignment.topic.title }}</span>
+                            <span>{{ attempt.assignment.topic.block.name }} · {{ attempt.assignment.topic.chapter.title }} · {{ attempt.assignment.topic.title }}</span>
                             <span>Попытка {{ attempt.version }} · {{ attempt.submitted_at|date:"d.m.Y H:i" }}</span>
                         </span>
                         {% if attempt.feedback.comment %}<p class="feedback-note small muted mb-0">{{ attempt.feedback.comment|truncatechars:180 }}</p>{% endif %}

@@ -86,20 +86,6 @@
                             {{ form.topic.errors }}
                         </div>
 
-                        <div class="form-field{% if form.group.errors %} field-error{% endif %}">
-                            <label for="{{ form.group.id_for_label }}">{{ form.group.label }}</label>
-                            {{ form.group }}
-                            {% if form.group.help_text %}<div class="help-text" id="{{ form.group.auto_id }}_helptext">{{ form.group.help_text }}</div>{% endif %}
-                            {{ form.group.errors }}
-                        </div>
-
-                        <div class="form-field form-field-wide{% if form.assigned_students.errors %} field-error{% endif %}">
-                            <label>{{ form.assigned_students.label }}</label>
-                            {{ form.assigned_students }}
-                            {% if form.assigned_students.help_text %}<div class="help-text" id="{{ form.assigned_students.auto_id }}_helptext">{{ form.assigned_students.help_text }}</div>{% endif %}
-                            {{ form.assigned_students.errors }}
-                        </div>
-
                         <div class="form-field form-field-wide{% if form.title.errors %} field-error{% endif %}">
                             <label for="{{ form.title.id_for_label }}">{{ form.title.label }} <span class="required" aria-hidden="true">*</span></label>
                             {{ form.title }}
@@ -126,6 +112,8 @@
                         </div>
                     </div>
                 </div>
+
+                {% include "lms/parts/audience_fields.html" with groups_field=form.groups students_field=form.assigned_students %}
 
                 <div class="form-section">
                     <h2 class="section-title">{% icon "settings" %}Параметры задания</h2>

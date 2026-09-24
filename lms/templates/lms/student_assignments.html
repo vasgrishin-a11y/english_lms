@@ -10,7 +10,7 @@
         <label for="id_q">Поиск по курсу</label>
         <div class="search-pill">
             {% icon "search" %}
-            <input id="id_q" type="search" name="q" maxlength="200" value="{{ query }}" placeholder="Задание, тема, блок…" data-suggest="{% url 'suggest' %}" data-suggest-scope="curriculum" autocomplete="off">
+            <input id="id_q" type="search" name="q" maxlength="200" value="{{ query }}" placeholder="Задание, тема, глава…" data-suggest="{% url 'suggest' %}" data-suggest-scope="curriculum" autocomplete="off">
         </div>
         <input type="hidden" name="mode" value="{{ mode }}">
         <div class="row" style="margin-top:12px">
@@ -27,7 +27,7 @@
             </div>
             <div class="grow">
                 <p class="small mb-0"><strong class="tnum">{{ totals.done }}</strong> из <span class="tnum">{{ totals.total }}</span> заданий проверено</p>
-                <p class="tiny muted mb-0">{% if totals.waiting %}{{ totals.waiting }} ждут проверки · {% endif %}{{ totals.blocks }} блока · {{ totals.topics }} тем</p>
+                <p class="tiny muted mb-0">{% if totals.waiting %}{{ totals.waiting }} ждут проверки · {% endif %}{{ totals.blocks }} {{ totals.blocks|pluralize_ru:"класс,класса,классов" }} · {{ totals.topics }} {{ totals.topics|pluralize_ru:"тема,темы,тем" }}</p>
             </div>
         </div>
         <div class="progress" style="margin-top:12px" aria-hidden="true"><span style="width:{{ totals.progress }}%"></span></div>
@@ -39,7 +39,7 @@
             <a class="pill {% if mode == 'map' %}is-active turquoise{% endif %}" {% if mode == 'map' %}aria-current="page"{% endif %} href="{% querystring mode='map' %}">{% icon "grid" "icon icon-sm" %}Карточки</a>
             <a class="pill {% if mode == 'list' %}is-active{% endif %}" {% if mode == 'list' %}aria-current="page"{% endif %} href="{% querystring mode='list' %}">{% icon "list" "icon icon-sm" %}Список</a>
         </div>
-        <p class="tiny muted" style="margin-top:12px">Блоки — карточками с обложками, внутри — темы и задания.</p>
+        <p class="tiny muted" style="margin-top:12px">Классы — карточками с обложками, внутри — главы, темы и задания.</p>
     </div>
 
     <div class="rail-card">
@@ -58,7 +58,7 @@
 <div class="classes-head">
     <div>
         <h1 class="classes-title">{% t "Карта курса" %}</h1>
-        <p class="page-note mb-0">Блоки → темы → задания: поиск, фильтр, обложки и быстрый переход в урок.</p>
+        <p class="page-note mb-0">Классы → главы → темы → задания: поиск, фильтр, обложки и быстрый переход в урок.</p>
     </div>
     <div class="classes-toolbar">
         {% if query %}<span class="badge badge-info">Найдено: {{ page_obj.paginator.count }}</span>{% endif %}
@@ -108,21 +108,33 @@
                         <span class="badge badge-turquoise tnum">{{ block_group.list|length }} заданий</span>
                     </div>
 
-                    {% regroup block_group.list by topic as topic_groups %}
-                    {% for topic_group in topic_groups %}
-                        {% with topic=topic_group.list.0.topic %}
-                            <div class="panel" style="margin-bottom:12px">
-                                <div class="row row-between">
-                                    <h3 class="mb-0">{% icon "book" %} {{ topic.title }}</h3>
-                                    <span class="tiny muted tnum">{{ topic_group.list|length }} {{ topic_group.list|length|pluralize_ru:"задание,задания,заданий" }}</span>
-                                </div>
-                                {% if topic.description %}<p class="muted small">{{ topic.description }}</p>{% endif %}
-                                <ul class="task-list">
-                                    {% for assignment in topic_group.list %}
-                                        {% include "lms/parts/task_item.html" with assignment=assignment state=assignment.state %}
-                                    {% endfor %}
-                                </ul>
+                    {% regroup block_group.list by topic.chapter as chapter_groups %}
+                    {% for chapter_group in chapter_groups %}
+                        {% with chapter=chapter_group.grouper %}
+                        <section class="chapter" id="chapter-{{ chapter.pk }}" aria-labelledby="chapter-title-{{ chapter.pk }}" style="margin-bottom:14px">
+                            <div class="chapter-head">
+                                <h3 id="chapter-title-{{ chapter.pk }}" class="chapter-title">{% icon "layers" "icon icon-sm" %}{{ chapter.title }}</h3>
+                                <span class="tiny muted tnum">{{ chapter_group.list|length }} {{ chapter_group.list|length|pluralize_ru:"задание,задания,заданий" }}</span>
                             </div>
+                            {% if chapter.description %}<p class="muted small mb-0">{{ chapter.description }}</p>{% endif %}
+                            {% regroup chapter_group.list by topic as topic_groups %}
+                            {% for topic_group in topic_groups %}
+                                {% with topic=topic_group.list.0.topic %}
+                                    <div class="panel">
+                                        <div class="row row-between">
+                                            <h4 class="mb-0">{% icon "book" %} {{ topic.title }}</h4>
+                                            <span class="tiny muted tnum">{{ topic_group.list|length }} {{ topic_group.list|length|pluralize_ru:"задание,задания,заданий" }}</span>
+                                        </div>
+                                        {% if topic.description %}<p class="muted small">{{ topic.description }}</p>{% endif %}
+                                        <ul class="task-list">
+                                            {% for assignment in topic_group.list %}
+                                                {% include "lms/parts/task_item.html" with assignment=assignment state=assignment.state %}
+                                            {% endfor %}
+                                        </ul>
+                                    </div>
+                                {% endwith %}
+                            {% endfor %}
+                        </section>
                         {% endwith %}
                     {% endfor %}
                 </section>
@@ -135,7 +147,7 @@
                     <span class="row-main">
                         <a class="row-title" href="{% url 'assignment_detail' assignment.pk %}">{{ assignment.title }}</a>
                         <span class="row-meta">
-                            <span>{{ assignment.topic.block.name }} · {{ assignment.topic.title }}</span>
+                            <span>{{ assignment.topic.block.name }} · {{ assignment.topic.chapter.title }} · {{ assignment.topic.title }}</span>
                             <span class="tag">{% icon assignment.assignment_type|type_icon "icon icon-sm" %}{{ assignment.get_assignment_type_display }}</span>
                             {% if assignment.deadline %}<span>{% icon "calendar" "icon icon-sm" %}{{ assignment.deadline|human_due }}</span>{% endif %}
                         </span>
@@ -159,7 +171,7 @@
         <div class="empty">
             <div class="empty-ill">🔍</div>
             <h3>{% if query %}Ничего не нашлось{% else %}Пока нет опубликованных заданий{% endif %}</h3>
-            <p>{% if query %}Попробуйте другой запрос — например, название темы или блока.{% else %}Как только преподаватель опубликует задания, они появятся на этой странице.{% endif %}</p>
+            <p>{% if query %}Попробуйте другой запрос — например, название темы или главы.{% else %}Как только преподаватель опубликует задания, они появятся на этой странице.{% endif %}</p>
             {% if query %}<a class="btn btn-secondary" href="{% url 'student_assignments' %}">{% t "Показать все задания" %}</a>{% endif %}
         </div>
     </div>

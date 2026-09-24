@@ -16,7 +16,7 @@
 <div class="content-head">
     <div>
         <h1>{{ assignment.title }}</h1>
-        <p class="page-note">{{ assignment.topic.block.name }} · {{ assignment.topic.title }} · {{ cards|length }} карточек · тренировали {{ learners }} учеников</p>
+        <p class="page-note">{{ assignment.topic.block.name }} · {{ assignment.topic.chapter.title }} · {{ assignment.topic.title }} · {{ cards|length }} карточек · тренировали {{ learners }} учеников</p>
     </div>
     <div class="row">
         <a class="btn btn-secondary" href="{% url 'teacher_assignment_form' assignment.pk %}">{% icon "pencil" %}{% t "Настройки задания" %}</a>

@@ -25,7 +25,7 @@
                 <h1 class="card-title mb-0">{{ assignment.title }}</h1>
                 <span class="badge badge-accent">{% icon assignment.assignment_type|type_icon "icon icon-sm" %}{{ assignment.get_assignment_type_display }}</span>
             </div>
-            <p class="tiny muted">{{ assignment.topic.block.name }} · {{ assignment.topic.title }}</p>
+            <p class="tiny muted">{{ assignment.topic.block.name }} · {{ assignment.topic.chapter.title }} · {{ assignment.topic.title }}</p>
             {{ assignment.description|linebreaks }}
             {% if assignment.skills.exists %}
                 <p class="row row-tight">

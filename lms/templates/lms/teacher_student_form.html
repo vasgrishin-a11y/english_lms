@@ -35,15 +35,17 @@
         
         <div class="form-row">
             <div class="form-group">
-                <label for="{{ form.first_name.id_for_label }}">Имя *</label>
+                <label for="{{ form.first_name.id_for_label }}">Имя</label>
                 {{ form.first_name }}
                 {% if form.first_name.errors %}<div class="form-error">{{ form.first_name.errors.0 }}</div>{% endif %}
+                <small class="form-help">Необязательно. Ученик видит у себя только имя; без него — логин.</small>
             </div>
             
             <div class="form-group">
-                <label for="{{ form.last_name.id_for_label }}">Фамилия *</label>
+                <label for="{{ form.last_name.id_for_label }}">Фамилия</label>
                 {{ form.last_name }}
                 {% if form.last_name.errors %}<div class="form-error">{{ form.last_name.errors.0 }}</div>{% endif %}
+                <small class="form-help">Необязательно. Видна только преподавателю.</small>
             </div>
         </div>
         
@@ -89,12 +91,13 @@
 <div class="card" style="margin-top:24px">
     <h3>Действия</h3>
     <div class="row row-gap" style="margin-top:16px">
+        <a class="btn btn-secondary" href="{% url 'teacher_student_detail' student.pk %}">{% icon "shield" %}{% t "Пароль и профиль" %}</a>
         <form method="post" action="{% url 'teacher_student_reset_password' student.pk %}" onsubmit="return confirm('Сгенерировать новый пароль для ученика?')">
             {% csrf_token %}
             <button type="submit" class="btn btn-secondary">{% t "Сбросить пароль" %}</button>
         </form>
         
-        <form method="post" action="{% url 'teacher_student_delete' student.pk %}" onsubmit="return confirm('Удалить ученика «{{ student.get_full_name|default:student.username }}»? Это нельзя отменить.')">
+        <form method="post" action="{% url 'teacher_student_delete' student.pk %}" onsubmit="return confirm('Удалить ученика «{{ student|display_name }}»? Это нельзя отменить.')">
             {% csrf_token %}
             <button type="submit" class="btn btn-danger">{% t "Удалить ученика" %}</button>
         </form>

@@ -3174,6 +3174,13 @@ table .grade-col {
     box-shadow: var(--shadow-3);
 }
 
+/* layout.css задаёт .panel { max-width: 100% } — для абсолютной панели это ширина
+   крошечной кнопки-summary, и текст схлопывался в нечитаемый столбик. */
+.danger-zone > .danger-panel {
+    max-width: none;
+    padding: var(--sp-4);
+}
+
 .danger-panel .row {
     margin: 0;
 }
@@ -3777,13 +3784,61 @@ tr.row-bad td:first-child {
 }
 
 .topic-panel.drop-above,
-[data-topic-panel].drop-above {
+[data-topic-panel].drop-above,
+[data-chapter-panel].drop-above {
     box-shadow: 0 -4px 0 0 var(--accent-500);
 }
 
 .topic-panel.drop-below,
-[data-topic-panel].drop-below {
+[data-topic-panel].drop-below,
+[data-chapter-panel].drop-below {
     box-shadow: 0 4px 0 0 var(--accent-500);
+}
+
+[data-chapter-panel].is-dragging {
+    opacity: 0.45;
+}
+
+/* Глава на карте курса: обрамление между классом и темами */
+.chapter {
+    padding: 12px 14px 14px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent-400);
+    border-radius: 12px;
+    background: var(--surface-sunken, var(--canvas));
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 100%;
+    box-sizing: border-box;
+    transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+
+.chapter-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    max-width: 100%;
+}
+
+.chapter-title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+[data-chapter-topics].drop-block-active {
+    outline: 2px dashed var(--accent-500);
+    outline-offset: 2px;
+    border-radius: 10px;
+    min-height: 24px;
 }
 
 .drop-block-active {
@@ -3858,4 +3913,138 @@ tr.row-bad td:first-child {
         max-width: 100%;
         box-sizing: border-box;
     }
+}
+
+
+/* Скрытое значение с «глазом»: выданный пароль ученика на странице у учителя */
+.secret-field {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.secret-field__input {
+    flex: 1 1 auto;
+    min-width: 0;
+    font: inherit;
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: 14px;
+    letter-spacing: 0.04em;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: var(--surface-sunken);
+    color: var(--text);
+}
+
+.secret-field__input:focus-visible {
+    outline: 2px solid var(--accent-400);
+    outline-offset: 1px;
+}
+
+
+/* «Кому доступно»: назначения по иерархии (класс → глава → тема → задание) */
+.audience-section .audience-note {
+    margin: 0 0 12px;
+}
+
+.audience-section .callout {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+}
+
+ul.audience-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+}
+
+ul.audience-list li {
+    margin: 0;
+}
+
+ul.audience-list label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    padding: 4px 10px 4px 8px;
+    font-size: var(--fs-13, 13px);
+    font-weight: 500;
+    line-height: 1.4;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+ul.audience-list label:hover {
+    border-color: var(--border-strong);
+}
+
+ul.audience-list label:has(input:checked) {
+    background: var(--accent-tint);
+    border-color: var(--accent-400);
+    color: var(--accent-800);
+}
+
+ul.audience-list input[type="checkbox"] {
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    accent-color: var(--accent-600);
+}
+
+.audience-details summary {
+    cursor: pointer;
+    color: var(--accent-700);
+    margin-bottom: 8px;
+}
+
+.audience-details summary::-webkit-details-marker {
+    color: var(--text-muted);
+}
+
+/* Бейдж аудитории на карте курса: «👥 ОГЭ-А · +2 ученика» */
+.audience-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    padding: 1px 8px;
+    font-size: var(--fs-12);
+    font-weight: 600;
+    line-height: 1.6;
+    color: var(--accent-800);
+    background: var(--accent-tint);
+    border: 1px solid transparent;
+    border-radius: var(--r-pill);
+    text-decoration: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.audience-badge .icon {
+    width: 12px;
+    height: 12px;
+    flex: none;
+}
+
+.audience-badge.is-inherited {
+    color: var(--text-muted);
+    background: transparent;
+    border-color: var(--border);
+    font-weight: 500;
+}
+
+a.audience-badge:hover {
+    border-color: var(--accent-400);
 }

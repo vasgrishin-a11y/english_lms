@@ -75,7 +75,7 @@ AI_QUESTION_KINDS = {value for value, _ in Question.Kind.choices}
 AI_CEFR_LEVELS = {value for value, _ in CefrLevel.choices}
 
 TARGETS = (
-    ("mixed", "Структура целиком: блок → темы → задания"),
+    ("mixed", "Структура целиком: класс → темы → задания"),
     ("assignment", "Одно задание"),
     ("quiz", "Тест с вопросами"),
     ("cards", "Набор карточек"),
@@ -508,7 +508,7 @@ class _OfflineBuilder:
     def ensure_block(self, name=None):
         if self._block is None:
             self._block = {
-                "name": (name or self.source or "Блок из материала")[:150],
+                "name": (name or self.source or "Класс из материала")[:150],
                 "cefr_level": "",
                 "description": "",
                 "topics": [],
@@ -748,7 +748,7 @@ PROMPT_SCHEMA = """Верни строго JSON без пояснений в ф�
 questions и cards не выдумывай, если их нет в материале."""
 
 TARGET_PROMPTS = {
-    "mixed": "Собери из материала блок курса с темами, заданиями, тестом и карточками.",
+    "mixed": "Собери из материала класс курса с темами, заданиями, тестом и карточками.",
     "assignment": "Собери одно задание с условием; если в материале есть упражнения — оформи их тестом.",
     "quiz": "Собери одно задание-тест с вопросами по материалу.",
     "cards": "Собери набор карточек: слово → перевод и пример употребления.",
@@ -971,7 +971,7 @@ def normalise(payload, *, source=""):
         if not isinstance(block_data, dict):
             continue
         block = {
-            "name": _clean(block_data.get("name") or source, 150) or "Новый блок",
+            "name": _clean(block_data.get("name") or source, 150) or "Новый класс",
             "cefr_level": _clean(block_data.get("cefr_level"), 2).upper(),
             "description": _clean_text(block_data.get("description")),
             "topics": [],

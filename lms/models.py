@@ -81,6 +81,9 @@ class Profile(models.Model):
     )
     telegram = models.CharField(max_length=100, blank=True, verbose_name="Telegram")
     comment = models.TextField(blank=True, verbose_name="Комментарий преподавателя")
+    #: Пароль, выданный учителем, в зашифрованном виде (см. ``lms.vault``).
+    #: Пусто, если ученик сменил пароль сам — тогда учитель видит только «Сбросить».
+    issued_password = models.TextField(blank=True, verbose_name="Выданный пароль")
 
     # Геймификация (мягкая)
     streak_days = models.PositiveIntegerField(default=0, verbose_name="Серия дней")
@@ -100,6 +103,30 @@ class Profile(models.Model):
     def __str__(self):
         name = self.user.get_full_name() or self.user.username
         return f"{name} — {self.get_role_display()}"
+
+    def remember_password(self, raw_password, *, save=True):
+        """Запомнить пароль, который учитель выдал ученику (шифруется ключом проекта)."""
+        from .vault import encrypt
+
+        self.issued_password = encrypt(raw_password) if raw_password else ""
+        if save:
+            self.save(update_fields=["issued_password", "updated_at"])
+
+    def forget_password(self, *, save=True):
+        """Ученик сменил пароль сам: выданный больше не действует и не показывается."""
+        if not self.issued_password:
+            return
+        self.issued_password = ""  # nosec B105 - очистка поля, не секрет
+        if save:
+            self.save(update_fields=["issued_password", "updated_at"])
+
+    def reveal_password(self):
+        """Расшифрованный выданный пароль или ``None``, если его нет/ключ сменился."""
+        from .vault import decrypt
+
+        if not self.issued_password:
+            return None
+        return decrypt(self.issued_password)
 
 
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)
@@ -168,8 +195,41 @@ class CefrLevel(models.TextChoices):
     C2 = "C2", "C2 — В совершенстве"
 
 
-class Block(models.Model):
-    name = models.CharField(max_length=150, verbose_name="Название блока")
+class AudienceMixin(models.Model):
+    """Кому назначен элемент курса: группы и отдельные ученики.
+
+    Назначения по иерархии складываются: класс → глава → тема → задание.
+    Если ни на одном уровне цепочки ничего не выбрано, материал общий — его
+    видят все ученики. Как только хоть где-то выбрана группа или ученик,
+    материал видят только те, кто назначен хотя бы на одном уровне.
+    """
+
+    groups = models.ManyToManyField(
+        "Group",
+        blank=True,
+        related_name="%(class)ss",
+        verbose_name="Группы",
+        help_text="Назначить целиком группам учеников",
+    )
+    students = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name="assigned_%(class)ss",
+        verbose_name="Ученики персонально",
+        limit_choices_to={"profile__role": "student"},
+    )
+
+    class Meta:
+        abstract = True
+
+    @property
+    def has_own_audience(self):
+        """Есть ли собственные назначения (без учёта родителей)."""
+        return self.groups.exists() or self.students.exists()
+
+
+class Block(AudienceMixin, models.Model):
+    name = models.CharField(max_length=150, verbose_name="Название класса")
     slug = models.SlugField(unique=True, verbose_name="URL")
     description = models.TextField(blank=True, verbose_name="Описание")
     cefr_level = models.CharField(
@@ -184,20 +244,86 @@ class Block(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = "Блок"
-        verbose_name_plural = "Блоки"
+        verbose_name = "Класс"
+        verbose_name_plural = "Классы"
         ordering = ["order", "name"]
 
     def __str__(self):
         return self.name
 
+    def default_chapter(self):
+        """Глава «Общее» класса: создаётся лениво, когда тема добавлена без главы.
 
-class Topic(models.Model):
+        Иерархия строгая — Класс → Глава → Тема — но импорт из библиотеки,
+        ИИ-помощник и старые данные знают только класс. Чтобы не блокировать
+        их, такие темы попадают в служебную главу, которую учитель потом
+        переименует или разнесёт по своим главам.
+        """
+        chapter = self.chapters.filter(slug=Chapter.DEFAULT_SLUG).first()
+        if chapter is None:
+            chapter = self.chapters.filter(title=Chapter.DEFAULT_TITLE).first()
+        if chapter is None:
+            last = self.chapters.aggregate(last=models.Max("order"))["last"] or 0
+            chapter = Chapter.objects.create(
+                block=self,
+                title=Chapter.DEFAULT_TITLE,
+                slug=Chapter.DEFAULT_SLUG,
+                order=last + 1,
+            )
+        return chapter
+
+
+class Chapter(AudienceMixin, models.Model):
+    """Глава — уровень систематизации между классом и темой.
+
+    У главы нет собственной страницы: она живёт только на карте курса,
+    группирует темы и участвует в архиве/публикации скопом.
+    """
+
+    DEFAULT_TITLE = "Общее"
+    DEFAULT_SLUG = "obshchee"
+
+    block = models.ForeignKey(
+        Block,
+        on_delete=models.CASCADE,
+        related_name="chapters",
+        verbose_name="Класс",
+    )
+    title = models.CharField(max_length=200, verbose_name="Глава")
+    slug = models.SlugField(verbose_name="URL")
+    description = models.TextField(blank=True, verbose_name="Описание")
+    order = models.PositiveIntegerField(default=0, verbose_name="Порядок")
+    is_active = models.BooleanField(default=True, verbose_name="Активна")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Глава"
+        verbose_name_plural = "Главы"
+        ordering = ["block", "order", "title"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["block", "slug"],
+                name="unique_chapter_slug_per_block",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.block.name}: {self.title}"
+
+
+class Topic(AudienceMixin, models.Model):
     block = models.ForeignKey(
         Block,
         on_delete=models.CASCADE,
         related_name="topics",
-        verbose_name="Блок",
+        verbose_name="Класс",
+    )
+    chapter = models.ForeignKey(
+        Chapter,
+        on_delete=models.CASCADE,
+        related_name="topics",
+        verbose_name="Глава",
     )
     title = models.CharField(max_length=200, verbose_name="Тема")
     slug = models.SlugField(verbose_name="URL")
@@ -210,7 +336,7 @@ class Topic(models.Model):
     class Meta:
         verbose_name = "Тема"
         verbose_name_plural = "Темы"
-        ordering = ["block", "order", "title"]
+        ordering = ["block", "chapter__order", "order", "title"]
         constraints = [
             models.UniqueConstraint(
                 fields=["block", "slug"],
@@ -220,6 +346,21 @@ class Topic(models.Model):
 
     def __str__(self):
         return f"{self.block.name}: {self.title}"
+
+    @property
+    def is_reachable(self):
+        """Тема видна ученикам: активна сама, активны её глава и класс."""
+        return bool(self.is_active and self.chapter.is_active and self.block.is_active)
+
+    def save(self, *args, **kwargs):
+        # Класс темы всегда совпадает с классом главы; тема без главы уходит в «Общее».
+        if self.chapter_id is None:
+            if self.block_id is None:
+                raise ValueError("Теме нужен класс или глава")
+            self.chapter = self.block.default_chapter()
+        elif self.block_id != self.chapter.block_id:
+            self.block_id = self.chapter.block_id
+        super().save(*args, **kwargs)
 
 
 class AssignmentQuerySet(models.QuerySet):
@@ -231,21 +372,16 @@ class AssignmentQuerySet(models.QuerySet):
             is_active=True,
             status=self.model.Publication.PUBLISHED,
             topic__is_active=True,
+            topic__chapter__is_active=True,
             topic__block__is_active=True,
         ).filter(Q(publish_at__isnull=True) | Q(publish_at__lte=moment))
 
-        # Если пользователь указан, показываем:
-        # 1. Задания без ограничений (нет группы и нет персональных учеников)
-        # 2. Задания для его групп
-        # 3. Задания, назначенные ему лично
+        # Если пользователь указан — учитываем назначения по всей иерархии
+        # (класс → глава → тема → задание): см. lms.audience.
         if user and user.is_authenticated:
-            user_groups = user.student_groups.all() if hasattr(user, "student_groups") else []
-            condition = (
-                (Q(group__isnull=True) & Q(assigned_students__isnull=True))
-                | Q(group__in=user_groups)
-                | Q(assigned_students=user)
-            )
-            qs = qs.filter(condition).distinct()
+            from .audience import visibility_q
+
+            qs = qs.filter(visibility_q(user))
 
         return qs
 
@@ -297,14 +433,12 @@ class Assignment(models.Model):
         related_name="assignments",
         verbose_name="Тема",
     )
-    group = models.ForeignKey(
+    groups = models.ManyToManyField(
         "Group",
-        on_delete=models.SET_NULL,
-        null=True,
         blank=True,
         related_name="assignments",
-        verbose_name="Группа",
-        help_text="Если указано, задание доступно только ученикам этой группы",
+        verbose_name="Группы",
+        help_text="Назначить задание целиком группам учеников",
     )
     title = models.CharField(max_length=200, verbose_name="Название задания")
     description = models.TextField(verbose_name="Условия задания")
@@ -335,8 +469,8 @@ class Assignment(models.Model):
         settings.AUTH_USER_MODEL,
         blank=True,
         related_name="assigned_assignments",
-        verbose_name="Индивидуально для учеников",
-        help_text="Если выбраны ученики, задание также будет доступно им персонально",
+        verbose_name="Ученики персонально",
+        help_text="Открыть задание отдельным ученикам помимо групп",
     )
     material_file = models.FileField(
         upload_to=assignment_upload_to,
@@ -415,6 +549,15 @@ class Assignment(models.Model):
             Assignment.Type.FLASHCARDS,
             Assignment.Type.MATERIAL,
         )
+
+    @property
+    def students(self):
+        """Единый доступ к персональным назначениям — как у класса, главы и темы."""
+        return self.assigned_students
+
+    @property
+    def has_own_audience(self):
+        return self.groups.exists() or self.assigned_students.exists()
 
     @property
     def is_visible(self):

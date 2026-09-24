@@ -38,7 +38,7 @@
 
 <section class="card">
     <div class="card-head">
-        <h2 class="card-title">{% icon "layers" %}Блоки курса</h2>
+        <h2 class="card-title">{% icon "layers" %}Классы курса</h2>
         <a class="btn btn-ghost btn-sm" href="{% url 'teacher_curriculum' %}">{% t "Карта курса" %}</a>
     </div>
     <div class="class-grid">
@@ -48,29 +48,29 @@
                 {% include "lms/parts/cover.html" with course=block %}
                 <div class="class-body">
                     <h3 class="class-title">{{ block.name }}</h3>
-                    <div class="class-meta"><span>{{ block_item.assignments }} заданий · {{ block_item.topics|length }} тем{% if block_item.flashcards %} · {{ block_item.flashcards }} с карточками{% endif %}</span></div>
+                    <div class="class-meta"><span>{{ block_item.assignments }} заданий · {{ block_item.chapters|length }} глав · {{ block_item.topics|length }} тем{% if block_item.flashcards %} · {{ block_item.flashcards }} с карточками{% endif %}</span></div>
                 </div>
             </a>
             {% endwith %}
         {% empty %}
-            <p class="muted small">Блоков пока нет — создайте первый: он станет разделом курса.</p>
+            <p class="muted small">Классов пока нет — создайте первый: он станет разделом курса.</p>
         {% endfor %}
-        <a class="class-card is-create" href="{% url 'teacher_block_new' %}">{% icon "plus" %}<span class="small strong" style="margin-top:8px">{% t "Новый блок" %}</span></a>
+        <a class="class-card is-create" href="{% url 'teacher_block_new' %}">{% icon "plus" %}<span class="small strong" style="margin-top:8px">{% t "Новый класс" %}</span></a>
     </div>
 </section>
 
-<div class="home-grid" style="margin-top:20px;align-items:stretch">
-    <section class="card" style="display:flex;flex-direction:column">
+<div class="home-grid console-grid" style="margin-top:20px">
+    <section class="card console-card">
         <div class="card-head">
             <h2 class="card-title">{% icon "clock" %}Самые старые работы</h2>
             <a class="btn btn-ghost btn-sm" href="{% url 'teacher_review_queue' %}">{% t "Вся очередь" %}</a>
         </div>
-        <div class="rows" style="flex:1 1 auto;display:flex;flex-direction:column;gap:8px">
+        <div class="rows console-card__body">
         {% for submission in waiting %}
             <div class="row-item">
                 <span class="avatar">{{ submission.student|initials }}</span>
                 <span class="row-main">
-                    <a class="row-title" href="{% url 'teacher_submission_review' submission.pk %}">{{ submission.student.get_full_name|default:submission.student.username }}</a>
+                    <a class="row-title" href="{% url 'teacher_submission_review' submission.pk %}">{{ submission.student|display_name }}</a>
                     <span class="row-meta">
                         <span>{{ submission.assignment.title }}</span>
                         <span>попытка {{ submission.version }}</span>
@@ -82,27 +82,30 @@
                 </span>
             </div>
         {% empty %}
-            <div class="empty" style="flex:1;display:flex;flex-direction:column;justify-content:center">
+            <div class="empty console-card__empty">
                 <div class="empty-icon">{% icon "check-circle" "icon icon-xl" %}</div>
                 <h3>Очередь пуста</h3>
                 <p>Все работы проверены. Можно заняться курсом или аналитикой.</p>
             </div>
         {% endfor %}
         </div>
+        <div class="console-card__foot">
+            <a class="btn btn-secondary btn-sm" href="{% url 'teacher_review_queue' %}">{% icon "check-circle" %}{% t "К очереди проверки" %}</a>
+        </div>
     </section>
 
-    <section class="card" style="display:flex;flex-direction:column">
+    <section class="card console-card">
         <div class="card-head">
             <h2 class="card-title">{% icon "pencil" %}Черновики заданий</h2>
             <a class="btn btn-ghost btn-sm" href="{% url 'teacher_curriculum' %}">{% t "Карта курса" %}</a>
         </div>
-        <div class="rows" style="flex:1 1 auto;display:flex;flex-direction:column;gap:8px">
+        <div class="rows console-card__body">
         {% for assignment in drafts %}
             <div class="row-item">
                 <span class="row-main">
                     <a class="row-title" href="{% url 'teacher_assignment_form' assignment.pk %}">{{ assignment.title }}</a>
                     <span class="row-meta">
-                        <span>{{ assignment.topic.block.name }} · {{ assignment.topic.title }}</span>
+                        <span>{{ assignment.topic.block.name }} · {{ assignment.topic.chapter.title }} · {{ assignment.topic.title }}</span>
                         <span class="badge badge-draft">черновик</span>
                     </span>
                 </span>
@@ -115,12 +118,14 @@
                 </span>
             </div>
         {% empty %}
-            <div style="flex:1;display:flex;flex-direction:column;justify-content:center">
-                <p class="muted small mb-0">Черновиков нет. Новое задание можно собрать из файла с помощью ИИ-помощника или вручную.</p>
+            <div class="empty console-card__empty">
+                <div class="empty-icon">{% icon "pencil" "icon icon-xl" %}</div>
+                <h3>Черновиков нет</h3>
+                <p>Новое задание можно собрать из файла с помощью ИИ-помощника или вручную.</p>
             </div>
         {% endfor %}
         </div>
-        <div style="margin-top:12px">
+        <div class="console-card__foot">
             <a class="btn btn-secondary btn-sm" href="{% url 'teacher_assignment_new' %}">{% icon "plus" %}{% t "Создать задание" %}</a>
         </div>
     </section>
@@ -129,7 +134,8 @@
 <section class="card">
     <div class="card-head"><h2 class="card-title">{% icon "lightbulb" %}Быстрые действия</h2></div>
     <div class="row">
-        <a class="chip" href="{% url 'teacher_block_new' %}">{% icon "plus" "icon icon-sm" %}Новый блок</a>
+        <a class="chip" href="{% url 'teacher_block_new' %}">{% icon "plus" "icon icon-sm" %}Новый класс</a>
+        <a class="chip" href="{% url 'teacher_chapter_new' %}">{% icon "plus" "icon icon-sm" %}Новая глава</a>
         <a class="chip" href="{% url 'teacher_topic_new' %}">{% icon "plus" "icon icon-sm" %}Новая тема</a>
         <a class="chip" href="{% url 'teacher_assignment_new' %}?type=flashcards">{% icon "cards" "icon icon-sm" %}Карточки-тренажёр</a>
         <a class="chip" href="{% url 'teacher_analytics' %}">{% icon "grid" "icon icon-sm" %}Журнал оценок</a>
