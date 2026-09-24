@@ -141,6 +141,21 @@ urlpatterns = [
         name="teacher_topic_assignments_publish",
     ),
     path(
+        "teacher/curriculum/topics/<int:pk>/board/",
+        views_teacher.topic_board,
+        name="teacher_topic_board",
+    ),
+    path(
+        "teacher/curriculum/attachments/<int:pk>/delete/",
+        views_teacher.attachment_delete,
+        name="teacher_attachment_delete",
+    ),
+    path(
+        "teacher/ai/extract/",
+        views_teacher.ai_extract_text,
+        name="teacher_ai_extract",
+    ),
+    path(
         "teacher/curriculum/assignments/new/",
         views_teacher.assignment_form,
         name="teacher_assignment_new",

@@ -33,15 +33,37 @@
                 {{ assignment.description|linebreaks }}
             </div>
 
-            {% if assignment.material_file %}
+            {% if assignment.material_file or assignment.attachments.exists or attachments %}
                 <div class="media-frame" style="margin-top:16px">
                     <p class="strong mb-0">{% icon "file-text" %} Материалы урока</p>
-                    {% if assignment.material_file.name|media_kind == 'image' %}
-                        <img src="{% url 'media_preview' assignment.material_file.name %}" alt="Материал задания: {{ assignment.title }}" loading="lazy">
-                    {% elif assignment.material_file.name|media_kind == 'audio' %}
-                        <audio controls preload="none" src="{% url 'media_preview' assignment.material_file.name %}"></audio>
+                    {% if assignment.material_file %}
+                        {% if assignment.material_file.name|media_kind == 'image' %}
+                            <img src="{% url 'media_preview' assignment.material_file.name %}" alt="Материал задания: {{ assignment.title }}" loading="lazy">
+                        {% elif assignment.material_file.name|media_kind == 'audio' %}
+                            <audio controls preload="none" src="{% url 'media_preview' assignment.material_file.name %}"></audio>
+                        {% endif %}
+                        <a class="btn btn-secondary btn-sm" href="{{ assignment.material_file.url }}">{% icon "download" %}{% t "Скачать материалы" %}</a>
                     {% endif %}
-                    <a class="btn btn-secondary btn-sm" href="{{ assignment.material_file.url }}">{% icon "download" %}{% t "Скачать материалы" %}</a>
+                    {% for att in assignment.attachments.all %}
+                        <div style="margin-top:8px">
+                            {% if att.file.name|media_kind == 'image' %}
+                                <img src="{% url 'media_preview' att.file.name %}" alt="Вложение" loading="lazy" style="max-height:300px;border-radius:8px">
+                            {% elif att.file.name|media_kind == 'audio' %}
+                                <audio controls preload="none" src="{% url 'media_preview' att.file.name %}"></audio>
+                            {% endif %}
+                            <a class="btn btn-secondary btn-sm" href="{{ att.file.url }}" style="margin-top:6px">{% icon "download" "icon icon-sm" %} {{ att.file.name|slice:"-30:" }}</a>
+                        </div>
+                    {% endfor %}
+                    {% for att in attachments %}
+                        {% if att not in assignment.attachments.all %}
+                        <div style="margin-top:8px">
+                            {% if att.file.name|media_kind == 'image' %}
+                                <img src="{% url 'media_preview' att.file.name %}" alt="Вложение" loading="lazy" style="max-height:300px;border-radius:8px">
+                            {% endif %}
+                            <a class="btn btn-secondary btn-sm" href="{{ att.file.url }}">{% icon "download" "icon icon-sm" %} {{ att.file.name|slice:"-30:" }}</a>
+                        </div>
+                        {% endif %}
+                    {% endfor %}
                 </div>
             {% endif %}
 
@@ -72,7 +94,7 @@
                 {% else %}
                     <p class="small muted" style="margin-top:12px">Преподаватель ещё не добавил слова — загляните позже.</p>
                 {% endif %}
-            {% elif not assignment.is_quiz %}
+            {% elif not assignment.is_quiz and not assignment.is_material %}
                 <div class="callout" style="margin-top:16px">
                     {% icon "info" %}
                     <div>
@@ -151,7 +173,7 @@
             </section>
         {% endif %}
 
-        {% if not assignment.is_flashcards %}
+        {% if not assignment.is_flashcards and not assignment.is_material %}
             <section class="card">
                 <div class="card-head">
                     <h2 class="card-title">{% icon "clock" %}История попыток</h2>
@@ -163,27 +185,31 @@
     </div>
 
     <aside class="lesson-side">
-        <div class="lesson-video-box">
-            <div>
-                {% icon "play" "icon icon-xl" %}
-                <p class="strong mb-0" style="margin-top:8px">Видео-урок</p>
-                <p class="tiny muted mb-0">Встроенная видеосвязь появится позже. Пока — материалы задания.</p>
-            </div>
-        </div>
-
         <div class="lesson-sections">
-            <p class="lesson-sections-title">Sections</p>
-            <a class="lesson-section" href="#">{% icon "lightbulb" %}Warm-up</a>
-            <a class="lesson-section" href="#">{% icon "language" %}Vocabulary</a>
-            <a class="lesson-section" href="#">{% icon "mic" %}Speaking</a>
-            <a class="lesson-section" href="#">{% icon "book" %}Reading</a>
-            <a class="lesson-section is-active" href="#">{% icon "headphones" %}Listening · {{ assignment.title|truncatechars:18 }}</a>
-            <a class="lesson-section" href="#">{% icon "pencil" %}Grammar</a>
-            <a class="lesson-section" href="#">{% icon "mic" %}Speaking</a>
-            <a class="lesson-section" href="#">{% icon "file-text" %}Writing</a>
+            <p class="lesson-sections-title">Sections — Skills</p>
+            {# Динамические секции по навыкам задания, названия на английском, подсветка выбранных #}
+            {% for skill in assignment.skills.all %}
+                <a class="lesson-section is-active" href="#skill-{{ skill.slug }}">
+                    {% icon skill.kind|skill_icon "icon icon-sm" %}{{ skill.name }}
+                </a>
+            {% empty %}
+                {# Если навыков нет, показываем все возможные с подсветкой none, но лучше показать все 6 как подсказку #}
+                {% for kind, label in skill_kinds %}
+                    <span class="lesson-section" style="opacity:.6">{% icon kind|skill_icon "icon icon-sm" %}{{ label }}</span>
+                {% endfor %}
+            {% endfor %}
+            {# Показываем остальные навыки как неактивные для контекста, если есть хотя бы один выбранный #}
+            {% if assignment.skills.exists %}
+                <div style="border-top:1px solid var(--border-subtle);margin:10px 0"></div>
+                <p class="tiny muted" style="margin:0 0 6px">Other skills in course:</p>
+                {% for kind, label in skill_kinds %}
+                    {% if kind not in assigned_skill_kinds %}
+                        <span class="lesson-section" style="opacity:.5">{% icon kind|skill_icon "icon icon-sm" %}{{ label }}</span>
+                    {% endif %}
+                {% endfor %}
+            {% endif %}
             <div style="border-top:1px solid var(--border-subtle);margin:12px 0"></div>
-            <a class="lesson-section" href="#">{% icon "home" %}Exercises for homework</a>
-            <button class="btn btn-secondary btn-sm btn-block" style="margin-top:12px" disabled>{% icon "check-circle" %}Finish this unit</button>
+            <a class="lesson-section" href="#">{% icon "home" "icon icon-sm" %}Exercises</a>
         </div>
 
         {% if not assignment.is_flashcards %}

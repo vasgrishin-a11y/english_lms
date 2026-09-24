@@ -1246,10 +1246,12 @@
       var accept = input.getAttribute("accept") || "";
       var hint =
         input.getAttribute("data-dropzone-hint") || "Перетащите файл сюда или выберите на диске";
+      var isMultiple = input.hasAttribute("multiple");
       var limits = [];
       var extensions = acceptLabel(accept);
       if (extensions) limits.push(extensions);
       if (maxMb) limits.push("до " + maxMb + " МБ");
+      if (isMultiple) limits.push("можно несколько");
 
       var zone = document.createElement("div");
       zone.className = "dropzone";
@@ -1267,45 +1269,71 @@
         '<span class="dropzone-file" data-dropzone-name hidden></span>' +
         '<span class="dropzone-error" data-dropzone-error role="alert" hidden></span>' +
         "</span>" +
-        '<button type="button" class="btn btn-secondary btn-sm" data-dropzone-pick>Выбрать файл</button>' +
-        '<button type="button" class="btn btn-ghost btn-sm" data-dropzone-clear hidden>Убрать файл</button>';
+        '<button type="button" class="btn btn-secondary btn-sm" data-dropzone-pick>' + (isMultiple ? "Выбрать файлы" : "Выбрать файл") + '</button>' +
+        '<button type="button" class="btn btn-ghost btn-sm" data-dropzone-clear hidden>' + (isMultiple ? "Убрать все" : "Убрать файл") + '</button>';
 
       input.parentNode.insertBefore(zone, input);
       input.classList.add("dropzone-native");
-      // Поле переезжает внутрь зоны: тогда фокус с клавиатуры подсвечивает всю зону.
       zone.appendChild(input);
 
-      var name = zone.querySelector("[data-dropzone-name]");
-      var error = zone.querySelector("[data-dropzone-error]");
+      var nameEl = zone.querySelector("[data-dropzone-name]");
+      var errorEl = zone.querySelector("[data-dropzone-error]");
       var pick = zone.querySelector("[data-dropzone-pick]");
-      var clear = zone.querySelector("[data-dropzone-clear]");
+      var clearBtn = zone.querySelector("[data-dropzone-clear]");
 
       function showError(message) {
-        if (!error) return;
-        error.textContent = message || "";
-        error.hidden = !message;
+        if (!errorEl) return;
+        errorEl.textContent = message || "";
+        errorEl.hidden = !message;
       }
 
       function render() {
-        var file = input.files && input.files[0];
-        if (!file) {
-          name.hidden = true;
-          name.textContent = "";
-          clear.hidden = true;
+        var files = input.files;
+        if (!files || !files.length) {
+          nameEl.hidden = true;
+          nameEl.textContent = "";
+          clearBtn.hidden = true;
           zone.classList.remove("is-filled");
           return;
         }
-        name.hidden = false;
-        name.textContent = "";
-        var title = document.createElement("span");
-        title.textContent = file.name;
-        var size = document.createElement("span");
-        size.className = "dropzone-size";
-        size.textContent = humanSize(file.size);
-        name.appendChild(title);
-        name.appendChild(size);
-        clear.hidden = false;
+        nameEl.hidden = false;
+        nameEl.textContent = "";
+        // Если много файлов — список
+        if (files.length > 1) {
+          var ul = document.createElement("div");
+          ul.style.display = "flex";
+          ul.style.flexDirection = "column";
+          ul.style.gap = "2px";
+          for (var i = 0; i < files.length; i++) {
+            var row = document.createElement("span");
+            row.style.display = "flex";
+            row.style.gap = "8px";
+            row.style.alignItems = "center";
+            var t = document.createElement("span");
+            t.textContent = files[i].name;
+            var s = document.createElement("span");
+            s.className = "dropzone-size";
+            s.textContent = humanSize(files[i].size);
+            row.appendChild(t);
+            row.appendChild(s);
+            ul.appendChild(row);
+          }
+          nameEl.appendChild(ul);
+        } else {
+          var file = files[0];
+          var title = document.createElement("span");
+          title.textContent = file.name;
+          var size = document.createElement("span");
+          size.className = "dropzone-size";
+          size.textContent = humanSize(file.size);
+          nameEl.appendChild(title);
+          nameEl.appendChild(size);
+        }
+        clearBtn.hidden = false;
         zone.classList.add("is-filled");
+        // Снимаем галку clear, если файлы выбраны заново
+        var clearBox = document.querySelector('input[name="' + input.name + '-clear"]');
+        if (clearBox && files.length) clearBox.checked = false;
       }
 
       function check(file) {
@@ -1332,19 +1360,32 @@
         return true;
       }
 
-      function acceptFiles(files) {
-        if (!files || !files.length) return;
-        if (!check(files[0])) {
-          input.value = "";
-          render();
-          return;
+      function acceptFiles(fileList) {
+        if (!fileList || !fileList.length) return;
+        // Проверка всех файлов
+        for (var k = 0; k < fileList.length; k++) {
+          if (!check(fileList[k])) {
+            if (!isMultiple) {
+              input.value = "";
+              render();
+            }
+            return;
+          }
         }
         try {
           var transfer = new DataTransfer();
-          transfer.items.add(files[0]);
+          if (isMultiple) {
+            // Добавляем к уже выбранным
+            if (input.files) {
+              for (var j = 0; j < input.files.length; j++) transfer.items.add(input.files[j]);
+            }
+            for (var idx = 0; idx < fileList.length; idx++) transfer.items.add(fileList[idx]);
+          } else {
+            transfer.items.add(fileList[0]);
+          }
           input.files = transfer.files;
         } catch (error) {
-          /* Браузер без DataTransfer: остаётся обычный выбор файла. */
+          // Fallback без DataTransfer — только одиночный файл
         }
         render();
         input.dispatchEvent(new Event("change", { bubbles: true }));
@@ -1357,20 +1398,19 @@
         });
       }
       zone.addEventListener("click", function (event) {
-        // Клик по скрытому полю пришёл из нашего же вызова — не зацикливаемся.
         if (event.target.closest("button, input, label")) return;
         input.click();
       });
-      ["dragenter", "dragover"].forEach(function (name) {
-        zone.addEventListener(name, function (event) {
+      ["dragenter", "dragover"].forEach(function (evName) {
+        zone.addEventListener(evName, function (event) {
           event.preventDefault();
           zone.classList.add("is-dragging");
         });
       });
-      ["dragleave", "dragend", "drop"].forEach(function (name) {
-        zone.addEventListener(name, function (event) {
+      ["dragleave", "dragend", "drop"].forEach(function (evName) {
+        zone.addEventListener(evName, function (event) {
           event.preventDefault();
-          if (name !== "drop" || !event.dataTransfer || !event.dataTransfer.files.length) {
+          if (evName !== "drop" || !event.dataTransfer || !event.dataTransfer.files.length) {
             zone.classList.remove("is-dragging");
           }
         });
@@ -1379,23 +1419,69 @@
         zone.classList.remove("is-dragging");
         acceptFiles(event.dataTransfer ? event.dataTransfer.files : null);
       });
-      if (clear) {
-        clear.addEventListener("click", function (event) {
+      // Поддержка Ctrl+V прямо в зоне
+      zone.addEventListener("paste", function (event) {
+        var items = (event.clipboardData || window.clipboardData).items;
+        if (!items) return;
+        var files = [];
+        for (var i = 0; i < items.length; i++) {
+          if (items[i].kind === "file") {
+            var f = items[i].getAsFile();
+            if (f) files.push(f);
+          }
+        }
+        if (files.length) {
+          event.preventDefault();
+          acceptFiles(files);
+        }
+      });
+      if (clearBtn) {
+        clearBtn.addEventListener("click", function (event) {
           event.preventDefault();
           event.stopPropagation();
           input.value = "";
+          // Для Django ClearableFileInput: ставим галку clear
           var clearBox = document.querySelector('input[name="' + input.name + '-clear"]');
-          if (clearBox) clearBox.checked = true;
+          if (clearBox) {
+            clearBox.checked = true;
+            // Также ищем по id с префиксом material_file-clear
+            clearBox.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+          // Для multiple просто очищаем DataTransfer
+          try {
+            var dt = new DataTransfer();
+            input.files = dt.files;
+          } catch (e) {}
           showError("");
           render();
+          input.dispatchEvent(new Event("change", { bubbles: true }));
         });
       }
       input.addEventListener("change", function () {
-        if (input.files && input.files[0] && !check(input.files[0])) {
-          input.value = "";
+        if (input.files) {
+          for (var i = 0; i < input.files.length; i++) {
+            if (!check(input.files[i])) {
+              if (!isMultiple) {
+                input.value = "";
+                try { var d = new DataTransfer(); input.files = d.files; } catch(e){}
+              }
+              break;
+            }
+          }
         }
         render();
       });
+      // Если в шаблоне уже есть checkbox clear, слушаем его
+      var extClear = document.querySelector('input[name="' + input.name + '-clear"]');
+      if (extClear) {
+        extClear.addEventListener("change", function () {
+          if (extClear.checked) {
+            zone.classList.add("is-cleared");
+          } else {
+            zone.classList.remove("is-cleared");
+          }
+        });
+      }
       render();
     });
   }
