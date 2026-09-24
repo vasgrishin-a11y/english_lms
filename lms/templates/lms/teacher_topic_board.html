@@ -22,7 +22,7 @@
             {% for item in skill_menu %}
                 <a class="pill {% if selected_skill == item.slug %}is-active turquoise{% endif %}" href="{% if item.slug == 'all' %}{% url 'teacher_topic_board' topic.pk %}{% else %}{% url 'teacher_topic_board' topic.pk %}?skill={{ item.slug }}{% endif %}" style="justify-content:space-between">
                     <span>{{ item.label }}</span>
-                    <span class="tnum" style="font-size:11px;opacity:.8">{{ item.count }}</span>
+                    <span class="tnum" style="font-size:11px">{{ item.count }}</span>
                 </a>
             {% endfor %}
         </div>

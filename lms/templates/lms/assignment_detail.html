@@ -195,7 +195,7 @@
             {% empty %}
                 {# Если навыков нет, показываем все возможные с подсветкой none, но лучше показать все 6 как подсказку #}
                 {% for kind, label in skill_kinds %}
-                    <span class="lesson-section" style="opacity:.6">{% icon kind|skill_icon "icon icon-sm" %}{{ label }}</span>
+                    <span class="lesson-section" style="color:var(--text-subtle)">{% icon kind|skill_icon "icon icon-sm" %}{{ label }}</span>
                 {% endfor %}
             {% endfor %}
             {# Показываем остальные навыки как неактивные для контекста, если есть хотя бы один выбранный #}
@@ -204,7 +204,7 @@
                 <p class="tiny muted" style="margin:0 0 6px">Other skills in course:</p>
                 {% for kind, label in skill_kinds %}
                     {% if kind not in assigned_skill_kinds %}
-                        <span class="lesson-section" style="opacity:.5">{% icon kind|skill_icon "icon icon-sm" %}{{ label }}</span>
+                        <span class="lesson-section" style="color:var(--text-subtle)">{% icon kind|skill_icon "icon icon-sm" %}{{ label }}</span>
                     {% endif %}
                 {% endfor %}
             {% endif %}

@@ -115,7 +115,7 @@
                         {% csrf_token %}<button class="btn btn-ghost btn-sm" type="submit" title="В архив">{% icon "archive" %}</button>
                     </form>
                     <details class="danger-zone">
-                        <summary class="btn btn-danger-ghost btn-sm" title="Удалить класс целиком">{% icon "trash" %}</summary>
+                        <summary class="btn btn-danger-ghost btn-sm" title="Удалить класс целиком" aria-label="Удалить класс целиком">{% icon "trash" %}</summary>
                         <div class="panel danger-panel">
                             <p class="small strong mb-0">Удалить класс «{{ block.name }}» целиком?</p>
                             <p class="tiny muted mb-0">Тем {{ block_item.topics|length }}, заданий {{ block_item.assignments }}. Работы учеников защищены.</p>
