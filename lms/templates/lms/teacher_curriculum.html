@@ -18,14 +18,14 @@
         </div>
     </form>
     <div class="rail-card">
-        <p class="rail-title">Курс целиком</p>
+        <p class="rail-title">{% t "Курс целиком" %}</p>
         <ul class="col" style="gap:6px;margin:0;padding:0;list-style:none">
-            <li class="row row-between"><span class="small">Классов</span><strong class="tnum">{{ totals.blocks }}</strong></li>
-            <li class="row row-between"><span class="small">Тем</span><strong class="tnum">{{ totals.topics }}</strong></li>
-            <li class="row row-between"><span class="small">Заданий</span><strong class="tnum">{{ totals.assignments }}</strong></li>
-            <li class="row row-between"><span class="small">С карточками</span><strong class="tnum">{{ totals.flashcards }}</strong></li>
-            <li class="row row-between"><span class="small">Черновиков</span><strong class="tnum">{{ totals.drafts }}</strong></li>
-            <li class="row row-between"><span class="small">Ждут проверки</span><strong class="tnum">{{ totals.waiting }}</strong></li>
+            <li class="row row-between"><span class="small">{% t "Классов" %}</span><strong class="tnum">{{ totals.blocks }}</strong></li>
+            <li class="row row-between"><span class="small">{% t "Тем" %}</span><strong class="tnum">{{ totals.topics }}</strong></li>
+            <li class="row row-between"><span class="small">{% t "Заданий" %}</span><strong class="tnum">{{ totals.assignments }}</strong></li>
+            <li class="row row-between"><span class="small">{% t "С карточками" %}</span><strong class="tnum">{{ totals.flashcards }}</strong></li>
+            <li class="row row-between"><span class="small">{% t "Черновиков" %}</span><strong class="tnum">{{ totals.drafts }}</strong></li>
+            <li class="row row-between"><span class="small">{% t "Ждут проверки" %}</span><strong class="tnum">{{ totals.waiting }}</strong></li>
         </ul>
     </div>
     <div class="rail-card">
@@ -55,10 +55,10 @@
 </div>
 
 <div class="filter-pills" style="margin-bottom:20px">
-    <span class="pill is-active turquoise">Классов: {{ totals.blocks }}</span>
-    <span class="pill">Тем: {{ totals.topics }}</span>
-    <span class="pill">Заданий: {{ totals.assignments }}</span>
-    {% if totals.drafts %}<span class="pill">Черновиков: {{ totals.drafts }}</span>{% endif %}
+    <span class="pill is-active turquoise">{% t "Классов" %}: {{ totals.blocks }}</span>
+    <span class="pill">{% t "Тем" %}: {{ totals.topics }}</span>
+    <span class="pill">{% t "Заданий" %}: {{ totals.assignments }}</span>
+    {% if totals.drafts %}<span class="pill">{% t "Черновиков" %}: {{ totals.drafts }}</span>{% endif %}
 </div>
 
 {% if blocks_data %}
@@ -135,7 +135,7 @@
                                     {{ topic.title }}
                                     {% icon "chevron-right" "icon icon-sm" %}
                                 </a>
-                                <div class="tiny muted" style="margin-top:2px">{{ topic_item.assignments|length }} задани{{ topic_item.assignments|length|pluralize:"е,я,й" }}{% if topic_item.flashcards %} · {{ topic_item.flashcards }} с карточками{% endif %}{% if topic_item.waiting %} · ждут {{ topic_item.waiting }}{% endif %}{% if not topic.is_active %} · скрыта{% endif %}</div>
+                                <div class="tiny muted" style="margin-top:2px">{{ topic_item.assignments|length }} {{ topic_item.assignments|length|pluralize_ru:"задание,задания,заданий" }}{% if topic_item.flashcards %} · {{ topic_item.flashcards }} с карточками{% endif %}{% if topic_item.waiting %} · ждут {{ topic_item.waiting }}{% endif %}{% if not topic.is_active %} · скрыта{% endif %}</div>
                             </div>
                         </div>
                         <div class="row row-tight" style="gap:4px;flex:0 0 auto">

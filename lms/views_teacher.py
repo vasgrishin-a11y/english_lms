@@ -1043,6 +1043,76 @@ def assignment_rename(request, pk):
 
 @teacher_required
 @require_POST
+def assignment_quick_edit(request, pk):
+    """Быстрое редактирование задания прямо в доске темы: заголовок, описание, статус, порядок + файлы."""
+    assignment = get_object_or_404(Assignment, pk=pk)
+    title = request.POST.get("title", "").strip()
+    description = request.POST.get("description", "")
+    status_val = request.POST.get("status", "")
+    order_val = request.POST.get("order", "")
+    changed = []
+    if title:
+        if len(title) > 200:
+            title = title[:200]
+        if assignment.title != title:
+            assignment.title = title
+            changed.append("title")
+    if description != "" and assignment.description != description:
+        assignment.description = description
+        changed.append("description")
+    if status_val in Assignment.Publication.values:
+        if assignment.status != status_val:
+            assignment.status = status_val
+            changed.append("status")
+            if status_val == Assignment.Publication.PUBLISHED and assignment.publish_at and assignment.publish_at > timezone.now():
+                assignment.publish_at = None
+    if order_val:
+        try:
+            order_int = int(order_val)
+            if assignment.order != order_int:
+                assignment.order = order_int
+                changed.append("order")
+        except (ValueError, TypeError):
+            pass
+    if changed:
+        assignment.save(update_fields=changed + ["updated_at"])
+    # attachments: new files
+    new_files = request.FILES.getlist("new_attachments")
+    if new_files:
+        from .models import AssignmentAttachment
+        from django.db.models import Max
+        last_order = assignment.attachments.aggregate(m=Max("order"))["m"] or 0
+        for idx, f in enumerate(new_files, start=1):
+            AssignmentAttachment.objects.create(
+                assignment=assignment, file=f, order=last_order + idx
+            )
+        changed.append("attachments")
+    # delete marked
+    delete_ids = request.POST.getlist("delete_attachments")
+    if delete_ids:
+        assignment.attachments.filter(pk__in=[i for i in delete_ids if i.isdigit()]).delete()
+    # material file clear?
+    if request.POST.get("material_file-clear") == "on":
+        if assignment.material_file:
+            assignment.material_file.delete(save=False)
+            assignment.material_file = ""
+            assignment.save(update_fields=["material_file", "updated_at"])
+    # material file new?
+    if request.FILES.get("material_file"):
+        assignment.material_file = request.FILES["material_file"]
+        assignment.save(update_fields=["material_file", "updated_at"])
+    if changed:
+        messages.success(request, f"Задание обновлено: {assignment.title}")
+    else:
+        messages.info(request, "Изменений нет.")
+    nxt = request.POST.get("next") or request.GET.get("next")
+    if nxt:
+        return redirect(nxt)
+    return redirect("teacher_topic_board", pk=assignment.topic_id)
+
+
+@teacher_required
+@require_POST
 def assignment_move(request, pk):
     """Порядок задания на доске: точное место (перетаскивание) или шаг ↑/↓."""
     assignment = get_object_or_404(Assignment.objects.select_related("topic"), pk=pk)

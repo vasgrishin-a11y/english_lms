@@ -12,7 +12,7 @@
             <p class="rail-title">Тема</p>
             <p class="small strong mb-0">{{ topic.title }}</p>
             <p class="tiny muted mb-0">{{ block.name }}{% if block.cefr_level %} · {{ block.cefr_level }}{% endif %}</p>
-            <p class="tiny muted">{{ all_assignments|length }} задани{{ all_assignments|length|pluralize:"е,я,й" }}</p>
+            <p class="tiny muted">{{ all_assignments|length }} {{ all_assignments|length|pluralize_ru:"задание,задания,заданий" }}</p>
         </div>
     </div>
 
@@ -91,7 +91,7 @@
                     <span class="tiny muted tnum">{{ assignment.max_points }} б. · порядок {{ assignment.order }}</span>
                 </div>
             </div>
-            <div class="row row-tight" style="gap:4px">
+            <div class="row row-tight" style="gap:4px;flex-wrap:wrap">
                 <a class="btn btn-secondary btn-sm" href="{% url 'teacher_assignment_form' assignment.pk %}?from_topic=1">{% icon "pencil" %}Изменить</a>
                 <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_preview' assignment.pk %}" title="Как увидит ученик">{% icon "eye" %}</a>
                 <form method="post" action="{% url 'teacher_assignment_publish' assignment.pk %}" style="display:inline">
@@ -104,24 +104,41 @@
             <div style="background:var(--surface-sunken);border:1px solid var(--border-subtle);border-radius:8px;padding:12px 14px;font-size:14px;line-height:1.6;white-space:pre-wrap">{{ assignment.description }}</div>
 
             {% if assignment.material_file or assignment.attachments.exists %}
-            <div class="media-frame" style="gap:8px">
-                <p class="strong mb-0 tiny" style="text-transform:uppercase;letter-spacing:.05em">{% icon "file-text" "icon icon-sm" %} Материалы</p>
+            <div class="media-frame" style="gap:12px">
+                <p class="strong mb-0 tiny" style="text-transform:uppercase;letter-spacing:.05em">{% icon "file-text" "icon icon-sm" %} Материалы — превью картинкой</p>
                 {% if assignment.material_file %}
-                    <div class="row row-tight" style="gap:8px;flex-wrap:wrap">
+                    <div style="display:flex;flex-direction:column;gap:8px;background:var(--surface);border:1px solid var(--border-subtle);border-radius:8px;padding:10px">
                         {% if assignment.material_file.name|media_kind == 'image' %}
-                            <img src="{% url 'media_preview' assignment.material_file.name %}" alt="Материал" loading="lazy" style="max-height:220px;border-radius:6px">
+                            <img src="{% url 'media_preview' assignment.material_file.name %}" alt="Материал" loading="lazy" style="max-width:100%;max-height:360px;object-fit:contain;border-radius:8px;border:1px solid var(--border-subtle)">
+                        {% elif assignment.material_file.name|media_kind == 'audio' %}
+                            <audio controls preload="none" src="{% url 'media_preview' assignment.material_file.name %}" style="width:100%"></audio>
                         {% endif %}
-                        <a class="btn btn-secondary btn-sm" href="{{ assignment.material_file.url }}">{% icon "download" "icon icon-sm" %}Скачать основной файл</a>
-                        <form method="post" action="{% url 'teacher_assignment_form' assignment.pk %}" style="display:inline">{% csrf_token %}<input type="hidden" name="material_file-clear" value="on"><button class="btn btn-ghost btn-sm" type="submit">Очистить</button></form>
+                        <div class="row row-tight" style="gap:8px;flex-wrap:wrap">
+                            <a class="btn btn-secondary btn-sm" href="{{ assignment.material_file.url }}">{% icon "download" "icon icon-sm" %}Скачать основной файл</a>
+                            <span class="tiny muted">{{ assignment.material_file.name|slice:"-40:" }}</span>
+                        </div>
                     </div>
                 {% endif %}
-                {% for att in assignment.attachments.all %}
-                    <div class="row row-tight" style="gap:8px">
-                        {% if att.file.name|media_kind == 'image' %}<img src="{% url 'media_preview' att.file.name %}" alt="Вложение" loading="lazy" style="max-height:160px;border-radius:6px">{% endif %}
-                        <a class="btn btn-ghost btn-sm" href="{{ att.file.url }}">{{ att.file.name|slice:"-30:" }}</a>
-                        <form method="post" action="{% url 'teacher_attachment_delete' att.pk %}">{% csrf_token %}<input type="hidden" name="from" value="board"><button class="btn btn-danger-ghost btn-sm" type="submit">{% icon "trash" "icon icon-sm" %}</button></form>
-                    </div>
-                {% endfor %}
+                {% if assignment.attachments.exists %}
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px">
+                    {% for att in assignment.attachments.all %}
+                        <div style="background:var(--surface);border:1px solid var(--border-subtle);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px">
+                            {% if att.file.name|media_kind == 'image' %}
+                                <img src="{% url 'media_preview' att.file.name %}" alt="Вложение" loading="lazy" style="width:100%;height:140px;object-fit:cover;border-radius:6px;border:1px solid var(--border-subtle)">
+                            {% elif att.file.name|media_kind == 'audio' %}
+                                <audio controls preload="none" src="{% url 'media_preview' att.file.name %}" style="width:100%"></audio>
+                            {% else %}
+                                <div style="height:80px;display:grid;place-items:center;background:var(--surface-sunken);border-radius:6px">{% icon "file-text" %}</div>
+                            {% endif %}
+                            <span class="tiny muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ att.file.name|slice:"-30:" }}</span>
+                            <div class="row row-tight" style="gap:4px">
+                                <a class="btn btn-secondary btn-sm" href="{{ att.file.url }}" style="flex:1">{% icon "download" "icon icon-sm" %}Скачать</a>
+                                <form method="post" action="{% url 'teacher_attachment_delete' att.pk %}" style="flex:0"><input type="hidden" name="from" value="board">{% csrf_token %}<button class="btn btn-danger-ghost btn-sm" type="submit">{% icon "trash" "icon icon-sm" %}</button></form>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
             </div>
             {% endif %}
 
@@ -147,6 +164,62 @@
                     <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_cards' assignment.pk %}" style="margin-top:6px">{% icon "cards" %}Редактировать карточки</a>
                 </div>
             {% endif %}
+
+            <!-- Быстрое редактирование inline -->
+            <details style="margin-top:4px;border:1px dashed var(--border);border-radius:8px;padding:10px;background:var(--surface-sunken)">
+                <summary style="cursor:pointer;font-weight:600;font-size:13px;list-style:none;display:flex;align-items:center;gap:6px">{% icon "pencil" "icon icon-sm" %} Быстрое редактирование прямо здесь</summary>
+                <form method="post" action="{% url 'teacher_assignment_quick_edit' assignment.pk %}" enctype="multipart/form-data" style="margin-top:12px;display:flex;flex-direction:column;gap:10px">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{% url 'teacher_topic_board' topic.pk %}#assignment-{{ assignment.pk }}">
+                    <div class="form-field">
+                        <label>Название</label>
+                        <input type="text" name="title" value="{{ assignment.title }}" maxlength="200" style="width:100%">
+                    </div>
+                    <div class="form-field">
+                        <label>Описание / Условия</label>
+                        <textarea name="description" rows="4" style="width:100%;font-size:13px">{{ assignment.description }}</textarea>
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-field">
+                            <label>Статус</label>
+                            <select name="status" style="width:100%">
+                                <option value="draft" {% if assignment.status == 'draft' %}selected{% endif %}>черновик</option>
+                                <option value="published" {% if assignment.status == 'published' %}selected{% endif %}>опубликовано</option>
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label>Порядок</label>
+                            <input type="number" name="order" value="{{ assignment.order }}" style="width:100%">
+                        </div>
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-field">
+                            <label>Основной файл (заменит)</label>
+                            <input type="file" name="material_file">
+                            <label style="font-weight:500;font-size:12px;margin-top:4px;display:flex;gap:4px;align-items:center"><input type="checkbox" name="material_file-clear"> Очистить основной файл</label>
+                        </div>
+                        <div class="form-field">
+                            <label>Добавить вложения (несколько)</label>
+                            <input type="file" name="new_attachments" multiple>
+                            <p class="tiny muted" style="margin-top:4px">Поддерживается Ctrl+V скриншота в поле описания на странице полного редактора</p>
+                        </div>
+                    </div>
+                    {% if assignment.attachments.exists %}
+                    <div class="form-field">
+                        <label>Удалить вложения</label>
+                        <div style="display:flex;flex-wrap:wrap;gap:6px">
+                            {% for att in assignment.attachments.all %}
+                            <label style="display:flex;align-items:center;gap:6px;font-size:11px;background:var(--surface);border:1px solid var(--border-subtle);border-radius:6px;padding:4px 8px"><input type="checkbox" name="delete_attachments" value="{{ att.pk }}"> {{ att.file.name|slice:"-20:" }}</label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    <div class="row row-tight">
+                        <button class="btn btn-sm" type="submit">{% icon "save" %}Сохранить быстро</button>
+                        <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_form' assignment.pk %}?from_topic=1">Полный редактор</a>
+                    </div>
+                </form>
+            </details>
         </div>
 
         <div class="row row-tight" style="margin-top:14px;gap:6px;justify-content:flex-end;border-top:1px solid var(--border-subtle);padding-top:10px">
@@ -166,11 +239,9 @@
 {% block extra_js %}
 <script>
 (function(){
-  // Skill filter client side for instant feedback (in addition to server filter)
   const board = document.querySelector('[data-topic-board]');
   if(!board) return;
-  const cards = board.querySelectorAll('[data-assignment-card]');
-  // already filtered server side, but keep for future
+  // автофокус после сохранения — прокрутка к якорю уже работает через #assignment-xxx
 })();
 </script>
 {% endblock %}

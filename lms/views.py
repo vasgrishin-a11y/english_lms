@@ -86,18 +86,26 @@ def dashboard(request):
 def _resolve_private_file(request, name):
     """Найти файл по имени из БД и проверить доступ. Возвращает FileField или None."""
     teacher = get_user_role(request.user) == Profile.Role.TEACHER
+    from .models import AssignmentAttachment
+
     materials = Assignment.objects.filter(material_file=name)
+    attachments = AssignmentAttachment.objects.filter(file=name)
     attempts = Submission.objects.filter(file_answer=name)
     items = QuestionResponse.objects.filter(file_answer=name)
     if not teacher:
         visible = Assignment.objects.visible()
         materials = materials.filter(pk__in=visible)
+        attachments = attachments.filter(assignment__in=visible)
         attempts = attempts.filter(
             student=request.user,
             assignment__in=visible,
         )
         items = items.filter(student=request.user, assignment__in=visible)
-    for queryset, field in ((materials, "material_file"), (attempts, "file_answer")):
+    for queryset, field in (
+        (materials, "material_file"),
+        (attachments, "file"),
+        (attempts, "file_answer"),
+    ):
         found = queryset.first()
         if found:
             return getattr(found, field)

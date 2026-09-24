@@ -181,6 +181,11 @@ urlpatterns = [
         name="teacher_assignment_rename",
     ),
     path(
+        "teacher/curriculum/assignments/<int:pk>/quick-edit/",
+        views_teacher.assignment_quick_edit,
+        name="teacher_assignment_quick_edit",
+    ),
+    path(
         "teacher/curriculum/assignments/<int:pk>/move/",
         views_teacher.assignment_move,
         name="teacher_assignment_move",

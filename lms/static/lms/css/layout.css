@@ -305,8 +305,15 @@
 .home-grid {
     display: grid;
     gap: var(--sp-5);
+    align-items: stretch;
     /* min(100%, …) гарантирует отсутствие горизонтального переполнения на 320px. */
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+}
+
+.home-grid > .card {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
 }
 
 .hero {
