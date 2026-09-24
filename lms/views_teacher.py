@@ -218,6 +218,7 @@ def console_home(request):
     overview = teacher_overview()
     waiting = (
         Submission.objects.latest_attempts()
+        .exclude(assignment__assignment_type__in=Assignment.NO_SUBMISSION_TYPES)
         .filter(status__in=QUEUE_FILTERS["pending"])
         .select_related("student", "assignment__topic__block", "assignment__topic__chapter")
         .order_by("submitted_at", "pk")[:6]
@@ -250,6 +251,8 @@ def _queue_queryset(request):
         order = "fifo"
     submissions = (
         Submission.objects.latest_attempts()
+        # Карточки и материалы для занятий не сдаются и не проверяются.
+        .exclude(assignment__assignment_type__in=Assignment.NO_SUBMISSION_TYPES)
         .select_related(
             "student", "assignment__topic__block", "assignment__topic__chapter", "feedback"
         )
@@ -420,6 +423,7 @@ def _queue_positions(request, submission):
     if not ids:
         ids = list(
             Submission.objects.latest_attempts()
+            .exclude(assignment__assignment_type__in=Assignment.NO_SUBMISSION_TYPES)
             .order_by("submitted_at", "pk")
             .values_list("pk", flat=True)
         )
@@ -940,8 +944,9 @@ def _submission_progress(assignment):
     не выбрана) плюс назначенные персонально. Используется в боковой панели
     формы задания, чтобы преподаватель видел «не сдали» без перехода в очередь.
     Для нового задания возвращает None: сдавать ещё нечего.
+    Для заданий без сдачи (карточки, материалы) тоже None: «не сдавших» нет.
     """
-    if not assignment.pk:
+    if not assignment.pk or assignment.is_no_submission:
         return None
     expected_ids = set(audience.expected_students(assignment).values_list("pk", flat=True))
     submitted_ids = set(
@@ -2314,11 +2319,13 @@ def student_detail(request, pk):
     blocks_data, totals = course_tree(student=student)
     attempts = (
         Submission.objects.filter(student=student)
+        .exclude(assignment__assignment_type__in=Assignment.NO_SUBMISSION_TYPES)
         .select_related("feedback", "assignment__topic__block", "assignment__topic__chapter")
         .order_by("-submitted_at", "-pk")[:30]
     )
     skill_rows = (
         Submission.objects.filter(student=student)
+        .exclude(assignment__assignment_type__in=Assignment.NO_SUBMISSION_TYPES)
         .latest_attempts()
         .values("assignment__skills__name", "feedback__grade", "max_points_snapshot")
     )
@@ -2366,11 +2373,15 @@ def analytics(request):
         block=block if block and block.isdigit() else None,
         topic=topic if topic and topic.isdigit() else None,
     )
-    summary = Submission.objects.latest_attempts().aggregate(
-        average=Avg("feedback__grade"),
-        graded=Count("feedback__grade"),
-        waiting=Count("pk", filter=Q(status__in=QUEUE_FILTERS["pending"])),
-        revision=Count("pk", filter=Q(status=Submission.Status.NEEDS_REVISION)),
+    summary = (
+        Submission.objects.latest_attempts()
+        .exclude(assignment__assignment_type__in=Assignment.NO_SUBMISSION_TYPES)
+        .aggregate(
+            average=Avg("feedback__grade"),
+            graded=Count("feedback__grade"),
+            waiting=Count("pk", filter=Q(status__in=QUEUE_FILTERS["pending"])),
+            revision=Count("pk", filter=Q(status=Submission.Status.NEEDS_REVISION)),
+        )
     )
     return render(
         request,

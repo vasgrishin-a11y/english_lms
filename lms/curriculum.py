@@ -81,9 +81,13 @@ def ordered_topics(active_only=False):
 
 
 def teacher_assignment_stats():
-    """Один запрос: сколько работ ждёт, на доработке, проверено, средний балл по заданию."""
+    """Один запрос: сколько работ ждёт, на доработке, проверено, средний балл по заданию.
+
+    Задания без сдачи (карточки, материалы) в проверки не попадают.
+    """
     rows = (
         Submission.objects.latest_attempts()
+        .exclude(assignment__assignment_type__in=Assignment.NO_SUBMISSION_TYPES)
         .values("assignment_id")
         .annotate(
             waiting=Count("pk", filter=Q(status__in=WAITING_STATUSES)),
@@ -183,7 +187,9 @@ def _topic_entry(topic, assignments, *, stats, student_view, query, parent_audie
             entry["audience"] = audience.accumulate(assignment, topic_audience)
         if assignment.is_flashcards:
             flashcard_count += 1
-        if student_view and not assignment.is_flashcards:
+        if student_view and not assignment.is_no_submission:
+            # Материалы для занятий, как и карточки: в структуре остаются,
+            # но прогресс и «долги» ученика не затрагивают.
             state = state_of(assignment)
             entry["state"] = state
             topic_total += 1
@@ -329,19 +335,31 @@ def _assemble(
 
 
 def queue_counts():
-    """Счётчики для вкладок очереди проверки — один агрегирующий запрос."""
-    return Submission.objects.latest_attempts().aggregate(
-        waiting=Count("pk", filter=Q(status__in=WAITING_STATUSES)),
-        revision=Count("pk", filter=Q(status=Submission.Status.NEEDS_REVISION)),
-        checked=Count("pk", filter=Q(status=Submission.Status.CHECKED)),
-        total=Count("pk"),
+    """Счётчики для вкладок очереди проверки — один агрегирующий запрос.
+
+    Задания без сдачи (карточки, материалы) не проверяются и не считаются.
+    """
+    return (
+        Submission.objects.latest_attempts()
+        .exclude(assignment__assignment_type__in=Assignment.NO_SUBMISSION_TYPES)
+        .aggregate(
+            waiting=Count("pk", filter=Q(status__in=WAITING_STATUSES)),
+            revision=Count("pk", filter=Q(status=Submission.Status.NEEDS_REVISION)),
+            checked=Count("pk", filter=Q(status=Submission.Status.CHECKED)),
+            total=Count("pk"),
+        )
     )
 
 
 def teacher_overview():
     """Сводка для домашней страницы преподавателя: 4 запроса."""
     counts = queue_counts()
-    students = Submission.objects.values("student_id").distinct().count()
+    students = (
+        Submission.objects.exclude(assignment__assignment_type__in=Assignment.NO_SUBMISSION_TYPES)
+        .values("student_id")
+        .distinct()
+        .count()
+    )
     curriculum = Assignment.objects.aggregate(
         total=Count("pk"),
         drafts=Count("pk", filter=Q(status=Assignment.Publication.DRAFT)),
@@ -351,8 +369,10 @@ def teacher_overview():
         chapters=Count("topic__chapter", distinct=True),
         blocks=Count("topic__block", distinct=True),
     )
-    averages = Submission.objects.latest_attempts().aggregate(
-        avg=Avg("feedback__grade"), graded=Count("feedback__grade")
+    averages = (
+        Submission.objects.latest_attempts()
+        .exclude(assignment__assignment_type__in=Assignment.NO_SUBMISSION_TYPES)
+        .aggregate(avg=Avg("feedback__grade"), graded=Count("feedback__grade"))
     )
     return {
         "queue": counts,
@@ -364,13 +384,18 @@ def teacher_overview():
 
 
 def gradebook(block=None, topic=None):
-    """Матрица журнала «ученики × задания»: 4 запроса независимо от размера."""
+    """Матрица журнала «ученики × задания»: 4 запроса независимо от размера.
+
+    Материалы для занятий не оцениваются, поэтому колонками не становятся,
+    но в карте курса остаются как все остальные задания.
+    """
     from django.contrib.auth import get_user_model
 
     from .models import Profile, Topic
 
     assignments = (
         visible_assignments()
+        .exclude(assignment_type=Assignment.Type.MATERIAL)
         .select_related("topic__block", "topic__chapter")
         .prefetch_related(*audience.ASSIGNMENT_PREFETCH)
     )

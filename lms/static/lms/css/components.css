@@ -333,6 +333,14 @@ select[aria-invalid="true"],
     margin-top: var(--sp-5);
 }
 
+/* Карточки — элементы сеток: вертикальный ритм задаёт gap сетки,
+   а соседний margin-top сдвигал бы 2-ю/3-ю карточку ряда вниз. */
+.home-grid > .card + .card,
+.archive-grid > .card + .card,
+.library-grid > .card + .card {
+    margin-top: 0;
+}
+
 .card-flat {
     box-shadow: none;
 }

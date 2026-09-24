@@ -138,13 +138,17 @@ def student_home(request):
         )
     )
     drafts = {draft.assignment_id: draft for draft in AnswerDraft.objects.filter(student=student)}
-    total = len(assignments)
-    done = waiting = revision = graded = 0
+    # Материалы для занятий остаются в списке (структура курса), но прогресс,
+    # сроки и «продолжить» не затрагивают: отвечать на них не нужно.
+    total = done = waiting = revision = graded = 0
     due_soon = []
     continue_candidates = []
     for assignment in assignments:
         state = state_of(assignment)
         assignment.state = state
+        if assignment.is_material:
+            continue
+        total += 1
         if state["status"] == Submission.Status.CHECKED:
             done += 1
             if state["grade"] is not None:
@@ -163,6 +167,7 @@ def student_home(request):
     due_soon.sort(key=lambda item: item[0])
     recent = list(
         Submission.objects.filter(student=student, feedback__isnull=False)
+        .exclude(assignment__assignment_type__in=Assignment.NO_SUBMISSION_TYPES)
         .select_related("feedback", "assignment__topic__block", "assignment__topic__chapter")
         .order_by("-feedback__updated_at", "-pk")[:5]
     )
@@ -231,10 +236,12 @@ def student_assignments(request):
     for assignment in page:
         assignment.state = state_of(assignment)
         assignment.cards_count = assignment.card_total or 0
+    not_material = ~Q(assignment_type=Assignment.Type.MATERIAL)
     summary = annotate_student_states(visible_assignments(request.user), request.user).aggregate(
-        total=Count("pk"),
-        done=Count("pk", filter=Q(latest_status=Submission.Status.CHECKED)),
-        waiting=Count("pk", filter=Q(latest_status__in=WAITING_STATUSES)),
+        # Материалы для занятий в прогресс не входят: их не сдают и не проверяют.
+        total=Count("pk", filter=not_material),
+        done=Count("pk", filter=Q(latest_status=Submission.Status.CHECKED) & not_material),
+        waiting=Count("pk", filter=Q(latest_status__in=WAITING_STATUSES) & not_material),
         blocks=Count("topic__block_id", distinct=True),
         topics=Count("topic_id", distinct=True),
     )
@@ -267,8 +274,8 @@ def assignment_detail(request, pk):
         ),
         pk=pk,
     )
-    if assignment.is_flashcards or assignment.is_material:
-        return _flashcards_detail(request, assignment)
+    if assignment.is_no_submission:
+        return _no_submission_detail(request, assignment)
     attempts = (
         Submission.objects.filter(student=request.user, assignment=assignment)
         .select_related("feedback__teacher")
@@ -568,11 +575,11 @@ def _topic_trainer_cards(assignment, student):
     )
 
 
-def _flashcards_detail(request, assignment):
-    """Задание с карточками или материалы: без сдачи, только просмотр и тренажёр.
+def _no_submission_detail(request, assignment):
+    """Задание без сдачи (карточки, материалы): только просмотр и тренажёр.
 
-    Сдач и оценок такое задание не предполагает — прогресс ведёт интервальное
-    повторение, поэтому POST перенаправляет прямо в сессию тренажёра.
+    Сдач и оценок такое задание не предполагает — у карточек прогресс ведёт
+    интервальное повторение, поэтому POST перенаправляет в сессию тренажёра.
     Для материалов просто показываем файлы.
     """
     if request.method == "POST" and assignment.is_flashcards:
@@ -798,6 +805,7 @@ def student_grades(request):
     """Мои оценки: последние попытки с решением преподавателя."""
     attempts = (
         Submission.objects.filter(student=request.user)
+        .exclude(assignment__assignment_type__in=Assignment.NO_SUBMISSION_TYPES)
         .latest_attempts()
         .select_related("feedback", "assignment__topic__block", "assignment__topic__chapter")
         .order_by("-submitted_at", "-pk")
@@ -833,7 +841,8 @@ def upcoming(request):
         annotate_student_states(
             visible_assignments(request.user)
             .select_related("topic__block", "topic__chapter")
-            .filter(deadline__isnull=False),
+            .filter(deadline__isnull=False)
+            .exclude(assignment_type=Assignment.Type.MATERIAL),
             request.user,
         ).order_by("deadline")
     )

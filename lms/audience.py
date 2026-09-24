@@ -103,7 +103,8 @@ def accumulate(obj, parent=None):
     Возвращает словарь: ``open`` — общий материал (нигде ничего не назначено),
     ``groups``/``students`` — объединение назначений по цепочке (без дублей),
     ``own`` — собственные назначения объекта, ``inherited`` — унаследованные,
-    ``label`` — короткая подпись для бейджа.
+    ``label`` — короткая подпись для бейджа, ``details`` — полный список
+    имён для всплывающей подсказки.
     """
     groups = {group.pk: group for group in (parent["groups"] if parent else [])}
     students = {student.pk: student for student in (parent["students"] if parent else [])}
@@ -123,6 +124,7 @@ def accumulate(obj, parent=None):
         "has_inherited": bool(inherited["groups"] or inherited["students"]),
     }
     result["label"] = label(result)
+    result["details"] = details(result)
     return result
 
 
@@ -165,6 +167,27 @@ def expected_ids_map(assignments):
             ids |= membership.get(group.pk, set())
         result[assignment.pk] = ids
     return result
+
+
+def user_display_name(user):
+    """Имя ученика для подсказок: «Имя Фамилия», без имени — логин.
+
+    Если указана только часть имени, показывается она (например, только имя).
+    """
+    if user is None:
+        return ""
+    return (user.get_full_name() or user.username or "").strip()
+
+
+def details(aud):
+    """Полный список аудитории через запятую: группы, затем ученики.
+
+    Для всплывающих подсказок на бейджах — в отличие от короткого ``label``,
+    здесь каждое имя видно целиком.
+    """
+    names = [group.name for group in aud["groups"]]
+    names += [user_display_name(student) for student in aud["students"]]
+    return ", ".join(name for name in names if name)
 
 
 def label(audience, *, max_groups=2):

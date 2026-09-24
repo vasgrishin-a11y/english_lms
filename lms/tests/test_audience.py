@@ -243,3 +243,57 @@ class AudienceGradebookTests(LMSCase):
         self.assertEqual(rows[self.other.pk]["total"], 0)
         self.assertFalse(rows[self.other.pk]["cells"][0]["assigned"])
         self.assertContains(response, "Задание не назначено этому ученику")
+
+
+class AudienceDetailsTests(LMSCase):
+    """Подсказки с именами: наведение на бейдж и формы редактирования."""
+
+    def setUp(self):
+        super().setUp()
+        self.student.first_name = "Анна"
+        self.student.last_name = "Смирнова"
+        self.student.save()
+        self.group = Group.objects.create(name="ОГЭ-А", slug="oge-a")
+        self.group.students.add(self.student)
+
+    def test_details_lists_groups_and_full_names(self):
+        self.block.groups.add(self.group)
+        self.topic.students.add(self.student)
+        result = audience.effective(self.assignment)
+        self.assertEqual(result["details"], "ОГЭ-А, Анна Смирнова")
+        self.assertEqual(result["label"], "ОГЭ-А · +1 ученик")
+
+    def test_details_falls_back_to_login(self):
+        self.topic.students.add(self.other)
+        self.assertEqual(audience.effective(self.assignment)["details"], "other")
+        self.other.first_name = "Максим"
+        self.other.save()
+        self.assertEqual(audience.effective(self.assignment)["details"], "Максим")
+
+    def test_badge_tooltip_contains_names(self):
+        self.block.groups.add(self.group)
+        self.block.students.add(self.student)
+        page = self.teacher_client.get("/teacher/curriculum/")
+        self.assertContains(page, "Назначено здесь: ОГЭ-А, Анна Смирнова. Нажмите, чтобы изменить.")
+
+    def test_edit_forms_show_inherited_names_on_every_level(self):
+        self.block.groups.add(self.group)
+        self.block.students.add(self.other)
+        chapter = Chapter.objects.get(pk=self.topic.chapter_id)
+        urls = [
+            reverse("teacher_chapter_edit", args=[chapter.pk]),
+            reverse("teacher_topic_edit", args=[self.topic.pk]),
+            reverse("teacher_assignment_form", args=[self.assignment.pk]),
+        ]
+        for url in urls:
+            with self.subTest(url=url):
+                page = self.teacher_client.get(url)
+                self.assertContains(page, "Уже назначено выше по иерархии")
+                self.assertContains(page, "ОГЭ-А")
+                # У other имени нет — виден логин.
+                self.assertContains(page, "other")
+
+    def test_block_form_checkboxes_show_full_names(self):
+        page = self.teacher_client.get(reverse("teacher_block_edit", args=[self.block.pk]))
+        self.assertContains(page, "Анна Смирнова")
+        self.assertNotContains(page, "Уже назначено выше по иерархии")

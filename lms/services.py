@@ -93,6 +93,10 @@ def submit_assignment(*, student, assignment_id, expected_version, text_answer, 
             )
             if not (assignment.is_active and assignment.topic.is_reachable):
                 raise PermissionDenied
+            if assignment.is_no_submission:
+                # Карточки и материалы для занятий: отвечать не нужно,
+                # попытки не создаются даже прямым вызовом сервиса.
+                raise PermissionDenied
             latest = (
                 Submission.objects.filter(student=student, assignment=assignment)
                 .order_by("-version")
@@ -710,7 +714,12 @@ def save_answer_draft(*, student, assignment_id, text):
     if not student.is_active or get_user_role(student) != Profile.Role.STUDENT:
         raise PermissionDenied
     assignment = Assignment.objects.filter(pk=assignment_id).first()
-    if not assignment or not assignment.is_visible or assignment.is_quiz:
+    if (
+        not assignment
+        or not assignment.is_visible
+        or assignment.is_quiz
+        or assignment.is_no_submission
+    ):
         raise PermissionDenied
     draft, _ = AnswerDraft.objects.update_or_create(
         student=student,

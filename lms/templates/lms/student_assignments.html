@@ -149,11 +149,13 @@
                         <span class="row-meta">
                             <span>{{ assignment.topic.block.name }} · {{ assignment.topic.chapter.title }} · {{ assignment.topic.title }}</span>
                             <span class="tag">{% icon assignment.assignment_type|type_icon "icon icon-sm" %}{{ assignment.get_assignment_type_display }}</span>
-                            {% if assignment.deadline %}<span>{% icon "calendar" "icon icon-sm" %}{{ assignment.deadline|human_due }}</span>{% endif %}
+                            {% if assignment.deadline and not assignment.is_material %}<span>{% icon "calendar" "icon icon-sm" %}{{ assignment.deadline|human_due }}</span>{% endif %}
                         </span>
                     </span>
                     <span class="row-side">
-                        {% if assignment.state.status %}
+                        {% if assignment.is_material %}
+                            <a class="btn btn-secondary btn-sm" href="{% url 'assignment_detail' assignment.pk %}">{% icon "book" %}{% t "Открыть" %}</a>
+                        {% elif assignment.state.status %}
                             <span class="badge badge-{{ assignment.state.status }}">{% icon assignment.state.status|status_icon "icon icon-sm" %}{{ assignment.state.status|status_label }}</span>
                             {% if assignment.state.grade != None %}
                                 <span class="grade-pill tnum {{ assignment.state.grade|grade_class:assignment.state.max_points }}">{{ assignment.state.grade }}<small>/{{ assignment.state.max_points }}</small></span>

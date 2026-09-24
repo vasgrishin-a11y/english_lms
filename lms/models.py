@@ -425,6 +425,11 @@ class Assignment(models.Model):
         DRAFT = "draft", "Черновик"
         PUBLISHED = "published", "Опубликовано"
 
+    #: Типы заданий без сдачи и оценок: тренажёр и материалы для занятий.
+    #: Такие задания живут в структуре курса как все остальные, но не требуют
+    #: ответа ученика и не попадают в проверки преподавателя.
+    NO_SUBMISSION_TYPES = (Type.FLASHCARDS, Type.MATERIAL)
+
     objects = AssignmentQuerySet.as_manager()
 
     topic = models.ForeignKey(
@@ -545,10 +550,7 @@ class Assignment(models.Model):
     @property
     def is_no_submission(self):
         """Задания без сдачи (карточки, материалы)."""
-        return self.assignment_type in (
-            Assignment.Type.FLASHCARDS,
-            Assignment.Type.MATERIAL,
-        )
+        return self.assignment_type in Assignment.NO_SUBMISSION_TYPES
 
     @property
     def students(self):
