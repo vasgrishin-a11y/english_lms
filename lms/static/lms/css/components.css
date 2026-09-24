@@ -389,6 +389,17 @@ select[aria-invalid="true"],
     border-radius: var(--r-md);
     font-size: var(--fs-14);
     color: var(--accent-900);
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow-wrap: break-word;
+}
+
+.callout > div,
+.callout > span,
+.callout > p {
+    min-width: 0;
+    max-width: 100%;
 }
 
 .callout .icon {
