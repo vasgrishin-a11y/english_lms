@@ -30,7 +30,13 @@ from lms.models import (
     Submission,
     Topic,
 )
-from lms.services import finish_round, save_item_answer, submit_quiz
+from lms.services import (
+    finish_round,
+    review_submission,
+    save_item_answer,
+    submit_assignment,
+    submit_quiz,
+)
 
 from .base import LMSCase
 
@@ -909,8 +915,8 @@ class StudentDirectoryTests(LMSCase):
         response = self.teacher_client.get(f"/teacher/students/{self.student.pk}/")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["totals"]["done"], 1)
-        self.assertEqual(response.context["skills"][0][0], "Writing")
-        self.assertEqual(response.context["skills"][0][1]["percent"], 90)
+        self.assertEqual(response.context["skills"][0]["name"], "Writing")
+        self.assertEqual(response.context["skills"][0]["percent"], 90)
         self.assertContains(response, "Past tense")
 
     def test_teacher_card_is_not_available(self):
@@ -1122,6 +1128,138 @@ class StudentProgressTreeTests(LMSCase):
         self.assertContains(page, "Мы ехали на поезде через всю страну.")
         self.assertContains(page, "Проверить")
         self.assertNotContains(page, "Правильный ответ:")
+
+
+class StudentSkillSummaryTests(LMSCase):
+    """Сводный анализ по навыкам: методика среднего % по работам."""
+
+    def detail(self):
+        return self.teacher_client.get(f"/teacher/students/{self.student.pk}/")
+
+    def make_assignment(self, title, max_points, order):
+        return Assignment.objects.create(
+            topic=self.topic,
+            title=title,
+            description="x",
+            assignment_type=Assignment.Type.TEXT,
+            max_points=max_points,
+            order=order,
+        )
+
+    def submit_and_review(self, assignment, grade):
+        attempt = submit_assignment(
+            student=self.student,
+            assignment_id=assignment.pk,
+            expected_version=0,
+            text_answer="answer",
+        )
+        review_submission(
+            teacher=self.teacher,
+            submission_id=attempt.pk,
+            expected_version=attempt.version,
+            expected_review_revision=attempt.review_revision,
+            grade=grade,
+            comment="ok",
+            decision="checked",
+        )
+        return attempt
+
+    def skills_by_name(self, response):
+        return {skill["name"]: skill for skill in response.context["skills"]}
+
+    def test_percent_is_mean_of_works_not_points(self):
+        skill = Skill.objects.create(name="Grammar", slug="grammar")
+        big = self.make_assignment("Big", 100, order=11)
+        small = self.make_assignment("Small", 10, order=12)
+        big.skills.set([skill])
+        small.skills.set([skill])
+        self.submit_and_review(big, 90)
+        self.submit_and_review(small, 8)
+        row = self.skills_by_name(self.detail())["Grammar"]
+        self.assertEqual(row["percent"], 85)
+        self.assertEqual(row["verdict"], "Отлично")
+        self.assertEqual(row["graded"], 2)
+
+    def test_multi_skill_assignment_counts_for_each_skill(self):
+        first = Skill.objects.create(name="Reading", slug="reading")
+        second = Skill.objects.create(name="Writing", slug="writing")
+        self.assignment.skills.set([first, second])
+        attempt = self.submit()
+        self.review(attempt, grade=70)
+        skills = self.skills_by_name(self.detail())
+        self.assertEqual(skills["Reading"]["percent"], 70)
+        self.assertEqual(skills["Writing"]["percent"], 70)
+
+    def test_pending_attempts_excluded_from_percent(self):
+        skill = Skill.objects.create(name="Listening", slug="listening")
+        graded = self.make_assignment("Graded", 100, order=13)
+        pending = self.make_assignment("Pending", 100, order=14)
+        graded.skills.set([skill])
+        pending.skills.set([skill])
+        self.submit_and_review(graded, 80)
+        submit_assignment(
+            student=self.student,
+            assignment_id=pending.pk,
+            expected_version=0,
+            text_answer="waiting",
+        )
+        page = self.detail()
+        row = self.skills_by_name(page)["Listening"]
+        self.assertEqual(row["percent"], 80)
+        self.assertEqual((row["graded"], row["total"], row["pending"]), (1, 2, 1))
+        self.assertContains(page, "ждёт оценки 1")
+
+    def test_ungraded_skill_shows_no_ratings_row(self):
+        skill = Skill.objects.create(name="Speaking", slug="speaking")
+        self.assignment.skills.set([skill])
+        page = self.detail()
+        row = self.skills_by_name(page)["Speaking"]
+        self.assertIsNone(row["percent"])
+        self.assertContains(page, "нет оценок")
+        self.assertContains(page, "Оценено 0 из 1")
+
+    def test_summary_shows_average_strongest_and_weakest(self):
+        strong = Skill.objects.create(name="Vocabulary", slug="vocabulary")
+        weak = Skill.objects.create(name="Grammar", slug="grammar")
+        first = self.make_assignment("First", 100, order=15)
+        second = self.make_assignment("Second", 100, order=16)
+        first.skills.set([strong])
+        second.skills.set([weak])
+        self.submit_and_review(first, 90)
+        self.submit_and_review(second, 50)
+        page = self.detail()
+        summary = page.context["skill_summary"]
+        self.assertEqual(
+            (summary["average"], summary["strongest"], summary["weakest"]),
+            (70, "Vocabulary", "Grammar"),
+        )
+        self.assertContains(page, "Средний уровень")
+        self.assertContains(page, "Сильнее: Vocabulary")
+        rows = page.context["skills"]
+        self.assertEqual([row["name"] for row in rows], ["Grammar", "Vocabulary"])
+
+    def test_latest_attempt_counts(self):
+        skill = Skill.objects.create(name="Writing", slug="writing")
+        self.assignment.skills.set([skill])
+        first = self.submit()
+        self.review(first, grade=40)
+        second = submit_assignment(
+            student=self.student,
+            assignment_id=self.assignment.pk,
+            expected_version=1,
+            text_answer="second try",
+        )
+        self.review(second, grade=90)
+        skills = self.skills_by_name(self.detail())
+        self.assertEqual(skills["Writing"]["percent"], 90)
+
+    def test_no_submission_types_excluded_from_coverage(self):
+        skill = Skill.objects.create(name="Reading", slug="reading")
+        self.assignment.skills.set([skill])
+        cards = self.card_assignment(topic=self.topic, title="Слова")
+        cards.skills.set([skill])
+        skills = self.skills_by_name(self.detail())
+        self.assertEqual(skills["Reading"]["total"], 1)
 
 
 class AnalyticsTests(LMSCase):

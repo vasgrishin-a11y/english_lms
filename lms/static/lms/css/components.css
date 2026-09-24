@@ -1038,6 +1038,22 @@ a.row-title:hover {
 .progress-sand > span {
     background: var(--sand-300);
 }
+.progress-danger > span {
+    background: var(--danger-ink);
+}
+
+.skill-row {
+    margin-bottom: 12px;
+}
+
+.skill-row:last-of-type {
+    margin-bottom: 0;
+}
+
+.skill-meta {
+    margin-top: 4px;
+    margin-bottom: 0;
+}
 
 .progress-lg {
     height: 10px;

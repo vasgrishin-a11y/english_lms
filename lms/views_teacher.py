@@ -2310,6 +2310,106 @@ def students_list(request):
     )
 
 
+#: Полосы вердикта по % освоения навыка: (нижняя граница, вердикт, класс полоски).
+SKILL_BANDS = (
+    (85, "Отлично", "progress-success"),
+    (70, "Хорошо", ""),
+    (50, "Средне", "progress-warning"),
+    (0, "Слабо", "progress-danger"),
+)
+
+
+def _skill_summary(student, blocks_data):
+    """Сводный анализ по навыкам: % освоения, охват и очередь проверки.
+
+    Единица измерения — последнее сданное задание, видимое ученику
+    (тренажёр и материалы без сдачи исключены). Каждое оценённое задание
+    даёт каждому своему навыку один голос ``grade / max_points``; %
+    навыка — среднее по голосам, каждая работа весит одинаково, иначе
+    одна большая работа перекроет всю картину. Сданное без оценки
+    (очередь проверки, свободная часть теста) в % не входит и
+    показывается отдельно. Два запроса: навыки заданий и последние
+    попытки ученика.
+    """
+    visible_ids = [
+        entry["assignment"].pk
+        for block_item in blocks_data
+        for chapter_item in block_item["chapters"]
+        for topic_item in chapter_item["topics"]
+        for entry in topic_item["assignments"]
+        if entry["assignment"].assignment_type not in Assignment.NO_SUBMISSION_TYPES
+    ]
+    skill_names = {}
+    through = Assignment.skills.through
+    for link in through.objects.filter(assignment_id__in=visible_ids).select_related("skill"):
+        skill_names.setdefault(link.assignment_id, []).append(link.skill.name)
+    buckets = {}
+    for assignment_id in visible_ids:
+        for name in skill_names.get(assignment_id, []):
+            bucket = buckets.setdefault(
+                name, {"total": 0, "graded": 0, "percent_sum": 0, "pending": 0}
+            )
+            bucket["total"] += 1
+    rows = (
+        Submission.objects.filter(student=student, assignment_id__in=visible_ids)
+        .latest_attempts()
+        .values("assignment_id", "feedback__grade", "max_points_snapshot")
+    )
+    for row in rows:
+        names = skill_names.get(row["assignment_id"], [])
+        if not names:
+            continue
+        grade = row["feedback__grade"]
+        maximum = row["max_points_snapshot"]
+        for name in names:
+            bucket = buckets[name]
+            if grade is None or not maximum:
+                bucket["pending"] += 1
+            else:
+                bucket["graded"] += 1
+                bucket["percent_sum"] += 100 * grade / maximum
+    skills = []
+    for name, bucket in buckets.items():
+        if not bucket["graded"]:
+            skills.append(
+                {
+                    "name": name,
+                    "percent": None,
+                    "verdict": "Нет оценок",
+                    "bar_class": "progress-sand",
+                    "graded": 0,
+                    "total": bucket["total"],
+                    "pending": bucket["pending"],
+                }
+            )
+            continue
+        percent = int(round(bucket["percent_sum"] / bucket["graded"]))
+        verdict, bar_class = next(
+            (verdict, bar_class) for bound, verdict, bar_class in SKILL_BANDS if percent >= bound
+        )
+        skills.append(
+            {
+                "name": name,
+                "percent": percent,
+                "verdict": verdict,
+                "bar_class": bar_class,
+                "graded": bucket["graded"],
+                "total": bucket["total"],
+                "pending": bucket["pending"],
+            }
+        )
+    skills.sort(key=lambda item: (item["percent"] is None, item["percent"] or 0))
+    summary = None
+    rated = [skill for skill in skills if skill["percent"] is not None]
+    if rated:
+        summary = {
+            "average": int(round(sum(skill["percent"] for skill in rated) / len(rated))),
+            "strongest": max(rated, key=lambda skill: skill["percent"])["name"],
+            "weakest": min(rated, key=lambda skill: skill["percent"])["name"],
+        }
+    return skills, summary
+
+
 def _attach_progress_details(blocks_data):
     """Сдачи ученика и разбор теста по пунктам прямо в дереве прогресса.
 
@@ -2393,27 +2493,7 @@ def student_detail(request, pk):
         .select_related("feedback", "assignment__topic__block", "assignment__topic__chapter")
         .order_by("-submitted_at", "-pk")[:30]
     )
-    skill_rows = (
-        Submission.objects.filter(student=student)
-        .exclude(assignment__assignment_type__in=Assignment.NO_SUBMISSION_TYPES)
-        .latest_attempts()
-        .values("assignment__skills__name", "feedback__grade", "max_points_snapshot")
-    )
-    skills = {}
-    for row in skill_rows:
-        name = row["assignment__skills__name"]
-        grade = row["feedback__grade"]
-        maximum = row["max_points_snapshot"]
-        if not name or grade is None or not maximum:
-            continue
-        bucket = skills.setdefault(name, {"scored": 0, "possible": 0, "count": 0})
-        bucket["scored"] += grade
-        bucket["possible"] += maximum
-        bucket["count"] += 1
-    for bucket in skills.values():
-        bucket["percent"] = (
-            int(round(100 * bucket["scored"] / bucket["possible"])) if bucket["possible"] else 0
-        )
+    skills, skill_summary = _skill_summary(student, blocks_data)
     cards_due = CardReview.objects.filter(student=student, due_at__lte=timezone.now()).count()
     issued_password = student.profile.reveal_password()
     return render(
@@ -2426,7 +2506,8 @@ def student_detail(request, pk):
             "blocks_data": blocks_data,
             "totals": totals,
             "attempts": list(attempts),
-            "skills": sorted(skills.items(), key=lambda item: item[1]["percent"]),
+            "skills": skills,
+            "skill_summary": skill_summary,
             "cards_due": cards_due,
             "workspace": "students",
         },
