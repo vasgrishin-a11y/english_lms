@@ -3831,7 +3831,8 @@ tr.row-bad td:first-child {
     }
     .type-cards label,
     .preset-card,
-    .dropzone {
+    .dropzone,
+    .callout {
         max-width: 100%;
         box-sizing: border-box;
         min-width: 0;
@@ -3841,5 +3842,20 @@ tr.row-bad td:first-child {
     .type-cards > div,
     .type-cards #id_assignment_type {
         grid-template-columns: minmax(0, 1fr) !important;
+    }
+    .callout {
+        flex-wrap: wrap;
+    }
+    .callout .btn,
+    .form-section .btn,
+    .form-actions .btn {
+        white-space: normal;
+        max-width: 100%;
+        box-sizing: border-box;
+        overflow-wrap: break-word;
+    }
+    .row {
+        max-width: 100%;
+        box-sizing: border-box;
     }
 }
