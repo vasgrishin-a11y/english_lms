@@ -1642,7 +1642,7 @@
       });
     });
 
-    // Перетаскивание: задания — внутри темы и между темами, темы — внутри блока.
+    // Перетаскивание: задания — внутри темы и между темами, темы — внутри блока и между классами (копия)
     var drag = null;
 
     function rowOf(node) {
@@ -1653,11 +1653,19 @@
       return node && node.closest ? node.closest("[data-topic-panel]") : null;
     }
 
+    function blockOf(node) {
+      return node && node.closest ? node.closest("[data-block-id]") : null;
+    }
+
+    function topicsContainerOf(node) {
+      return node && node.closest ? node.closest("[data-block-topics]") : null;
+    }
+
     function clearMarkers() {
       Array.prototype.forEach.call(
-        boardEl.querySelectorAll(".drop-above, .drop-below"),
+        boardEl.querySelectorAll(".drop-above, .drop-below, .drop-block-active"),
         function (el) {
-          el.classList.remove("drop-above", "drop-below");
+          el.classList.remove("drop-above", "drop-below", "drop-block-active");
         }
       );
     }
@@ -1675,15 +1683,18 @@
           event.preventDefault();
           return;
         }
-        drag = { kind: kind, el: el };
+        drag = {
+          kind: kind,
+          el: el,
+          blockId: handle.getAttribute("data-block-id") || (el.getAttribute && el.getAttribute("data-block-id")) || "",
+          topicId: handle.getAttribute("data-topic-id") || el.getAttribute("data-topic-panel") || ""
+        };
         el.classList.add("is-dragging");
         if (event.dataTransfer) {
-          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.effectAllowed = kind === "topic" ? "copyMove" : "move";
           try {
             event.dataTransfer.setData("text/plain", "move");
-          } catch (ignore) {
-            /* Firefox настолько же обязателен, насколько нет */
-          }
+          } catch (ignore) {}
         }
       });
       handle.addEventListener("dragend", function () {
@@ -1703,12 +1714,34 @@
         event.preventDefault();
         if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
         if (row) row.classList.add(isBelowMiddle(event, row) ? "drop-below" : "drop-above");
+        else if (panel) panel.classList.add("drop-block-active");
       } else {
-        var target = panelOf(event.target);
-        if (!target || target === drag.el || target.parentNode !== drag.el.parentNode) return;
-        event.preventDefault();
-        if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-        target.classList.add(isBelowMiddle(event, target) ? "drop-below" : "drop-above");
+        // topic: allow drop on any panel (even other block) and on block container
+        var targetPanel = panelOf(event.target);
+        var targetBlockContainer = topicsContainerOf(event.target);
+        var targetBlockSection = blockOf(event.target);
+        if (targetPanel && targetPanel !== drag.el) {
+          event.preventDefault();
+          if (event.dataTransfer) {
+            var srcBlock = drag.blockId;
+            var tgtBlock = targetPanel.getAttribute("data-block-id") || "";
+            event.dataTransfer.dropEffect = srcBlock && tgtBlock && srcBlock !== tgtBlock ? "copy" : "move";
+          }
+          targetPanel.classList.add(isBelowMiddle(event, targetPanel) ? "drop-below" : "drop-above");
+        } else if (targetBlockContainer) {
+          event.preventDefault();
+          if (event.dataTransfer) {
+            var srcB = drag.blockId;
+            var tgtB = targetBlockContainer.getAttribute("data-block-topics") || "";
+            event.dataTransfer.dropEffect = srcB && tgtB && srcB !== tgtB ? "copy" : "move";
+          }
+          targetBlockContainer.classList.add("drop-block-active");
+        } else if (targetBlockSection && targetBlockSection.hasAttribute("data-block-drop")) {
+          // drop on empty block section
+          event.preventDefault();
+          if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+          targetBlockSection.classList.add("drop-block-active");
+        }
       }
     });
 
@@ -1731,7 +1764,7 @@
         if (!list || !list.getAttribute("data-topic-list")) return;
         event.preventDefault();
         if (!beforeRow && list === drag.el.parentNode && list.lastElementChild === drag.el) {
-          return; // уже стоит последним в своей теме
+          return;
         }
         var sameTopic = drag.el.parentNode === list;
         list.insertBefore(drag.el, beforeRow);
@@ -1740,31 +1773,78 @@
         params.set("before", beforeRow ? beforeRow.getAttribute("data-assignment-row") : "");
         postForm(drag.el.getAttribute("data-move-url"), params)
           .then(function () {
-            if (!sameTopic) window.location.reload(); // счётчики тем — с сервера
+            if (!sameTopic) window.location.reload();
           })
           .catch(function (error) {
             window.alert(error.message || "Не удалось переместить задание");
             window.location.reload();
           });
       } else {
-        var target = panelOf(event.target);
-        if (!target || target === drag.el || target.parentNode !== drag.el.parentNode) return;
+        // TOPIC drop — reorder within same block or copy to other block
+        var targetPanel = panelOf(event.target);
+        var targetContainer = topicsContainerOf(event.target);
+        var targetSection = blockOf(event.target);
+        var srcBlockId = drag.blockId;
+        var tgtBlockId = null;
+        var beforePanel = null;
+        var container = null;
+
+        if (targetPanel) {
+          tgtBlockId = targetPanel.getAttribute("data-block-id");
+          container = targetPanel.parentNode;
+          beforePanel = isBelowMiddle(event, targetPanel) ? targetPanel.nextElementSibling : targetPanel;
+          if (beforePanel === drag.el && srcBlockId === tgtBlockId) return;
+        } else if (targetContainer) {
+          tgtBlockId = targetContainer.getAttribute("data-block-topics");
+          container = targetContainer;
+          beforePanel = null;
+        } else if (targetSection) {
+          tgtBlockId = targetSection.getAttribute("data-block-id");
+          container = targetSection.querySelector("[data-block-topics]") || targetSection;
+          beforePanel = null;
+        } else {
+          return;
+        }
+
         event.preventDefault();
-        var beforePanel = isBelowMiddle(event, target) ? target.nextElementSibling : target;
-        if (beforePanel === drag.el) return;
-        if (!beforePanel && target.parentNode.lastElementChild === drag.el) return;
-        var topicParams = new FormData();
-        topicParams.set(
-          "before",
-          beforePanel && beforePanel.getAttribute("data-topic-panel")
-            ? beforePanel.getAttribute("data-topic-panel")
-            : ""
-        );
-        target.parentNode.insertBefore(drag.el, beforePanel);
-        postForm(drag.el.getAttribute("data-move-url"), topicParams).catch(function (error) {
-          window.alert(error.message || "Не удалось переместить тему");
-          window.location.reload();
-        });
+
+        if (srcBlockId && tgtBlockId && srcBlockId !== tgtBlockId) {
+          // COPY between classes
+          if (!window.confirm("Скопировать тему «" + (drag.el.querySelector("a") ? drag.el.querySelector("a").textContent.trim() : "тема") + "» в другой класс? Оригинал сохранится, копия будет с черновиками заданий.")) {
+            return;
+          }
+          var copyParams = new FormData();
+          copyParams.set("target_block", tgtBlockId);
+          if (beforePanel) copyParams.set("before", beforePanel.getAttribute("data-topic-panel") || "");
+          // visual feedback
+          drag.el.style.opacity = "0.5";
+          postForm(drag.el.getAttribute("data-move-url"), copyParams)
+            .then(function (data) {
+              window.location.reload();
+            })
+            .catch(function (error) {
+              window.alert(error.message || "Не удалось скопировать тему");
+              window.location.reload();
+            });
+        } else {
+          // MOVE within same block
+          if (!targetPanel) return;
+          if (!container) return;
+          if (beforePanel === drag.el) return;
+          if (!beforePanel && container.lastElementChild === drag.el) return;
+          var topicParams = new FormData();
+          topicParams.set(
+            "before",
+            beforePanel && beforePanel.getAttribute("data-topic-panel")
+              ? beforePanel.getAttribute("data-topic-panel")
+              : ""
+          );
+          container.insertBefore(drag.el, beforePanel);
+          postForm(drag.el.getAttribute("data-move-url"), topicParams).catch(function (error) {
+            window.alert(error.message || "Не удалось переместить тему");
+            window.location.reload();
+          });
+        }
       }
     });
   }

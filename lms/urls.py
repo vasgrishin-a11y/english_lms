@@ -126,6 +126,11 @@ urlpatterns = [
         name="teacher_topic_move",
     ),
     path(
+        "teacher/curriculum/topics/<int:pk>/copy/",
+        views_teacher.topic_copy,
+        name="teacher_topic_copy",
+    ),
+    path(
         "teacher/curriculum/topics/<int:pk>/delete/",
         views_teacher.topic_delete,
         name="teacher_topic_delete",

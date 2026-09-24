@@ -3751,7 +3751,8 @@ tr.row-bad td:first-child {
 }
 
 [data-assignment-row].is-dragging > .row-item,
-.topic-panel.is-dragging {
+.topic-panel.is-dragging,
+[data-topic-panel].is-dragging {
     opacity: 0.45;
 }
 
@@ -3763,12 +3764,26 @@ tr.row-bad td:first-child {
     box-shadow: 0 3px 0 0 var(--accent-500);
 }
 
-.topic-panel.drop-above {
+.topic-panel.drop-above,
+[data-topic-panel].drop-above {
     box-shadow: 0 -4px 0 0 var(--accent-500);
 }
 
-.topic-panel.drop-below {
+.topic-panel.drop-below,
+[data-topic-panel].drop-below {
     box-shadow: 0 4px 0 0 var(--accent-500);
+}
+
+.drop-block-active {
+    background: var(--accent-soft) !important;
+    border-color: var(--accent-400) !important;
+    box-shadow: 0 0 0 2px var(--accent-200) inset;
+}
+
+[data-block-topics].drop-block-active,
+[data-block-id].drop-block-active {
+    outline: 2px dashed var(--accent-500);
+    outline-offset: 2px;
 }
 
 .inline-rename-input {
