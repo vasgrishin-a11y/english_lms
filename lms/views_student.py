@@ -19,7 +19,7 @@ from .curriculum import (
 )
 from .decorators import student_required
 from .forms import DictionaryWordForm, SubmissionForm
-from .models import AnswerDraft, Assignment, CardReview, Flashcard, QuestionResponse, Submission
+from .models import AnswerDraft, Assignment, CardReview, Flashcard, QuestionResponse, Skill, Submission
 from .quiz_items import build_items, progress_of
 from .scoring import normalize_gap
 from .services import (
@@ -44,6 +44,25 @@ from .services import (
 from .views import _add_validation_errors
 
 SESSION_QUEUE_PREFIX = "trainer-queue:"
+
+
+
+def _skill_context(assignment):
+    """Контекст для боковой панели Sections: все навыки и выбранные."""
+    from .models import Skill
+    # English labels for student
+    eng_labels = {
+        "grammar": "Grammar",
+        "vocabulary": "Vocabulary",
+        "listening": "Listening",
+        "speaking": "Speaking",
+        "writing": "Writing",
+        "reading": "Reading",
+    }
+    all_kinds = [(k, eng_labels.get(k, k.title())) for k, _ in Skill.Kind.choices]
+    assigned = set(assignment.skills.values_list("kind", flat=True)) if assignment.pk else set()
+    return {"skill_kinds": all_kinds, "assigned_skill_kinds": assigned}
+
 
 
 def _questions_with_choices(assignment):
@@ -229,7 +248,7 @@ def assignment_detail(request, pk):
     assignment = get_object_or_404(
         Assignment.objects.visible().select_related("topic__block"), pk=pk
     )
-    if assignment.is_flashcards:
+    if assignment.is_flashcards or assignment.is_material:
         return _flashcards_detail(request, assignment)
     attempts = (
         Submission.objects.filter(student=request.user, assignment=assignment)
@@ -272,6 +291,7 @@ def assignment_detail(request, pk):
             return redirect("assignment_detail", pk=assignment.pk)
 
     history = Paginator(attempts, settings.LMS_PAGE_SIZE).get_page(request.GET.get("page"))
+    skill_ctx = _skill_context(assignment)
     response = render(
         request,
         "lms/assignment_detail.html",
@@ -286,6 +306,7 @@ def assignment_detail(request, pk):
             "conflict": status == 409,
             "trainer_cards": _topic_trainer_cards(assignment),
             "workspace": "curriculum",
+            **skill_ctx,
         },
         status=status,
     )
@@ -363,6 +384,7 @@ def _quiz_detail(request, assignment, attempts, submission):
         submission = attempts.first()
     context = _quiz_context(request, assignment, attempts, submission)
     history = Paginator(attempts, settings.LMS_PAGE_SIZE).get_page(request.GET.get("page"))
+    skill_ctx = _skill_context(assignment)
     context.update(
         {
             "form": None,
@@ -372,6 +394,7 @@ def _quiz_detail(request, assignment, attempts, submission):
             "quiz_error": quiz_error,
             "trainer_cards": _topic_trainer_cards(assignment),
             "workspace": "curriculum",
+            **skill_ctx,
         }
     )
     response = render(request, "lms/assignment_detail.html", context, status=status)
@@ -527,15 +550,18 @@ def _topic_trainer_cards(assignment):
 
 
 def _flashcards_detail(request, assignment):
-    """Задание с карточками: условия, слова и переход в тренажёр.
+    """Задание с карточками или материалы: без сдачи, только просмотр и тренажёр.
 
     Сдач и оценок такое задание не предполагает — прогресс ведёт интервальное
     повторение, поэтому POST перенаправляет прямо в сессию тренажёра.
+    Для материалов просто показываем файлы.
     """
-    if request.method == "POST":
+    if request.method == "POST" and assignment.is_flashcards:
         return redirect("trainer_session", pk=assignment.pk)
-    cards = list(assignment.cards.order_by("order", "pk"))
+    cards = list(assignment.cards.order_by("order", "pk")) if assignment.is_flashcards else []
     trainer_cards = _topic_trainer_cards(assignment)
+    skill_ctx = _skill_context(assignment)
+    attachments = list(assignment.attachments.all()) if hasattr(assignment, 'attachments') else []
     return render(
         request,
         "lms/assignment_detail.html",
@@ -550,8 +576,10 @@ def _flashcards_detail(request, assignment):
             "page_obj": None,
             "conflict": False,
             "cards": cards,
-            "trainer_queue": practice_queue(student=request.user, cards=cards, limit=1),
+            "attachments": attachments,
+            "trainer_queue": practice_queue(student=request.user, cards=cards, limit=1) if cards else None,
             "workspace": "curriculum",
+            **skill_ctx,
         },
     )
 
@@ -568,7 +596,7 @@ def _parse_int(value, default=0):
 def save_draft(request, pk):
     """Автосохранение черновика ответа (htmx). Попытки при этом не создаются."""
     assignment = get_object_or_404(Assignment.objects.visible(), pk=pk)
-    if assignment.is_quiz or assignment.is_flashcards:
+    if assignment.is_quiz or assignment.is_flashcards or assignment.is_material:
         return render(request, "lms/parts/draft_state.html", {"draft": None, "denied": True})
     try:
         draft = save_answer_draft(

@@ -25,6 +25,11 @@ def assignment_upload_to(instance, filename):
     return f"assignments/{instance.topic_id}/{uuid.uuid4().hex}{_safe_extension(filename)}"
 
 
+def attachment_upload_to(instance, filename):
+    topic_id = instance.assignment.topic_id if instance.assignment_id else "unknown"
+    return f"assignments/{topic_id}/attachments/{uuid.uuid4().hex}{_safe_extension(filename)}"
+
+
 def submission_upload_to(instance, filename):
     return f"submissions/{instance.assignment_id}/user_{instance.student_id}/{uuid.uuid4().hex}{_safe_extension(filename)}"
 
@@ -278,6 +283,7 @@ class Assignment(models.Model):
         MIXED = "mixed", "Текст + файл/аудио"
         QUIZ = "quiz", "Тест с автопроверкой"
         FLASHCARDS = "flashcards", "Карточки-тренажёр"
+        MATERIAL = "material", "Материалы для занятий"
 
     class Publication(models.TextChoices):
         DRAFT = "draft", "Черновик"
@@ -398,6 +404,19 @@ class Assignment(models.Model):
         return self.assignment_type == Assignment.Type.FLASHCARDS
 
     @property
+    def is_material(self):
+        """Информационные материалы: без сдачи, только просмотр."""
+        return self.assignment_type == Assignment.Type.MATERIAL
+
+    @property
+    def is_no_submission(self):
+        """Задания без сдачи (карточки, материалы)."""
+        return self.assignment_type in (
+            Assignment.Type.FLASHCARDS,
+            Assignment.Type.MATERIAL,
+        )
+
+    @property
     def is_visible(self):
         """Опубликовано и доступно ученикам прямо сейчас."""
         return bool(
@@ -422,6 +441,32 @@ class Assignment(models.Model):
     @property
     def recording_limit_display(self):
         return format_duration(self.recording_limit_seconds)
+
+
+class AssignmentAttachment(models.Model):
+    """Дополнительные файлы к заданию: много вложений вместо одного material_file."""
+
+    assignment = models.ForeignKey(
+        Assignment,
+        on_delete=models.CASCADE,
+        related_name="attachments",
+        verbose_name="Задание",
+    )
+    file = models.FileField(
+        upload_to=attachment_upload_to,
+        validators=[file_validator, validate_upload],
+        verbose_name="Файл",
+    )
+    order = models.PositiveIntegerField(default=0, verbose_name="Порядок")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Вложение задания"
+        verbose_name_plural = "Вложения заданий"
+        ordering = ["order", "pk"]
+
+    def __str__(self):
+        return f"{self.assignment_id}: {self.file.name}"
 
 
 class SubmissionQuerySet(models.QuerySet):

@@ -41,7 +41,11 @@
                             <p class="mb-0 small">Ученик учит слова по интервалам повторения — сдавать ответ не нужно. После сохранения откроется страница карточек: добавьте слова вручную, списком или из готового шаблона.</p>
                             {% if assignment and assignment.is_flashcards %}
                                 <p class="mb-0 small"><a href="{% url 'teacher_assignment_cards' assignment.pk %}">Перейти к карточкам ({{ assignment.card_total|default:0 }})</a></p>
-                            {% endif %}
+                        <div class="callout" data-show-types="material" style="margin-top:12px;border-left:3px solid var(--accent)">
+                        {% icon "file-text" %}
+                        <div><p class="mb-0 strong">Материалы для занятий</p><p class="mb-0 small">Загрузите файл, картинку или фото учебника. ИИ может распознать текст и перенести его в Условия задания — нажмите «Распознать текст с файла» ниже. Оценок и сдачи нет, ученик просто видит материалы.</p></div>
+                    </div>
+                        {% endif %}
                         </div>
                     </div>
                 </fieldset>
@@ -187,15 +191,52 @@
                     </div>
                 </div>
 
-                <div class="form-section">
+                <div class="form-section" data-materials-section>
                     <h2 class="section-title">{% icon "upload" %}Материалы</h2>
-                    <p class="help-text">Файл, картинка или аудио по теме — ученик увидит их на странице задания любого типа. Необязательно.</p>
+                    <p class="help-text">Файл, картинка или аудио по теме — ученик увидит их на странице задания любого типа. Необязательно. Можно перетащить или вставить скриншот Ctrl+V.</p>
                     <p class="help-text" data-show-types="audio">Для аудио ученик прикрепит запись. Можно дать образец произношения.</p>
+                    
                     <div class="form-field{% if form.material_file.errors %} field-error{% endif %}">
-                        <label for="{{ form.material_file.id_for_label }}">{{ form.material_file.label }}</label>
+                        <label for="{{ form.material_file.id_for_label }}">{{ form.material_file.label }} (основной файл)</label>
                         {{ form.material_file }}
                         {% if form.material_file.help_text %}<div class="help-text" id="{{ form.material_file.auto_id }}_helptext">{{ form.material_file.help_text }}</div>{% endif %}
                         {{ form.material_file.errors }}
+                    </div>
+
+                    {% if assignment and assignment.attachments.exists %}
+                    <div class="form-field">
+                        <label>Прикреплённые файлы ({{ assignment.attachments.count }})</label>
+                        <div class="col" style="gap:8px">
+                            {% for att in assignment.attachments.all %}
+                            <div class="row row-tight" style="gap:8px;align-items:center;background:var(--surface);border:1px solid var(--border-subtle);border-radius:8px;padding:8px 12px">
+                                {% if att.file.name|media_kind == 'image' %}<img src="{% url 'media_preview' att.file.name %}" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:6px">{% endif %}
+                                <a href="{{ att.file.url }}" target="_blank" style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ att.file.name|slice:"-40:" }}</a>
+                                <label style="display:flex;align-items:center;gap:4px;margin:0;font-weight:500;font-size:12px"><input type="checkbox" name="delete_attachments" value="{{ att.pk }}"> Удалить</label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <p class="help-text">Отметьте файлы для удаления и сохраните задание.</p>
+                    </div>
+                    {% endif %}
+
+                    <div class="form-field{% if form.new_attachments.errors %} field-error{% endif %}">
+                        <label for="{{ form.new_attachments.id_for_label }}">{{ form.new_attachments.label }} — можно несколько</label>
+                        {{ form.new_attachments }}
+                        {% if form.new_attachments.help_text %}<div class="help-text">{{ form.new_attachments.help_text }}</div>{% endif %}
+                        {{ form.new_attachments.errors }}
+                        <p class="tiny muted" style="margin-top:6px">Поддерживается Ctrl+V скриншота в окно загрузки или в поле Условия задания — файл добавится автоматически.</p>
+                    </div>
+
+                    <div class="callout" style="margin-top:12px" data-ai-extract>
+                        {% icon "sparkles" %}
+                        <div style="flex:1">
+                            <p class="mb-0 strong">ИИ: извлечь текст с картинки</p>
+                            <p class="mb-0 small">Загрузите файл/картинку в материалы выше, затем нажмите кнопку — ИИ перенесет текст с картинки в поле Условия задания. Для типа "Материалы для занятий" это основной сценарий.</p>
+                            <div class="row row-tight" style="margin-top:8px">
+                                <button type="button" class="btn btn-secondary btn-sm" id="ai-extract-btn">{% icon "sparkles" "icon icon-sm" %} Распознать текст с файла</button>
+                                <span class="tiny muted" id="ai-extract-status" aria-live="polite"></span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -307,4 +348,148 @@
         </div>
     </div>
 </div>
+
+{% block extra_js %}
+<script>
+(function(){
+  const extractBtn = document.getElementById('ai-extract-btn');
+  const statusEl = document.getElementById('ai-extract-status');
+  const desc = document.getElementById('id_description');
+  const mainFile = document.getElementById('id_material_file');
+  const newFiles = document.getElementById('id_new_attachments');
+
+  function getCsrf(){
+    const m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+
+  function setStatus(t){ if(statusEl) statusEl.textContent = t; }
+
+  async function extractFromFile(file){
+    if(!file){ setStatus('Выберите файл сначала'); return; }
+    setStatus('Распознаю…');
+    if(extractBtn) extractBtn.disabled = true;
+    const fd = new FormData();
+    fd.append('file', file);
+    try{
+      const resp = await fetch("{% url 'teacher_ai_extract' %}", {
+        method: 'POST',
+        headers: {'X-CSRFToken': getCsrf()},
+        body: fd,
+        credentials: 'same-origin'
+      });
+      const data = await resp.json();
+      if(!resp.ok || !data.ok){
+        throw new Error(data.error || 'Ошибка '+resp.status);
+      }
+      if(desc){
+        const cur = desc.value;
+        const sep = cur ? "\n\n" : "";
+        desc.value = cur + sep + data.text;
+        desc.dispatchEvent(new Event('input',{bubbles:true}));
+        desc.focus();
+        setStatus('Текст вставлен в Условия задания ✓');
+      }
+    }catch(e){
+      setStatus('Ошибка: '+(e.message||e));
+    }finally{
+      if(extractBtn) extractBtn.disabled = false;
+    }
+  }
+
+  if(extractBtn){
+    extractBtn.addEventListener('click', function(){
+      let file = null;
+      if(newFiles && newFiles.files && newFiles.files[0]) file = newFiles.files[0];
+      else if(mainFile && mainFile.files && mainFile.files[0]) file = mainFile.files[0];
+      else { setStatus('Сначала выберите файл в Материалах'); return; }
+      extractFromFile(file);
+    });
+  }
+
+  // Paste handling for description and file inputs
+  function insertAtCursor(textarea, text){
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const before = textarea.value.substring(0,start);
+    const after = textarea.value.substring(end);
+    textarea.value = before + text + after;
+    const pos = start + text.length;
+    textarea.selectionStart = textarea.selectionEnd = pos;
+    textarea.dispatchEvent(new Event('input',{bubbles:true}));
+  }
+
+  if(desc){
+    desc.addEventListener('paste', function(e){
+      const items = (e.clipboardData||window.clipboardData).items;
+      if(!items) return;
+      for(let i=0;i<items.length;i++){
+        const item = items[i];
+        if(item.kind === 'file'){
+          const file = item.getAsFile();
+          if(file && file.type.startsWith('image/')){
+            e.preventDefault();
+            // Add to new_attachments via DataTransfer
+            if(newFiles){
+              try{
+                const dt = new DataTransfer();
+                // keep existing
+                if(newFiles.files){
+                  for(let f of newFiles.files) dt.items.add(f);
+                }
+                dt.items.add(file);
+                newFiles.files = dt.files;
+                newFiles.dispatchEvent(new Event('change',{bubbles:true}));
+              }catch(err){}
+            }
+            const placeholder = "\n[Изображение: "+file.name+"]\n";
+            insertAtCursor(desc, placeholder);
+            setStatus('Скриншот добавлен как вложение, вставлена метка');
+            break;
+          }
+        }
+      }
+    });
+  }
+
+  // Global paste for dropzones (if user pastes while focused elsewhere)
+  document.addEventListener('paste', function(e){
+    // if already handled in desc, skip
+    if(e.target && e.target.id === 'id_description') return;
+    const items = (e.clipboardData||window.clipboardData).items;
+    if(!items) return;
+    let hasImage = false;
+    for(let i=0;i<items.length;i++){
+      if(items[i].kind === 'file' && items[i].type.startsWith('image/')){
+        hasImage = true;
+        break;
+      }
+    }
+    if(!hasImage) return;
+    // find first dropzone file input
+    const input = newFiles || mainFile;
+    if(!input) return;
+    // If user pastes in file context, add file
+    for(let i=0;i<items.length;i++){
+      const item = items[i];
+      if(item.kind === 'file'){
+        const file = item.getAsFile();
+        if(file){
+          try{
+            const dt = new DataTransfer();
+            if(input.files){
+              for(let f of input.files) dt.items.add(f);
+            }
+            dt.items.add(file);
+            input.files = dt.files;
+            input.dispatchEvent(new Event('change',{bubbles:true}));
+            setStatus('Изображение из буфера добавлено: '+file.name);
+          }catch(err){}
+        }
+      }
+    }
+  });
+
+})();
+</script>
 {% endblock %}

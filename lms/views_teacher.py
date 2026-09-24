@@ -904,6 +904,27 @@ def assignment_form(request, pk=None):
     if request.method == "POST" and form.is_valid():
         is_new = assignment is None
         instance = form.save()
+        # Handle multiple attachments
+        new_files = request.FILES.getlist("new_attachments")
+        if not new_files:
+            # fallback single field name from widget
+            single = request.FILES.get("new_attachments")
+            if single:
+                new_files = [single]
+        if new_files:
+            from .models import AssignmentAttachment
+            from django.db.models import Max
+            last_order = instance.attachments.aggregate(m=Max("order"))["m"] or 0
+            for idx, f in enumerate(new_files, start=1):
+                AssignmentAttachment.objects.create(
+                    assignment=instance, file=f, order=last_order + idx
+                )
+        # Handle deletion of existing attachments
+        delete_ids = request.POST.getlist("delete_attachments")
+        if delete_ids:
+            from .models import AssignmentAttachment
+            instance.attachments.filter(pk__in=[i for i in delete_ids if i.isdigit()]).delete()
+
         messages.success(
             request,
             "Задание сохранено как черновик — ученикам пока не видно."
@@ -915,6 +936,9 @@ def assignment_form(request, pk=None):
         if instance.is_flashcards:
             messages.info(request, "Добавьте карточки: вручную, списком или из шаблона.")
             return redirect("teacher_assignment_cards", pk=instance.pk)
+        # If topic board was origin, go back there
+        if request.GET.get("from_topic"):
+            return redirect("teacher_topic_board", pk=instance.topic_id)
         return redirect("teacher_curriculum")
     skill_payload = type_skill_payload()
     preset_groups = assignment_preset_groups()
@@ -1160,6 +1184,150 @@ def assignment_preview(request, pk):
             "workspace": "curriculum",
         },
     )
+
+
+
+@teacher_required
+@require_GET
+def topic_board(request, pk):
+    """Раздел Задания по Теме: все задания темы со всем содержимым для правок учителя.
+
+    Открывается при клике на тему в разделе Курс. Справа — навигация по навыкам на английском.
+    Не добавляется в главное меню, выход — кнопка Назад в Курс.
+    """
+    topic = get_object_or_404(Topic.objects.select_related("block"), pk=pk)
+    assignments = list(
+        Assignment.objects.filter(topic=topic)
+        .select_related("topic__block")
+        .prefetch_related("skills", "questions__choices", "cards", "attachments")
+        .order_by("order", "pk")
+    )
+    # Собираем навыки присутствующие в теме
+    from .models import Skill
+    skill_ids = set()
+    for a in assignments:
+        for s in a.skills.all():
+            skill_ids.add(s.pk)
+    all_skills = list(Skill.objects.filter(pk__in=skill_ids).order_by("order", "name")) if skill_ids else []
+    # Для фильтра
+    selected_skill = request.GET.get("skill", "").strip().lower()
+    if selected_skill:
+        filtered = []
+        for a in assignments:
+            slugs = [s.slug for s in a.skills.all()]
+            kinds = [s.kind for s in a.skills.all()]
+            # match by slug or kind or english name lower
+            if selected_skill in slugs or selected_skill in kinds or any(selected_skill == (s.name or "").lower() for s in a.skills.all()):
+                filtered.append(a)
+            # also match english names
+            eng_map = {"reading": "reading", "listening": "listening", "speaking": "speaking", "writing": "writing", "grammar": "grammar", "vocabulary": "vocabulary"}
+            if selected_skill in eng_map:
+                if eng_map[selected_skill] in kinds or eng_map[selected_skill] in slugs:
+                    if a not in filtered:
+                        filtered.append(a)
+        # if filter by english but no match via slug, try kind
+        if not filtered and selected_skill in ["reading","listening","speaking","writing","grammar","vocabulary"]:
+            filtered = [a for a in assignments if any(s.kind == selected_skill for s in a.skills.all())]
+        assignments_filtered = filtered
+    else:
+        assignments_filtered = assignments
+
+    # Полный список навыков для меню (английские названия)
+    skill_menu = [
+        {"slug": "all", "label": "All", "count": len(assignments), "kind": "all"},
+        {"slug": "reading", "label": "Reading", "count": len([a for a in assignments if any(s.kind == "reading" for s in a.skills.all())]), "kind": "reading"},
+        {"slug": "listening", "label": "Listening", "count": len([a for a in assignments if any(s.kind == "listening" for s in a.skills.all())]), "kind": "listening"},
+        {"slug": "speaking", "label": "Speaking", "count": len([a for a in assignments if any(s.kind == "speaking" for s in a.skills.all())]), "kind": "speaking"},
+        {"slug": "writing", "label": "Writing", "count": len([a for a in assignments if any(s.kind == "writing" for s in a.skills.all())]), "kind": "writing"},
+        {"slug": "grammar", "label": "Grammar", "count": len([a for a in assignments if any(s.kind == "grammar" for s in a.skills.all())]), "kind": "grammar"},
+        {"slug": "vocabulary", "label": "Vocabulary", "count": len([a for a in assignments if any(s.kind == "vocabulary" for s in a.skills.all())]), "kind": "vocabulary"},
+    ]
+    # Only show skills that have at least 1 assignment, plus All
+    skill_menu_visible = [item for item in skill_menu if item["slug"] == "all" or item["count"] > 0]
+
+    return render(
+        request,
+        "lms/teacher_topic_board.html",
+        {
+            "topic": topic,
+            "block": topic.block,
+            "assignments": assignments_filtered,
+            "all_assignments": assignments,
+            "skill_menu": skill_menu_visible,
+            "selected_skill": selected_skill or "all",
+            "workspace": "curriculum",
+        },
+    )
+
+
+@teacher_required
+@require_POST
+def attachment_delete(request, pk):
+    """Удалить одно вложение задания."""
+    from .models import AssignmentAttachment
+    att = get_object_or_404(AssignmentAttachment, pk=pk)
+    assignment_id = att.assignment_id
+    topic_id = att.assignment.topic_id
+    att.delete()
+    messages.success(request, "Файл удалён.")
+    if request.POST.get("from") == "board":
+        return redirect("teacher_topic_board", pk=topic_id)
+    return redirect("teacher_assignment_form", pk=assignment_id)
+
+
+@teacher_required
+@require_POST
+def ai_extract_text(request):
+    """ИИ-извлечение текста с картинки/файла в окно Условия задания.
+
+    Принимает файл, извлекает текст офлайн (docx/xlsx/pdf/txt) или через vision-модель если доступна,
+    возвращает JSON с текстом.
+    """
+    upload = request.FILES.get("file")
+    if not upload:
+        return JsonResponse({"ok": False, "error": "Файл не передан."}, status=400)
+    try:
+        from . import ai
+        blob = upload.read()
+        filename = upload.name
+        text = ai.extract_text(filename, blob)
+        if not text:
+            # Если это картинка и есть online модель с vision — пробуем через провайдера
+            if ai.ai_mode() == "online":
+                try:
+                    spec = ai.provider_spec()
+                    if "image" in ai.provider_uploads(spec):
+                        # Собираем промпт для OCR
+                        prompt = "Извлеки весь текст с картинки дословно, сохрани форматирование. Верни только текст."
+                        payload = ai._provider_material(
+                            spec,
+                            ai.build_prompt("", prompt=prompt, target="assignment", filename=filename, kind=ai.upload_kind(filename)),
+                            filename=filename,
+                            blob=blob,
+                        )
+                        # Если модель вернула структуру, берем описание первого задания
+                        if payload.get("blocks"):
+                            first_block = payload["blocks"][0]
+                            if first_block.get("topics"):
+                                first_topic = first_block["topics"][0]
+                                if first_topic.get("assignments"):
+                                    text = first_topic["assignments"][0].get("description", "")
+                        if not text:
+                            # fallback: попробуем взять title + description
+                            text = payload.get("title", "")
+                except Exception as e:
+                    # Логируем но не падаем
+                    import logging
+                    logging.getLogger("lms.ai").warning("extract_image_failed %s", e)
+        if not text:
+            return JsonResponse({"ok": False, "error": "Не удалось извлечь текст. Попробуйте другой файл или вставьте вручную."}, status=400)
+        # Ограничиваем
+        text = text[:10000]
+        return JsonResponse({"ok": True, "text": text})
+    except Exception as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+
+
 
 
 @teacher_required

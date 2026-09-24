@@ -320,6 +320,10 @@ class DurationLimitField(forms.MultiValueField):
         return seconds
 
 
+class MultipleFileInput(forms.FileInput):
+    allow_multiple_selected = True
+
+
 class AssignmentForm(forms.ModelForm):
     assigned_students = forms.ModelMultipleChoiceField(
         queryset=None,
@@ -327,6 +331,17 @@ class AssignmentForm(forms.ModelForm):
         label="Персонально ученикам",
         help_text="Если нужно открыть доступ конкретным ученикам помимо группы",
         widget=forms.CheckboxSelectMultiple,
+    )
+    new_attachments = forms.FileField(
+        required=False,
+        label="Дополнительные файлы",
+        widget=MultipleFileInput(
+            attrs={
+                "data-dropzone": "1",
+                "data-dropzone-hint": "Перетащите файлы сюда или вставьте скриншот Ctrl+V",
+            }
+        ),
+        help_text="Можно выбрать несколько файлов, перетащить или вставить картинку из буфера (Ctrl+V).",
     )
 
     class Meta:
@@ -431,12 +446,22 @@ class AssignmentForm(forms.ModelForm):
         ).order_by("last_name", "first_name", "username")
 
         # Материалы можно прикрепить к заданию любого типа
-        self.fields["material_file"].widget.attrs["accept"] = ",".join(
-            f".{ext}" for ext in sorted(ALLOWED_FILE_EXTENSIONS)
-        )
+        accept_str = ",".join(f".{ext}" for ext in sorted(ALLOWED_FILE_EXTENSIONS))
+        max_mb = settings.LMS_MAX_FILE_BYTES // (1024 * 1024)
+        self.fields["material_file"].widget.attrs["accept"] = accept_str
+        self.fields["material_file"].widget.attrs["data-dropzone"] = "1"
+        self.fields["material_file"].widget.attrs["data-max-mb"] = str(max_mb)
+        self.fields["material_file"].widget.attrs["data-dropzone-hint"] = "Перетащите файл сюда или вставьте скриншот Ctrl+V"
         self.fields["material_file"].help_text = (
-            f"Один файл до {settings.LMS_MAX_FILE_BYTES // (1024 * 1024)} MiB: "
-            "документ, картинка, аудио или архив. Ученик увидит его на странице задания."
+            f"Файл до {max_mb} MiB: документ, картинка, аудио или архив. "
+            "Можно перетащить или вставить из буфера (Ctrl+V). Ученик увидит его на странице задания."
+        )
+        self.fields["new_attachments"].widget.attrs["accept"] = accept_str
+        self.fields["new_attachments"].widget.attrs["data-max-mb"] = str(max_mb)
+        # Поддержка paste для description
+        self.fields["description"].widget.attrs["data-paste-target"] = "1"
+        self.fields["description"].widget.attrs["placeholder"] = (
+            "Что нужно сделать, объём, критерии, пример ответа. Можно вставить картинку Ctrl+V — она добавится как вложение."
         )
 
         # Улучшаем выпадающий список тем: показываем Блок - Тема
