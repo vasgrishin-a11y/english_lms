@@ -324,6 +324,15 @@ class MultipleFileInput(forms.FileInput):
     allow_multiple_selected = True
 
 
+class MaterialFileInput(forms.ClearableFileInput):
+    clear_checkbox_label = "Удалить основной файл после сохранения"
+
+    def get_context(self, name, value, attrs):
+        context = super().get_context(name, value, attrs)
+        context["widget"]["checkbox_id"] = context["widget"]["attrs"].get("id", name) + "-clear"
+        return context
+
+
 class AssignmentForm(forms.ModelForm):
     assigned_students = forms.ModelMultipleChoiceField(
         queryset=None,
@@ -367,6 +376,7 @@ class AssignmentForm(forms.ModelForm):
             "is_active",
         ]
         widgets = {
+            "material_file": MaterialFileInput(),
             "title": forms.TextInput(
                 attrs={"placeholder": "Например: Опишите свою обычную субботу"}
             ),
@@ -488,6 +498,34 @@ class AssignmentForm(forms.ModelForm):
         return instance
 
 
+class AssignmentQuickForm(forms.ModelForm):
+    class Meta:
+        model = Assignment
+        fields = [
+            "title",
+            "description",
+            "assignment_type",
+            "status",
+            "publish_at",
+            "exam_mode",
+            "recording_limit_seconds",
+            "order",
+            "skills",
+            "max_points",
+            "deadline",
+            "max_tries",
+            "allow_retake",
+            "material_file",
+        ]
+        widgets = {
+            "material_file": MaterialFileInput(),
+            "description": forms.Textarea(attrs={"rows": 4}),
+            "deadline": _datetime_widget(),
+            "publish_at": _datetime_widget(),
+            "skills": forms.CheckboxSelectMultiple,
+        }
+
+
 class QuestionForm(forms.ModelForm):
     choices_text = forms.CharField(
         label="Правильный ответ и варианты",
@@ -547,9 +585,21 @@ class QuestionForm(forms.ModelForm):
                 lines.append(("*" if choice.is_correct else "") + choice.text)
         return "\n".join(lines)
 
+    def clean_kind(self):
+        kind = self.cleaned_data["kind"]
+        if self.instance.pk and kind != self.instance.kind:
+            if (
+                self.instance.responses.exists()
+                or self.instance.assignment.submissions.filter(quiz_attempt__isnull=False).exists()
+            ):
+                raise forms.ValidationError(
+                    "У пункта уже есть ответы. Для другого типа создайте новый пункт."
+                )
+        return kind
+
     def clean_choices_text(self):
         raw = self.cleaned_data.get("choices_text", "")
-        kind = self.data.get("kind") or self.instance.kind
+        kind = self.data.get(self.add_prefix("kind")) or self.instance.kind
         lines = [line.strip() for line in raw.splitlines() if line.strip()]
         parsed = []
         if kind in Question.MANUAL_KINDS:
@@ -619,19 +669,26 @@ class QuestionForm(forms.ModelForm):
         return data
 
     def save_choices(self, question):
-        question.choices.all().delete()
-        Choice.objects.bulk_create(
-            [
-                Choice(
-                    question=question,
-                    text=item["text"],
-                    match_text=item["match_text"],
-                    is_correct=item["correct"],
-                    order=index,
-                )
-                for index, item in enumerate(self.cleaned_data["choices_text"])
-            ]
-        )
+        # Keep choice IDs stable: student answers reference them. Match unchanged
+        # text first (including reordered options), then reuse the edited row.
+        existing = list(question.choices.all())
+        parsed = self.cleaned_data["choices_text"]
+        matched = {}
+        for index, item in enumerate(parsed):
+            choice = next((c for c in existing if c.text == item["text"]), None)
+            if choice:
+                existing.remove(choice)
+                matched[index] = choice
+        for index, item in enumerate(parsed):
+            choice = matched.get(index)
+            if choice is None:
+                choice = existing.pop(0) if existing else Choice(question=question)
+            choice.text = item["text"]
+            choice.match_text = item["match_text"]
+            choice.is_correct = item["correct"]
+            choice.order = index
+            choice.save()
+        question.choices.filter(pk__in=[c.pk for c in existing]).delete()
 
 
 class CommentSnippetForm(forms.ModelForm):

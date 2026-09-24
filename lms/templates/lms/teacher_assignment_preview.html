@@ -32,16 +32,7 @@
                     {% for skill in assignment.skills.all %}<span class="tag">{{ skill.name }}</span>{% endfor %}
                 </p>
             {% endif %}
-            {% if assignment.material_file %}
-                <div class="media-frame">
-                    <p class="strong mb-0">{% icon "file-text" %} Материалы задания</p>
-                    {% if assignment.material_file.name|media_kind == 'image' %}
-                        <img src="{% url 'media_preview' assignment.material_file.name %}" alt="Материал задания" loading="lazy">
-                    {% elif assignment.material_file.name|media_kind == 'audio' %}
-                        <audio controls preload="none" src="{% url 'media_preview' assignment.material_file.name %}"></audio>
-                    {% endif %}
-                </div>
-            {% endif %}
+            {% include "lms/parts/material_files.html" %}
         </section>
 
         {% if questions %}

@@ -210,7 +210,7 @@
                             {% for att in assignment.attachments.all %}
                             <div class="row row-tight" style="gap:8px;align-items:center;background:var(--surface);border:1px solid var(--border-subtle);border-radius:8px;padding:8px 12px">
                                 {% if att.file.name|media_kind == 'image' %}<img src="{% url 'media_preview' att.file.name %}" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:6px">{% endif %}
-                                <a href="{{ att.file.url }}" target="_blank" style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ att.file.name|slice:"-40:" }}</a>
+                                <a href="{% url 'private_file' att.file.name %}" target="_blank" style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ att.file.name|slice:"-40:" }}</a>
                                 <label style="display:flex;align-items:center;gap:4px;margin:0;font-weight:500;font-size:12px"><input type="checkbox" name="delete_attachments" value="{{ att.pk }}"> Удалить</label>
                             </div>
                             {% endfor %}
@@ -232,6 +232,11 @@
                         <div style="flex:1">
                             <p class="mb-0 strong">ИИ: извлечь текст с картинки</p>
                             <p class="mb-0 small">Загрузите файл/картинку в материалы выше, затем нажмите кнопку — ИИ перенесет текст с картинки в поле Условия задания. Для типа "Материалы для занятий" это основной сценарий.</p>
+                            <label for="ai-extract-source">Файл для распознавания</label>
+                            <select id="ai-extract-source">
+                                {% if assignment.material_file %}<option value="material:{{ assignment.pk }}">Основной файл: {{ assignment.material_file.name }}</option>{% endif %}
+                                {% for att in assignment.attachments.all %}<option value="attachment:{{ att.pk }}">{{ att.file.name }}</option>{% endfor %}
+                            </select>
                             <div class="row row-tight" style="margin-top:8px">
                                 <button type="button" class="btn btn-secondary btn-sm" id="ai-extract-btn">{% icon "sparkles" "icon icon-sm" %} Распознать текст с файла</button>
                                 <span class="tiny muted" id="ai-extract-status" aria-live="polite"></span>
@@ -360,18 +365,21 @@
   const newFiles = document.getElementById('id_new_attachments');
 
   function getCsrf(){
-    const m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
-    return m ? decodeURIComponent(m[1]) : '';
+    return extractBtn.closest('form').querySelector('[name=csrfmiddlewaretoken]').value;
   }
 
   function setStatus(t){ if(statusEl) statusEl.textContent = t; }
 
-  async function extractFromFile(file){
-    if(!file){ setStatus('Выберите файл сначала'); return; }
+  async function extractFromFile(file, saved){
+    if(!file && !saved){ setStatus('Выберите файл сначала'); return; }
     setStatus('Распознаю…');
     if(extractBtn) extractBtn.disabled = true;
     const fd = new FormData();
-    fd.append('file', file);
+    if(file) fd.append('file', file);
+    else {
+      const [kind, id] = saved.split(':');
+      fd.append(kind === 'material' ? 'material_assignment_id' : 'attachment_id', id);
+    }
     try{
       const resp = await fetch("{% url 'teacher_ai_extract' %}", {
         method: 'POST',
@@ -398,13 +406,26 @@
     }
   }
 
+  const source = document.getElementById('ai-extract-source');
+  let pending = [];
+  function updateSources(){
+    if(!source) return;
+    source.querySelectorAll('[data-pending]').forEach(option => option.remove());
+    pending = [...(mainFile?.files || []), ...(newFiles?.files || [])];
+    pending.forEach((file, index) => {
+      const option = new Option('Новый файл: ' + file.name, 'pending:' + index);
+      option.dataset.pending = '1';
+      source.add(option);
+    });
+    if(pending.length) source.value = 'pending:0';
+  }
+  mainFile?.addEventListener('change', updateSources);
+  newFiles?.addEventListener('change', updateSources);
   if(extractBtn){
     extractBtn.addEventListener('click', function(){
-      let file = null;
-      if(newFiles && newFiles.files && newFiles.files[0]) file = newFiles.files[0];
-      else if(mainFile && mainFile.files && mainFile.files[0]) file = mainFile.files[0];
-      else { setStatus('Сначала выберите файл в Материалах'); return; }
-      extractFromFile(file);
+      const value = source.value;
+      if(value.startsWith('pending:')) extractFromFile(pending[Number(value.split(':')[1])]);
+      else extractFromFile(null, value);
     });
   }
 

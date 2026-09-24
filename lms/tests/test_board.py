@@ -24,18 +24,14 @@ class BoardControlsTests(LMSCase):
         html = self.teacher_client.get(reverse("teacher_curriculum")).content.decode()
         for fragment in (
             "data-curriculum-board",
-            'data-topic-list="',
-            'data-dnd-handle="assignment"',
             'data-dnd-handle="topic"',
-            "data-rename-url",
-            "data-board-toggle",
-            reverse("teacher_assignment_move", args=[self.assignment.pk]),
-            reverse("teacher_assignment_rename", args=[self.assignment.pk]),
-            reverse("teacher_assignment_ai", args=[self.assignment.pk]),
+            reverse("teacher_topic_board", args=[self.topic.pk]),
             reverse("teacher_topic_assignments_publish", args=[self.topic.pk]),
             reverse("teacher_block_assignments_publish", args=[self.block.pk]),
         ):
             self.assertIn(fragment, html)
+        self.assertNotIn("data-assignment-row", html)
+        self.assertNotIn(self.assignment.title, html)
 
 
 class BoardRenameTests(LMSCase):

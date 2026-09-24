@@ -30,6 +30,7 @@ from .curriculum import course_tree, gradebook, queue_counts, teacher_overview
 from .decorators import get_user_role, teacher_required
 from .forms import (
     AssignmentForm,
+    AssignmentQuickForm,
     BlockForm,
     CommentSnippetForm,
     FlashcardBulkForm,
@@ -896,26 +897,40 @@ def _flat_presets(groups):
 @require_http_methods(["GET", "POST"])
 def block_form(request, pk=None):
     block = get_object_or_404(Block, pk=pk) if pk else None
-    # Копирование темы из другого класса прямо в форме редактирования класса
-    if request.method == "POST" and request.POST.get("copy_topic_id"):
+    # Accept the legacy single-copy field as well as checkbox selections.
+    if request.method == "POST" and (
+        request.POST.get("copy_topics") or request.POST.get("copy_topic_id")
+    ):
         if not block:
             messages.error(request, "Сначала сохраните класс, затем копируйте темы.")
             return redirect("teacher_block_new")
-        copy_topic_id = request.POST.get("copy_topic_id")
-        if copy_topic_id.isdigit():
-            source_topic = get_object_or_404(
-                Topic.objects.select_related("block"), pk=int(copy_topic_id)
-            )
-            if source_topic.block_id == block.pk:
-                messages.info(request, f"Тема «{source_topic.title}» уже в этом классе.")
-            else:
-                new_topic = _clone_topic_to_block(source_topic, block)
-                messages.success(
-                    request,
-                    f"Тема «{source_topic.title}» скопирована в класс «{block.name}» как «{new_topic.title}» "
-                    f"({new_topic.assignments.count()} заданий, черновики).",
+        ids = request.POST.getlist("copy_topic_ids") or request.POST.getlist("copy_topic_id")
+        if not ids:
+            messages.error(request, "Выберите хотя бы одну тему.")
+        elif len(ids) > 100 or any(not value.isdigit() for value in ids):
+            messages.error(request, "Выберите не более 100 тем из списка.")
+        else:
+            ids = set(map(int, ids))
+            with transaction.atomic():
+                Block.objects.select_for_update().get(pk=block.pk)
+                sources = list(
+                    Topic.objects.filter(pk__in=ids, is_active=True)
+                    .exclude(block=block)
+                    .select_related("block")
+                    .order_by("block__order", "order", "pk")
                 )
-                return redirect("teacher_block_edit", pk=block.pk)
+                if len(sources) != len(ids):
+                    messages.error(
+                        request, "Список тем изменился. Выберите темы из других классов заново."
+                    )
+                else:
+                    for source in sources:
+                        _clone_topic_to_block(source, block)
+                    messages.success(
+                        request,
+                        f"Скопировано тем: {len(sources)}. Задания сохранены как черновики.",
+                    )
+        return redirect("teacher_block_edit", pk=block.pk)
     form = BlockForm(request.POST or None, instance=block)
     if request.method == "POST" and form.is_valid():
         instance = form.save()
@@ -1242,77 +1257,55 @@ def assignment_rename(request, pk):
 @teacher_required
 @require_POST
 def assignment_quick_edit(request, pk):
-    """Быстрое редактирование задания прямо в доске темы: заголовок, описание, статус, порядок + файлы."""
     assignment = get_object_or_404(Assignment, pk=pk)
-    title = request.POST.get("title", "").strip()
-    description = request.POST.get("description", "")
-    status_val = request.POST.get("status", "")
-    order_val = request.POST.get("order", "")
-    changed = []
-    if title:
-        if len(title) > 200:
-            title = title[:200]
-        if assignment.title != title:
-            assignment.title = title
-            changed.append("title")
-    if description != "" and assignment.description != description:
-        assignment.description = description
-        changed.append("description")
-    if status_val in Assignment.Publication.values:
-        if assignment.status != status_val:
-            assignment.status = status_val
-            changed.append("status")
-            if (
-                status_val == Assignment.Publication.PUBLISHED
-                and assignment.publish_at
-                and assignment.publish_at > timezone.now()
-            ):
-                assignment.publish_at = None
-    if order_val:
+    form = AssignmentQuickForm(
+        request.POST, request.FILES, instance=assignment, auto_id=f"assignment-{pk}-%s"
+    )
+    question_forms = [
+        QuestionForm(request.POST, instance=q, prefix=f"question-{q.pk}")
+        for q in assignment.questions.prefetch_related("choices")
+    ]
+    valid = form.is_valid()
+    for question_form in question_forms:
+        valid = question_form.is_valid() and valid
+    from .models import AssignmentAttachment
+
+    attachments = []
+    for upload in request.FILES.getlist("new_attachments"):
+        attachment = AssignmentAttachment(assignment=assignment, file=upload)
         try:
-            order_int = int(order_val)
-            if assignment.order != order_int:
-                assignment.order = order_int
-                changed.append("order")
-        except (ValueError, TypeError):
-            pass
-    if changed:
-        assignment.save(update_fields=changed + ["updated_at"])
-    # attachments: new files
-    new_files = request.FILES.getlist("new_attachments")
-    if new_files:
-        from django.db.models import Max
+            attachment.full_clean()
+        except ValidationError as error:
+            form.add_error(None, error.messages)
+            valid = False
+        attachments.append(attachment)
+    if not valid:
+        return _render_topic_board(
+            request, assignment.topic_id, edit_errors=(assignment.pk, form, question_forms)
+        )
+    with transaction.atomic():
+        form.save()
+        for question_form in question_forms:
+            question = question_form.save()
+            question_form.save_choices(question)
+        if question_forms:
+            _sync_quiz_points(assignment)
+            from .services import regrade_assignment
 
-        from .models import AssignmentAttachment
-
+            regrade_assignment(assignment)
         last_order = assignment.attachments.aggregate(m=Max("order"))["m"] or 0
-        for idx, f in enumerate(new_files, start=1):
-            AssignmentAttachment.objects.create(
-                assignment=assignment, file=f, order=last_order + idx
-            )
-        changed.append("attachments")
-    # delete marked
-    delete_ids = request.POST.getlist("delete_attachments")
-    if delete_ids:
-        assignment.attachments.filter(pk__in=[i for i in delete_ids if i.isdigit()]).delete()
-    # material file clear?
-    if request.POST.get("material_file-clear") == "on":
-        if assignment.material_file:
-            assignment.material_file.delete(save=False)
-            assignment.material_file = ""
-            assignment.save(update_fields=["material_file", "updated_at"])
-    # material file new?
-    if request.FILES.get("material_file"):
-        assignment.material_file = request.FILES["material_file"]
-        assignment.save(update_fields=["material_file", "updated_at"])
-    if changed:
-        messages.success(request, f"Задание обновлено: {assignment.title}")
-    else:
-        messages.info(request, "Изменений нет.")
-    nxt = request.POST.get("next") or request.GET.get("next")
-    if nxt:
-        return redirect(nxt)
-    return redirect("teacher_topic_board", pk=assignment.topic_id)
+        for index, attachment in enumerate(attachments, 1):
+            attachment.order = last_order + index
+            attachment.save()
+        assignment.attachments.filter(
+            pk__in=[
+                value for value in request.POST.getlist("delete_attachments") if value.isdigit()
+            ]
+        ).delete()
+    messages.success(request, "Задание сохранено. Автоматические результаты пересчитаны.")
+    return redirect(
+        reverse("teacher_topic_board", args=[assignment.topic_id]) + f"#assignment-{assignment.pk}"
+    )
 
 
 @teacher_required
@@ -1463,6 +1456,10 @@ def assignment_preview(request, pk):
 @teacher_required
 @require_GET
 def topic_board(request, pk):
+    return _render_topic_board(request, pk)
+
+
+def _render_topic_board(request, pk, edit_errors=None):
     """Раздел Задания по Теме: все задания темы со всем содержимым для правок учителя.
 
     Открывается при клике на тему в разделе Курс. Справа — навигация по навыкам на английском.
@@ -1475,6 +1472,16 @@ def topic_board(request, pk):
         .prefetch_related("skills", "questions__choices", "cards", "attachments")
         .order_by("order", "pk")
     )
+    for assignment in assignments:
+        assignment.quick_form = AssignmentQuickForm(
+            instance=assignment, auto_id=f"assignment-{assignment.pk}-%s"
+        )
+        assignment.question_forms = [
+            QuestionForm(instance=q, prefix=f"question-{q.pk}") for q in assignment.questions.all()
+        ]
+        if edit_errors and assignment.pk == edit_errors[0]:
+            assignment.quick_form, assignment.question_forms = edit_errors[1:]
+            assignment.edit_open = True
     # Собираем навыки присутствующие в теме
     # Для фильтра
     selected_skill = request.GET.get("skill", "").strip().lower()
@@ -1613,63 +1620,57 @@ def ai_extract_text(request):
     Принимает файл, извлекает текст офлайн (docx/xlsx/pdf/txt) или через vision-модель если доступна,
     возвращает JSON с текстом.
     """
-    upload = request.FILES.get("file")
-    if not upload:
-        return JsonResponse({"ok": False, "error": "Файл не передан."}, status=400)
-    try:
-        from . import ai
+    from . import ai
+    from .models import AssignmentAttachment
+    from .validators import validate_upload
 
-        blob = upload.read()
+    for field in ("attachment_id", "material_assignment_id"):
+        if request.POST.get(field) and not request.POST[field].isdigit():
+            return JsonResponse({"ok": False, "error": "Некорректный файл."}, status=400)
+    upload = request.FILES.get("file")
+    if not upload and request.POST.get("attachment_id"):
+        upload = get_object_or_404(AssignmentAttachment, pk=request.POST["attachment_id"]).file
+    if not upload and request.POST.get("material_assignment_id"):
+        upload = get_object_or_404(
+            Assignment, pk=request.POST["material_assignment_id"]
+        ).material_file
+    if not upload:
+        return JsonResponse({"ok": False, "error": "Выберите файл для распознавания."}, status=400)
+    try:
+        if upload.size > ai.max_upload_bytes():
+            raise ValidationError("Файл слишком большой для распознавания.")
+        validate_upload(upload)
+        upload.open("rb")
+        blob = upload.read(ai.max_upload_bytes() + 1)
+        upload.close()
         filename = upload.name
         text = ai.extract_text(filename, blob)
-        if not text:
-            # Если это картинка и есть online модель с vision — пробуем через провайдера
-            if ai.ai_mode() == "online":
-                try:
-                    spec = ai.provider_spec()
-                    if "image" in ai.provider_uploads(spec):
-                        # Собираем промпт для OCR
-                        prompt = "Извлеки весь текст с картинки дословно, сохрани форматирование. Верни только текст."
-                        payload = ai._provider_material(
-                            spec,
-                            ai.build_prompt(
-                                "",
-                                prompt=prompt,
-                                target="assignment",
-                                filename=filename,
-                                kind=ai.upload_kind(filename),
-                            ),
-                            filename=filename,
-                            blob=blob,
-                        )
-                        # Если модель вернула структуру, берем описание первого задания
-                        if payload.get("blocks"):
-                            first_block = payload["blocks"][0]
-                            if first_block.get("topics"):
-                                first_topic = first_block["topics"][0]
-                                if first_topic.get("assignments"):
-                                    text = first_topic["assignments"][0].get("description", "")
-                        if not text:
-                            # fallback: попробуем взять title + description
-                            text = payload.get("title", "")
-                except Exception as e:
-                    # Логируем но не падаем
-                    import logging
-
-                    logging.getLogger("lms.ai").warning("extract_image_failed %s", e)
-        if not text:
-            return JsonResponse(
-                {
-                    "ok": False,
-                    "error": "Не удалось извлечь текст. Попробуйте другой файл или вставьте вручную.",
-                },
-                status=400,
+        if not text and ai.upload_kind(filename) == "image":
+            spec = ai.provider_spec()
+            if ai.ai_mode() != "online" or "image" not in ai.provider_uploads(spec):
+                raise ai.AiError(
+                    "Для распознавания картинки подключите ИИ-модель с поддержкой изображений."
+                )
+            text = ai._provider_material(
+                spec,
+                "Перепиши весь видимый текст изображения дословно, сохраняя абзацы. "
+                "Не решай задания, не добавляй пояснений или новых заданий. Верни только распознанный текст.",
+                filename=filename,
+                blob=blob,
+                raw_text=True,
             )
-        # Ограничиваем
-        text = text[:10000]
-        return JsonResponse({"ok": True, "text": text})
-    except Exception as exc:
-        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+        if not text.strip():
+            raise ai.AiError(
+                "Не удалось извлечь текст. Попробуйте более чёткое изображение или вставьте текст вручную."
+            )
+        return JsonResponse({"ok": True, "text": text[:10000]})
+    except (ValidationError, ai.AiError) as exc:
+        error = " ".join(exc.messages) if isinstance(exc, ValidationError) else str(exc)
+        return JsonResponse({"ok": False, "error": error}, status=400)
+    except (FileNotFoundError, OSError):
+        return JsonResponse(
+            {"ok": False, "error": "Файл недоступен. Загрузите его повторно."}, status=400
+        )
 
 
 @teacher_required
@@ -1855,9 +1856,13 @@ def question_form(request, pk):
     question = get_object_or_404(Question.objects.select_related("assignment"), pk=pk)
     form = QuestionForm(request.POST or None, instance=question)
     if request.method == "POST" and form.is_valid():
-        form.save()
-        form.save_choices(question)
-        _sync_quiz_points(question.assignment)
+        with transaction.atomic():
+            form.save()
+            form.save_choices(question)
+            _sync_quiz_points(question.assignment)
+            from .services import regrade_assignment
+
+            regrade_assignment(question.assignment)
         messages.success(request, "Вопрос обновлён.")
         return redirect("teacher_questions", pk=question.assignment_id)
     return render(

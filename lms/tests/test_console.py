@@ -345,8 +345,9 @@ class CurriculumTreeTests(LMSCase):
         entry = blocks[0]["topics"][0]["assignments"][0]
         self.assertEqual(entry["stats"]["waiting"], 1)
         self.assertEqual(response.context["totals"]["drafts"], 1)
-        self.assertContains(response, draft.title)
-        self.assertContains(response, self.assignment.title)
+        self.assertNotContains(response, draft.title)
+        self.assertNotContains(response, self.assignment.title)
+        self.assertContains(response, self.topic.title)
 
     def test_search_filters_tree(self):
         response = self.teacher_client.get("/teacher/curriculum/?q=Past tense")

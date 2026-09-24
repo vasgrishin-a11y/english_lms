@@ -35,29 +35,32 @@
                 <h2 class="card-title">{% icon "layers" %}Добавить тему из другого класса</h2>
                 <span class="badge badge-turquoise">{{ other_topics|length }} доступно</span>
             </div>
-            <p class="small muted">Выберите тему из другого класса — она скопируется в «{{ block.name }}» вместе со всеми заданиями (копии станут черновиками, оригинал не удаляется). Можно также перетаскивать темы между классами прямо на странице Классов.</p>
+            <p class="small muted">Выберите темы из других классов — они скопируются в «{{ block.name }}» вместе со всеми заданиями (копии станут черновиками, оригинал не удаляется). Можно также перетаскивать темы между классами прямо на странице Классов.</p>
             {% if other_topics %}
+                <form method="post" data-topic-copy-form>
+                {% csrf_token %}
+                <input type="hidden" name="copy_topics" value="1">
+                <p><label><input type="checkbox" data-select-all-topics> Выбрать все темы в списке</label></p>
                 <div class="rows" style="max-height:420px;overflow:auto">
                     {% for t in other_topics %}
                     <div class="row-item">
                         <span class="row-main">
-                            <span class="row-title">{{ t.title }}</span>
+                            <label class="row-title"><input type="checkbox" name="copy_topic_ids" value="{{ t.pk }}"> {{ t.title }}</label>
                             <span class="row-meta">
                                 <span>{{ t.block.name }}</span>
                                 <span>{{ t.assignment_count }} {{ t.assignment_count|pluralize_ru:"задание,задания,заданий" }}</span>
                             </span>
                         </span>
                         <span class="row-side">
-                            <form method="post" style="display:inline">
-                                {% csrf_token %}
-                                <input type="hidden" name="copy_topic_id" value="{{ t.pk }}">
-                                <button class="btn btn-secondary btn-sm" type="submit">{% icon "copy" "icon icon-sm" %}Копировать в этот класс</button>
-                            </form>
+
                             <a class="btn btn-ghost btn-sm" href="{% url 'teacher_topic_board' t.pk %}" title="Открыть исходную тему">{% icon "eye" "icon icon-sm" %}</a>
                         </span>
                     </div>
                     {% endfor %}
                 </div>
+                <button class="btn btn-secondary" type="submit">Копировать выбранные темы</button>
+                <p class="help-text" data-copy-selection aria-live="polite">Выберите темы для копирования.</p>
+                </form>
             {% else %}
                 <p class="muted small">Нет тем в других классах для копирования. Создайте новую тему или скопируйте из библиотеки.</p>
             {% endif %}
@@ -123,4 +126,25 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function(){
+  const form = document.querySelector('[data-topic-copy-form]');
+  if(!form) return;
+  const all = form.querySelector('[data-select-all-topics]');
+  const boxes = Array.from(form.querySelectorAll('[name="copy_topic_ids"]'));
+  function update(){
+    const count = boxes.filter(box => box.checked).length;
+    all.checked = count === boxes.length;
+    all.indeterminate = count > 0 && count < boxes.length;
+    form.querySelector('[type="submit"]').disabled = count === 0;
+    form.querySelector('[data-copy-selection]').textContent = 'Выбрано тем: ' + count;
+  }
+  all.addEventListener('change', () => { boxes.forEach(box => box.checked = all.checked); update(); });
+  boxes.forEach(box => box.addEventListener('change', update));
+  update();
+})();
+</script>
 {% endblock %}

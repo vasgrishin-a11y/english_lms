@@ -93,7 +93,7 @@ def _resolve_private_file(request, name):
     attempts = Submission.objects.filter(file_answer=name)
     items = QuestionResponse.objects.filter(file_answer=name)
     if not teacher:
-        visible = Assignment.objects.visible()
+        visible = Assignment.objects.visible(user=request.user)
         materials = materials.filter(pk__in=visible)
         attachments = attachments.filter(assignment__in=visible)
         attempts = attempts.filter(
@@ -175,9 +175,9 @@ def media_preview(request, name):
     file = _resolve_private_file(request, name)
     if not file:
         raise Http404
-    if file.size > settings.LMS_MAX_FILE_BYTES:
-        raise Http404
     try:
+        if file.size > settings.LMS_MAX_FILE_BYTES:
+            raise Http404
         with file.open("rb") as handle:
             if not _signature_matches(name, handle):
                 raise Http404

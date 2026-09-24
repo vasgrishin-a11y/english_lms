@@ -312,3 +312,79 @@ class BrowserItemFlowTests(StaticLiveServerTestCase):
         self.assertEqual(header[:4], b"RIFF")
         self.assertEqual(int.from_bytes(header[24:28], "little"), 16000, "WAV 16 кГц")
         self.assertEqual(int.from_bytes(header[22:24], "little"), 1, "моно")
+
+    def test_material_clear_ocr_source_and_bulk_topic_copy(self):
+        """One-click controls remain scoped to their assignment/form in a real browser."""
+        from django.conf import settings
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.test import Client
+        from django.urls import reverse
+        from playwright.sync_api import expect, sync_playwright
+
+        teacher = get_user_model().objects.create_user("editing_teacher")
+        teacher.profile.role = Profile.Role.TEACHER
+        teacher.profile.save()
+        block = Block.objects.create(name="Source", slug="source")
+        topic = Topic.objects.create(block=block, title="First topic", slug="first")
+        Topic.objects.create(block=block, title="Second topic", slug="second")
+        target = Block.objects.create(name="Target", slug="target")
+        assignment = Assignment.objects.create(topic=topic, title="Task", description="Original")
+        assignment.material_file.save("saved.txt", SimpleUploadedFile("saved.txt", b"Saved text"))
+        other = Assignment.objects.create(
+            topic=topic,
+            title="Other",
+            description="Other",
+            material_file=assignment.material_file.name,
+        )
+        client = Client()
+        client.force_login(teacher, backend="django.contrib.auth.backends.ModelBackend")
+        with sync_playwright() as playwright:
+            options = {"headless": True}
+            if os.getenv("BROWSER_EXECUTABLE"):
+                options["executable_path"] = os.environ["BROWSER_EXECUTABLE"]
+                options["args"] = json.loads(os.getenv("BROWSER_ARGS", "[]"))
+            browser = playwright.chromium.launch(**options)
+            context = browser.new_context()
+            context.add_cookies(
+                [
+                    {
+                        "name": settings.SESSION_COOKIE_NAME,
+                        "value": client.cookies[settings.SESSION_COOKIE_NAME].value,
+                        "url": self.live_server_url,
+                    }
+                ]
+            )
+            page = context.new_page()
+            page.goto(self.live_server_url + reverse("teacher_topic_board", args=[topic.pk]))
+            page.locator(f'[data-open-editor="edit-{assignment.pk}"]').click()
+            editor = page.locator(f"#edit-{assignment.pk}")
+            expect(editor).to_have_attribute("open", "")
+            editor.get_by_label("Удалить основной файл после сохранения").check()
+            expect(
+                page.locator(f'#edit-{other.pk} [name="material_file-clear"]')
+            ).not_to_be_checked()
+            editor.get_by_role("button", name="Сохранить", exact=True).click()
+
+            page.goto(self.live_server_url + reverse("teacher_assignment_form", args=[other.pk]))
+            expect(page.locator("#ai-extract-source")).to_have_value(f"material:{other.pk}")
+            page.locator("#ai-extract-btn").click()
+            expect(page.locator("#id_description")).to_have_value("Other\n\nSaved text")
+            # Removing a new selection does not mark the existing material for deletion.
+            page.locator("#id_material_file").set_input_files(
+                {"name": "new.txt", "mimeType": "text/plain", "buffer": b"New text"}
+            )
+            page.locator(".dropzone").filter(has=page.locator("#id_material_file")).locator(
+                "[data-dropzone-clear]"
+            ).click()
+            expect(page.locator('[name="material_file-clear"]')).not_to_be_checked()
+
+            page.goto(self.live_server_url + reverse("teacher_block_edit", args=[target.pk]))
+            page.locator("[data-select-all-topics]").check()
+            expect(page.locator("[data-copy-selection]")).to_have_text("Выбрано тем: 2")
+            page.get_by_role("button", name="Копировать выбранные темы").click()
+            expect(page.locator("[data-copy-selection]")).to_have_text("Выбрано тем: 0")
+            browser.close()
+        assignment.refresh_from_db()
+        self.assertFalse(assignment.material_file)
+        self.assertTrue(other.material_file.storage.exists(other.material_file.name))
+        self.assertEqual(target.topics.count(), 2)
