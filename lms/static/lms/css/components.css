@@ -389,6 +389,17 @@ select[aria-invalid="true"],
     border-radius: var(--r-md);
     font-size: var(--fs-14);
     color: var(--accent-900);
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow-wrap: break-word;
+}
+
+.callout > div,
+.callout > span,
+.callout > p {
+    min-width: 0;
+    max-width: 100%;
 }
 
 .callout .icon {
@@ -3062,8 +3073,9 @@ table .grade-col {
 }
 
 .dropzone-body {
-    flex: 1 1 220px;
+    flex: 1 1 0;
     min-width: 0;
+    max-width: 100%;
 }
 
 .dropzone-title {
@@ -3751,7 +3763,8 @@ tr.row-bad td:first-child {
 }
 
 [data-assignment-row].is-dragging > .row-item,
-.topic-panel.is-dragging {
+.topic-panel.is-dragging,
+[data-topic-panel].is-dragging {
     opacity: 0.45;
 }
 
@@ -3763,12 +3776,26 @@ tr.row-bad td:first-child {
     box-shadow: 0 3px 0 0 var(--accent-500);
 }
 
-.topic-panel.drop-above {
+.topic-panel.drop-above,
+[data-topic-panel].drop-above {
     box-shadow: 0 -4px 0 0 var(--accent-500);
 }
 
-.topic-panel.drop-below {
+.topic-panel.drop-below,
+[data-topic-panel].drop-below {
     box-shadow: 0 4px 0 0 var(--accent-500);
+}
+
+.drop-block-active {
+    background: var(--accent-soft) !important;
+    border-color: var(--accent-400) !important;
+    box-shadow: 0 0 0 2px var(--accent-200) inset;
+}
+
+[data-block-topics].drop-block-active,
+[data-block-id].drop-block-active {
+    outline: 2px dashed var(--accent-500);
+    outline-offset: 2px;
 }
 
 .inline-rename-input {
@@ -3785,4 +3812,50 @@ tr.row-bad td:first-child {
     outline: none;
     box-shadow: var(--ring);
     border-color: var(--accent-500);
+}
+
+/* 320px overflow fix: assignment-form and related grids must never exceed viewport */
+@media (max-width: 400px) {
+    #assignment-form,
+    .form-grid,
+    .preset-grid,
+    .type-cards,
+    .type-cards > div,
+    .type-cards #id_assignment_type,
+    .dropzone,
+    .form-section,
+    .callout {
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        min-width: 0 !important;
+    }
+    .type-cards label,
+    .preset-card,
+    .dropzone,
+    .callout {
+        max-width: 100%;
+        box-sizing: border-box;
+        min-width: 0;
+    }
+    .preset-grid,
+    .form-grid,
+    .type-cards > div,
+    .type-cards #id_assignment_type {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+    .callout {
+        flex-wrap: wrap;
+    }
+    .callout .btn,
+    .form-section .btn,
+    .form-actions .btn {
+        white-space: normal;
+        max-width: 100%;
+        box-sizing: border-box;
+        overflow-wrap: break-word;
+    }
+    .row {
+        max-width: 100%;
+        box-sizing: border-box;
+    }
 }

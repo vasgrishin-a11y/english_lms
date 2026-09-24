@@ -28,6 +28,65 @@
                 </div>
             </form>
         </section>
+
+        {% if block %}
+        <section class="card" style="margin-top:16px">
+            <div class="card-head">
+                <h2 class="card-title">{% icon "layers" %}Добавить тему из другого класса</h2>
+                <span class="badge badge-turquoise">{{ other_topics|length }} доступно</span>
+            </div>
+            <p class="small muted">Выберите тему из другого класса — она скопируется в «{{ block.name }}» вместе со всеми заданиями (копии станут черновиками, оригинал не удаляется). Можно также перетаскивать темы между классами прямо на странице Классов.</p>
+            {% if other_topics %}
+                <div class="rows" style="max-height:420px;overflow:auto">
+                    {% for t in other_topics %}
+                    <div class="row-item">
+                        <span class="row-main">
+                            <span class="row-title">{{ t.title }}</span>
+                            <span class="row-meta">
+                                <span>{{ t.block.name }}</span>
+                                <span>{{ t.assignment_count }} {{ t.assignment_count|pluralize_ru:"задание,задания,заданий" }}</span>
+                            </span>
+                        </span>
+                        <span class="row-side">
+                            <form method="post" style="display:inline">
+                                {% csrf_token %}
+                                <input type="hidden" name="copy_topic_id" value="{{ t.pk }}">
+                                <button class="btn btn-secondary btn-sm" type="submit">{% icon "copy" "icon icon-sm" %}Копировать в этот класс</button>
+                            </form>
+                            <a class="btn btn-ghost btn-sm" href="{% url 'teacher_topic_board' t.pk %}" title="Открыть исходную тему">{% icon "eye" "icon icon-sm" %}</a>
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="muted small">Нет тем в других классах для копирования. Создайте новую тему или скопируйте из библиотеки.</p>
+            {% endif %}
+        </section>
+
+        <section class="card" style="margin-top:16px">
+            <div class="card-head"><h2 class="card-title">{% icon "book" %}Текущие темы в классе</h2></div>
+            {% with topics=block.topics.all %}
+                {% if topics %}
+                    <div class="rows">
+                    {% for topic in topics|dictsort:"order" %}
+                        <div class="row-item">
+                            <span class="row-main">
+                                <a class="row-title" href="{% url 'teacher_topic_board' topic.pk %}">{{ topic.title }}</a>
+                                <span class="row-meta"><span>{{ topic.assignments.count }} {{ topic.assignments.count|pluralize_ru:"задание,задания,заданий" }}</span></span>
+                            </span>
+                            <span class="row-side">
+                                <a class="btn btn-ghost btn-sm" href="{% url 'teacher_topic_edit' topic.pk %}">{% icon "pencil" "icon icon-sm" %}</a>
+                                <a class="btn btn-ghost btn-sm" href="{% url 'teacher_topic_board' topic.pk %}">{% icon "eye" "icon icon-sm" %}</a>
+                            </span>
+                        </div>
+                    {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="muted small">В этом классе пока нет тем.</p>
+                {% endif %}
+            {% endwith %}
+        </section>
+        {% endif %}
     </div>
     <div class="split-side">
         <div class="card card-pad-sm">
@@ -60,7 +119,7 @@
         <div class="card card-pad-sm">
             <p class="rail-title">Подсказка</p>
             <p class="small muted">Блок — крупный раздел курса (например, «Reading B2» или «Модуль 1 ОГЭ»). Порядок блоков задаёт последовательность дорожной карты у учеников.</p>
-            <p class="small muted mb-0">Уровень CEFR показывает ученику сложность раздела и используется в аналитике.</p>
+            <p class="small muted mb-0">Уровень CEFR показывает ученику сложность раздела и используется в аналитике. Перетаскивайте темы между классами на странице Классов — оригинал сохраняется, создаётся копия со всеми заданиями.</p>
         </div>
     </div>
 </div>

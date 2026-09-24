@@ -33,12 +33,13 @@
     </div>
 </section>
 
-<div class="home-grid">
-    <section class="card">
+<div class="home-grid" style="align-items:stretch">
+    <section class="card" style="display:flex;flex-direction:column">
         <div class="card-head">
             <h2 class="card-title">{% icon "play" %}Продолжить</h2>
             {% if continue_item %}<span class="badge badge-turquoise">Сейчас</span>{% endif %}
         </div>
+        <div style="flex:1 1 auto;display:flex;flex-direction:column">
         {% if continue_item %}
             <p class="strong mb-0">{{ continue_item.title }}</p>
             <p class="muted small">{{ continue_item.topic.block.name }} · {{ continue_item.topic.title }}</p>
@@ -46,26 +47,30 @@
                 <p class="pill-note">{% icon "save" "icon icon-sm" %}Черновик сохранён: {{ continue_draft.updated_at|date:"d.m.Y H:i" }}</p>
                 <p class="small muted draft-excerpt">{{ continue_draft.text|truncatechars:160 }}</p>
             {% endif %}
-            <a class="btn" href="{% url 'assignment_detail' continue_item.pk %}">
-                {% if continue_draft and continue_draft.text %}Продолжить черновик{% else %}Открыть задание{% endif %}
-                {% icon "arrow-right" %}
-            </a>
+            <div style="margin-top:auto;padding-top:12px">
+                <a class="btn" href="{% url 'assignment_detail' continue_item.pk %}">
+                    {% if continue_draft and continue_draft.text %}Продолжить черновик{% else %}Открыть задание{% endif %}
+                    {% icon "arrow-right" %}
+                </a>
+            </div>
         {% else %}
-            <div class="empty">
+            <div class="empty" style="flex:1">
                 <div class="empty-ill">✅</div>
                 <h3>Всё сдано</h3>
                 <p>Незавершённых заданий нет. Повторите слова в тренажёре или загляните в оценки.</p>
             </div>
         {% endif %}
+        </div>
     </section>
 
-    <section class="card">
+    <section class="card" style="display:flex;flex-direction:column">
         <div class="card-head">
             <h2 class="card-title">{% icon "clock" %}Ближайшие сроки</h2>
             <a class="btn btn-ghost btn-sm" href="{% url 'student_upcoming' %}">{% t "Все сроки" %}</a>
         </div>
+        <div style="flex:1 1 auto">
         {% if due_soon %}
-            <ul class="task-list">
+            <ul class="task-list" style="margin:0">
                 {% for assignment in due_soon %}
                     {% include "lms/parts/task_item.html" with assignment=assignment state=assignment.state %}
                 {% endfor %}
@@ -73,6 +78,7 @@
         {% else %}
             <p class="muted mb-0">На ближайшие три дня дедлайнов нет.</p>
         {% endif %}
+        </div>
     </section>
 </div>
 
@@ -91,7 +97,7 @@
                     <div class="class-body">
                         <h3 class="class-title">{{ block.name }}</h3>
                         <div class="class-meta">
-                            <span>{{ block_group.list|length }} заданий</span>
+                            <span>{{ block_group.list|length }} {{ block_group.list|length|pluralize_ru:"задание,задания,заданий" }}</span>
                             {% if block.cefr_level %}<span class="tag tag-cefr">{{ block.cefr_level }}</span>{% endif %}
                         </div>
                         <div class="class-foot">

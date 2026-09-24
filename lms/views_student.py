@@ -19,7 +19,15 @@ from .curriculum import (
 )
 from .decorators import student_required
 from .forms import DictionaryWordForm, SubmissionForm
-from .models import AnswerDraft, Assignment, CardReview, Flashcard, QuestionResponse, Skill, Submission
+from .models import (
+    AnswerDraft,
+    Assignment,
+    CardReview,
+    Flashcard,
+    QuestionResponse,
+    Skill,
+    Submission,
+)
 from .quiz_items import build_items, progress_of
 from .scoring import normalize_gap
 from .services import (
@@ -46,10 +54,8 @@ from .views import _add_validation_errors
 SESSION_QUEUE_PREFIX = "trainer-queue:"
 
 
-
 def _skill_context(assignment):
     """Контекст для боковой панели Sections: все навыки и выбранные."""
-    from .models import Skill
     # English labels for student
     eng_labels = {
         "grammar": "Grammar",
@@ -62,7 +68,6 @@ def _skill_context(assignment):
     all_kinds = [(k, eng_labels.get(k, k.title())) for k, _ in Skill.Kind.choices]
     assigned = set(assignment.skills.values_list("kind", flat=True)) if assignment.pk else set()
     return {"skill_kinds": all_kinds, "assigned_skill_kinds": assigned}
-
 
 
 def _questions_with_choices(assignment):
@@ -561,7 +566,7 @@ def _flashcards_detail(request, assignment):
     cards = list(assignment.cards.order_by("order", "pk")) if assignment.is_flashcards else []
     trainer_cards = _topic_trainer_cards(assignment)
     skill_ctx = _skill_context(assignment)
-    attachments = list(assignment.attachments.all()) if hasattr(assignment, 'attachments') else []
+    attachments = list(assignment.attachments.all()) if hasattr(assignment, "attachments") else []
     return render(
         request,
         "lms/assignment_detail.html",
@@ -577,7 +582,9 @@ def _flashcards_detail(request, assignment):
             "conflict": False,
             "cards": cards,
             "attachments": attachments,
-            "trainer_queue": practice_queue(student=request.user, cards=cards, limit=1) if cards else None,
+            "trainer_queue": practice_queue(student=request.user, cards=cards, limit=1)
+            if cards
+            else None,
             "workspace": "curriculum",
             **skill_ctx,
         },

@@ -126,6 +126,11 @@ urlpatterns = [
         name="teacher_topic_move",
     ),
     path(
+        "teacher/curriculum/topics/<int:pk>/copy/",
+        views_teacher.topic_copy,
+        name="teacher_topic_copy",
+    ),
+    path(
         "teacher/curriculum/topics/<int:pk>/delete/",
         views_teacher.topic_delete,
         name="teacher_topic_delete",
@@ -179,6 +184,11 @@ urlpatterns = [
         "teacher/curriculum/assignments/<int:pk>/rename/",
         views_teacher.assignment_rename,
         name="teacher_assignment_rename",
+    ),
+    path(
+        "teacher/curriculum/assignments/<int:pk>/quick-edit/",
+        views_teacher.assignment_quick_edit,
+        name="teacher_assignment_quick_edit",
     ),
     path(
         "teacher/curriculum/assignments/<int:pk>/move/",

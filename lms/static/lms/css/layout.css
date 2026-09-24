@@ -305,8 +305,15 @@
 .home-grid {
     display: grid;
     gap: var(--sp-5);
+    align-items: stretch;
     /* min(100%, …) гарантирует отсутствие горизонтального переполнения на 320px. */
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+}
+
+.home-grid > .card {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
 }
 
 .hero {
@@ -708,6 +715,15 @@
     .topbar-brand > span:not(.brand-logo) {
         display: none;
     }
+    .form-grid,
+    .preset-grid,
+    .type-cards > div,
+    .type-cards #id_assignment_type {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+    .dropzone {
+        flex-wrap: wrap;
+    }
 }
 
 @media (max-width: 620px) {
@@ -759,9 +775,30 @@
 .rail-card,
 .row-item,
 .split-main,
-.split-side {
+.split-side,
+.form-grid,
+.preset-grid,
+.type-cards,
+.dropzone,
+.lesson-sections,
+.table-scroll,
+.ex,
+.panel,
+#assignment-form,
+.form-section,
+.assignment-body,
+.mobile-nav,
+.mobile-nav ul,
+.callout {
     min-width: 0;
     overflow-wrap: break-word;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.mobile-nav {
+    max-width: 100vw;
+    overflow-x: auto;
 }
 
 /* Неделимые токены (URL, пути, фрагменты кода) ломаем жёстко: иначе они
@@ -1110,7 +1147,22 @@ html[data-nav="collapsed"] .app-nav-link:has(.app-nav-count)::after {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--sp-5);
-    align-items: start;
+    align-items: stretch;
+}
+
+.archive-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    height: 100%;
+}
+
+.archive-section .card-head {
+    flex: 0 0 auto;
+}
+
+.archive-section .archive-item:last-child {
+    border-bottom: 0;
 }
 
 .archive-section--wide {
@@ -1127,6 +1179,8 @@ html[data-nav="collapsed"] .app-nav-link:has(.app-nav-count)::after {
     gap: var(--sp-4);
     padding: var(--sp-4) 0;
     border-top: 1px solid var(--border-subtle);
+    min-width: 0;
+    box-sizing: border-box;
 }
 
 .archive-item:first-of-type {
@@ -1153,6 +1207,7 @@ html[data-nav="collapsed"] .app-nav-link:has(.app-nav-count)::after {
 .archive-item__body h3 {
     margin: 0 0 var(--sp-1);
     font-size: var(--fs-14);
+    overflow-wrap: break-word;
 }
 
 .archive-item__actions {
@@ -1173,6 +1228,7 @@ html[data-nav="collapsed"] .app-nav-link:has(.app-nav-count)::after {
 @media (max-width: 720px) {
     .archive-grid {
         grid-template-columns: minmax(0, 1fr);
+        align-items: start;
     }
     .archive-section--wide {
         grid-column: auto;

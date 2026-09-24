@@ -8,7 +8,6 @@
 <section class="hero">
     <div>
         <h1>Консоль преподавателя</h1>
-        <p class="muted mb-0">Одно пространство для проверки работ и управления курсом: блоки, темы, задания, тесты и карточки.</p>
         <div class="row" style="margin-top:16px">
             <a class="btn" href="{% url 'teacher_review_queue' %}">{% icon "check-circle" %}К очереди проверки
                 {% if overview.queue.waiting %}<span class="chip count">{{ overview.queue.waiting }}</span>{% endif %}</a>
@@ -60,14 +59,15 @@
     </div>
 </section>
 
-<div class="home-grid" style="margin-top:20px">
-    <section class="card">
+<div class="home-grid" style="margin-top:20px;align-items:stretch">
+    <section class="card" style="display:flex;flex-direction:column">
         <div class="card-head">
             <h2 class="card-title">{% icon "clock" %}Самые старые работы</h2>
             <a class="btn btn-ghost btn-sm" href="{% url 'teacher_review_queue' %}">{% t "Вся очередь" %}</a>
         </div>
+        <div class="rows" style="flex:1 1 auto;display:flex;flex-direction:column;gap:8px">
         {% for submission in waiting %}
-            <div class="row-item" style="margin-bottom:8px">
+            <div class="row-item">
                 <span class="avatar">{{ submission.student|initials }}</span>
                 <span class="row-main">
                     <a class="row-title" href="{% url 'teacher_submission_review' submission.pk %}">{{ submission.student.get_full_name|default:submission.student.username }}</a>
@@ -82,21 +82,23 @@
                 </span>
             </div>
         {% empty %}
-            <div class="empty">
+            <div class="empty" style="flex:1;display:flex;flex-direction:column;justify-content:center">
                 <div class="empty-icon">{% icon "check-circle" "icon icon-xl" %}</div>
                 <h3>Очередь пуста</h3>
                 <p>Все работы проверены. Можно заняться курсом или аналитикой.</p>
             </div>
         {% endfor %}
+        </div>
     </section>
 
-    <section class="card">
+    <section class="card" style="display:flex;flex-direction:column">
         <div class="card-head">
             <h2 class="card-title">{% icon "pencil" %}Черновики заданий</h2>
             <a class="btn btn-ghost btn-sm" href="{% url 'teacher_curriculum' %}">{% t "Карта курса" %}</a>
         </div>
+        <div class="rows" style="flex:1 1 auto;display:flex;flex-direction:column;gap:8px">
         {% for assignment in drafts %}
-            <div class="row-item" style="margin-bottom:8px">
+            <div class="row-item">
                 <span class="row-main">
                     <a class="row-title" href="{% url 'teacher_assignment_form' assignment.pk %}">{{ assignment.title }}</a>
                     <span class="row-meta">
@@ -113,9 +115,14 @@
                 </span>
             </div>
         {% empty %}
-            <p class="muted small mb-0">Черновиков нет. Новое задание можно собрать из файла с помощью ИИ-помощника или вручную.</p>
+            <div style="flex:1;display:flex;flex-direction:column;justify-content:center">
+                <p class="muted small mb-0">Черновиков нет. Новое задание можно собрать из файла с помощью ИИ-помощника или вручную.</p>
+            </div>
         {% endfor %}
-        <a class="btn btn-secondary btn-sm" href="{% url 'teacher_assignment_new' %}">{% icon "plus" %}{% t "Создать задание" %}</a>
+        </div>
+        <div style="margin-top:12px">
+            <a class="btn btn-secondary btn-sm" href="{% url 'teacher_assignment_new' %}">{% icon "plus" %}{% t "Создать задание" %}</a>
+        </div>
     </section>
 </div>
 

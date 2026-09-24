@@ -16,7 +16,7 @@
 <div class="content-head">
     <div>
         <h1>Вопросы теста</h1>
-        <p class="page-note">Максимум баллов задания пересчитывается автоматически по сумме вопросов: сейчас <strong class="tnum">{{ total_points }}</strong> из {{ questions|length }} вопросов.</p>
+        <p class="tiny muted">Баллов: <strong class="tnum">{{ total_points }}</strong> · {{ questions|length }} вопросов</p>
     </div>
     <div class="row">
         <a class="btn btn-secondary" href="{% url 'teacher_assignment_preview' assignment.pk %}?answers=1">{% icon "eye" %}{% t "Предпросмотр с ответами" %}</a>

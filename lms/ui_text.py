@@ -188,6 +188,21 @@ TEXTS_EN = {
     "С трудом": "Hard",
     "Помню": "Remembered",
     "Не помню": "Forgotten",
+    # Курс целиком и счётчики
+    "Классы": "Course",
+    "Курс целиком": "Whole course",
+    "Классов": "Classes",
+    "Тем": "Topics",
+    "Заданий": "Assignments",
+    "С карточками": "With flashcards",
+    "Черновиков": "Drafts",
+    "Ждут проверки": "Awaiting review",
+    "Классов:": "Classes:",
+    "Тем:": "Topics:",
+    "Заданий:": "Assignments:",
+    "С карточками:": "With flashcards:",
+    "Черновиков:": "Drafts:",
+    "Ждут проверки:": "Awaiting review:",
 }
 
 

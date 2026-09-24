@@ -2,17 +2,17 @@
    Правило: пастель = фон/тон, глубокий тон = текст и интерактив (контраст WCAG AA просчитан). */
 
 :root {
-    /* Поверхности */
-    --canvas: #faf9f6;
-    --canvas-alt: #f5f3ef;
+    /* Поверхности — осветлены на ~40% к белому, меньше зелёного */
+    --canvas: #fdfdfb;
+    --canvas-alt: #fbfaf8;
     --surface: #ffffff;
-    --surface-sunken: #f7f6f2;
+    --surface-sunken: #fcfcfa;
     --surface-raised: #ffffff;
 
-    /* Линии */
-    --border-subtle: #f0ede6;
-    --border: #e7e3db;
-    --border-strong: #d9d4ca;
+    /* Линии — светлее и нейтральнее */
+    --border-subtle: #f3f1ec;
+    --border: #ece9e2;
+    --border-strong: #ddd9d0;
 
     /* Текст. Все три ступени проходят WCAG AA (4.5:1) для мелкого текста на любой
        светлой поверхности проекта, включая тинты статусов — axe проверяет это в CI.
@@ -24,12 +24,12 @@
     --link: #35614a;          /* 6.7:1 на canvas */
     --link-hover: #264634;
 
-    /* Акцент — шалфей */
-    --accent-50: #f3f7f3;
-    --accent-100: #e4ede5;
-    --accent-200: #cbdccd;
-    --accent-300: #a6c3aa;
-    --accent-400: #7fa786;
+    /* Акцент — шалфей, осветлён: меньше зелёного, ближе к белому */
+    --accent-50: #f7faf7;
+    --accent-100: #eef4ef;
+    --accent-200: #d9e6da;
+    --accent-300: #b6cdb8;
+    --accent-400: #8eb393;
     --accent-500: #5c8a66;
     --accent-600: #466e51;
     --accent-700: #3f5a47;    /* чернила акцента, 7.6:1 с белым */
@@ -62,37 +62,37 @@
     --turquoise-ink: var(--turquoise-700);
     --turquoise-bg: var(--turquoise-50);
 
-    /* Обложки карточек курса — пастельные градиенты для разделов */
-    --cover-1: linear-gradient(135deg, #e8f8f7 0%, #d4ede5 45%, #f6efe4 100%);
-    --cover-2: linear-gradient(135deg, #eeedfb 0%, #d9d7f3 50%, #e8f8f7 100%);
-    --cover-3: linear-gradient(135deg, #f6efe4 0%, #ead9c0 50%, #fbeae7 100%);
-    --cover-4: linear-gradient(135deg, #e7f2ea 0%, #cbdccd 50%, #e8f8f7 100%);
-    --cover-5: linear-gradient(135deg, #fbf1dc 0%, #eedcb4 50%, #f6efe4 100%);
-    --cover-6: linear-gradient(135deg, #fbeae7 0%, #f0d2cb 50%, #eeedfb 100%);
-    --cover-7: linear-gradient(135deg, #e7f1f8 0%, #c9dcef 50%, #eeedfb 100%);
-    --cover-8: linear-gradient(135deg, #faf9f6 0%, #f0ede6 50%, #e4ede5 100%);
+    /* Обложки — осветлены, ближе к белому, меньше зелёного */
+    --cover-1: linear-gradient(135deg, #f2fbf9 0%, #e6f3ea 45%, #fdf6ec 100%);
+    --cover-2: linear-gradient(135deg, #f3f1fe 0%, #e6e3f7 50%, #f2fbf9 100%);
+    --cover-3: linear-gradient(135deg, #fdf6ec 0%, #f0e3cc 50%, #fdf0ed 100%);
+    --cover-4: linear-gradient(135deg, #f1f7f2 0%, #dde9df 50%, #f2fbf9 100%);
+    --cover-5: linear-gradient(135deg, #fdf6e3 0%, #f3e6c2 50%, #fdf6ec 100%);
+    --cover-6: linear-gradient(135deg, #fdf0ed 0%, #f5ddd8 50%, #f3f1fe 100%);
+    --cover-7: linear-gradient(135deg, #f0f5fb 0%, #dbe7f5 50%, #f3f1fe 100%);
+    --cover-8: linear-gradient(135deg, #fdfdfb 0%, #f5f2eb 50%, #eef4ef 100%);
 
-    /* Данные и визуализация — перивинкл */
-    --info-bg: #eeedfb;
+    /* Данные и визуализация — перивинкл, осветлён */
+    --info-bg: #f3f1fe;
     --info-ink: #4c4a8a;      /* 6.8:1 на info-bg */
-    --info-border: #d9d7f3;
+    --info-border: #e2dff6;
 
-    /* Семантика: tint-фон + ink-текст + border */
-    --success-bg: #e7f2ea;
+    /* Семантика: tint-фон + ink-текст + border — светлее */
+    --success-bg: #eef6f0;
     --success-ink: #2f6b45;   /* 5.5:1 */
-    --success-border: #cfe4d5;
+    --success-border: #d9e9dd;
 
-    --warning-bg: #fbf1dc;
+    --warning-bg: #fdf6e3;
     --warning-ink: #7a5c10;   /* 5.6:1 */
-    --warning-border: #eedcb4;
+    --warning-border: #f2e4c0;
 
-    --danger-bg: #fbeae7;
-    --danger-ink: #a03a2c;    /* 5.8:1 */
-    --danger-border: #f0d2cb;
+    --danger-bg: #fdf0ed;
+    --danger-ink: #a03a2c;   /* 5.8:1 */
+    --danger-border: #f4ddd8;
 
-    --neutral-bg: #efede8;
+    --neutral-bg: #f5f3ef;
     --neutral-ink: #5b564e;
-    --neutral-border: #e0dcd3;
+    --neutral-border: #ece9e2;
 
     /* Статусы работ */
     --st-new-bg: var(--neutral-bg);

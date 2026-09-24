@@ -503,6 +503,120 @@ def _place_topic(topic, before):
     return index
 
 
+def _generate_unique_topic_slug(block, base_slug):
+    """Сгенерировать уникальный slug темы внутри блока."""
+    base = (base_slug or "tema").strip()[:80] or "tema"
+    slug = base
+    counter = 2
+    while Topic.objects.filter(block=block, slug=slug).exists():
+        suffix = f"-{counter}"
+        slug = (
+            (base[: 80 - len(suffix)] + suffix) if len(base) + len(suffix) > 80 else base + suffix
+        )
+        counter += 1
+        if counter > 1000:
+            slug = f"{base[:70]}-{counter}"
+            break
+    return slug
+
+
+def _clone_assignment_full(source, target_topic, order=None):
+    """Клонировать задание со всеми вложениями, карточками, вопросами."""
+    from .models import AssignmentAttachment, Choice, Flashcard, Question
+
+    new_order = order if order is not None else source.order
+    copy = Assignment(
+        topic=target_topic,
+        title=source.title,
+        description=source.description,
+        assignment_type=source.assignment_type,
+        material_file=source.material_file,
+        deadline=source.deadline,
+        max_points=source.max_points,
+        max_tries=source.max_tries,
+        allow_retake=source.allow_retake,
+        exam_mode=source.exam_mode,
+        recording_limit_seconds=source.recording_limit_seconds,
+        order=new_order,
+        is_active=source.is_active,
+        status=Assignment.Publication.DRAFT,
+        group=source.group,
+        publish_at=None,
+    )
+    copy.save()
+    copy.skills.set(source.skills.all())
+    copy.assigned_students.set(source.assigned_students.all())
+    # attachments
+    for att in source.attachments.order_by("order", "pk"):
+        AssignmentAttachment.objects.create(assignment=copy, file=att.file, order=att.order)
+    # flashcards
+    for card in source.cards.order_by("order", "pk"):
+        Flashcard.objects.create(
+            assignment=copy,
+            front=card.front,
+            back=card.back,
+            example=card.example,
+            order=card.order,
+        )
+    # questions
+    for question in source.questions.prefetch_related("choices").order_by("order", "pk"):
+        new_q = Question.objects.create(
+            assignment=copy,
+            kind=question.kind,
+            text=question.text,
+            explanation=question.explanation,
+            points=question.points,
+            order=question.order,
+            recording_limit_seconds=question.recording_limit_seconds,
+        )
+        Choice.objects.bulk_create(
+            [
+                Choice(
+                    question=new_q,
+                    text=choice.text,
+                    match_text=choice.match_text,
+                    is_correct=choice.is_correct,
+                    order=choice.order,
+                )
+                for choice in question.choices.all()
+            ]
+        )
+    return copy
+
+
+def _clone_topic_to_block(source_topic, target_block, before=None):
+    """Скопировать тему в другой блок вместе со всеми заданиями (оригинал не удаляется)."""
+    with transaction.atomic():
+        # order
+        max_order = target_block.topics.aggregate(m=Max("order"))["m"] or 0
+        # slug
+        new_slug = _generate_unique_topic_slug(target_block, source_topic.slug)
+        # если в целевом блоке уже есть тема с таким же title, добавим (копия)
+        title = source_topic.title
+        if target_block.topics.filter(title=title).exists():
+            title = f"{title} (копия)"
+            if len(title) > 200:
+                title = title[:200]
+        new_topic = Topic.objects.create(
+            block=target_block,
+            title=title,
+            slug=new_slug,
+            description=source_topic.description,
+            order=max_order + 1,
+            is_active=source_topic.is_active,
+        )
+        # clone assignments
+        for assignment in source_topic.assignments.order_by("order", "pk"):
+            _clone_assignment_full(assignment, new_topic)
+        # если указан before, ставим копию перед ним
+        if before:
+            _place_topic(new_topic, before)
+        else:
+            # перенумеровать чтобы порядок был последовательным
+            _renumber(list(target_block.topics.order_by("order", "pk")), force_pks={new_topic.pk})
+        return new_topic
+
+
 def _quick_outcome(request, done, success, failure):
     """Ответ быстрого действия: JSON для fetch, сообщение+редирект без JS."""
     if _wants_json(request):
@@ -782,12 +896,46 @@ def _flat_presets(groups):
 @require_http_methods(["GET", "POST"])
 def block_form(request, pk=None):
     block = get_object_or_404(Block, pk=pk) if pk else None
+    # Копирование темы из другого класса прямо в форме редактирования класса
+    if request.method == "POST" and request.POST.get("copy_topic_id"):
+        if not block:
+            messages.error(request, "Сначала сохраните класс, затем копируйте темы.")
+            return redirect("teacher_block_new")
+        copy_topic_id = request.POST.get("copy_topic_id")
+        if copy_topic_id.isdigit():
+            source_topic = get_object_or_404(
+                Topic.objects.select_related("block"), pk=int(copy_topic_id)
+            )
+            if source_topic.block_id == block.pk:
+                messages.info(request, f"Тема «{source_topic.title}» уже в этом классе.")
+            else:
+                new_topic = _clone_topic_to_block(source_topic, block)
+                messages.success(
+                    request,
+                    f"Тема «{source_topic.title}» скопирована в класс «{block.name}» как «{new_topic.title}» "
+                    f"({new_topic.assignments.count()} заданий, черновики).",
+                )
+                return redirect("teacher_block_edit", pk=block.pk)
     form = BlockForm(request.POST or None, instance=block)
     if request.method == "POST" and form.is_valid():
         instance = form.save()
         messages.success(request, f"Блок сохранён: {instance.name}")
         return redirect("teacher_curriculum")
     groups = block_suggestion_groups()
+    # Темы из других классов для быстрого копирования
+    other_topics = []
+    all_blocks = []
+    if block:
+        other_topics = (
+            Topic.objects.filter(is_active=True)
+            .exclude(block=block)
+            .select_related("block")
+            .annotate(assignment_count=Count("assignments"))
+            .order_by("block__order", "order", "title")[:100]
+        )
+        all_blocks = Block.objects.exclude(pk=block.pk).order_by("order", "name")
+    else:
+        all_blocks = Block.objects.order_by("order", "name")
     return render(
         request,
         "lms/teacher_block_form.html",
@@ -796,6 +944,8 @@ def block_form(request, pk=None):
             "block": block,
             "suggestion_groups": groups,
             "suggestion_payload": _flat_presets(groups),
+            "other_topics": other_topics,
+            "all_blocks": all_blocks,
             "workspace": "curriculum",
         },
     )
@@ -865,11 +1015,31 @@ def topic_delete(request, pk):
 @teacher_required
 @require_POST
 def topic_move(request, pk):
-    """Переместить тему внутри блока: точное место (перетаскивание) или шаг ↑/↓."""
+    """Переместить тему внутри блока или скопировать в другой блок (дрэг между классами с копированием)."""
     topic = get_object_or_404(Topic.objects.select_related("block"), pk=pk)
+    # Копирование между классами: если target_block отличается — создаём копию, оригинал не удаляем
+    target_block_id = request.POST.get("target_block") or request.POST.get("block")
+    if target_block_id and target_block_id.isdigit():
+        target_block = get_object_or_404(Block, pk=int(target_block_id))
+        if target_block.pk != topic.block_id:
+            before = None
+            if request.POST.get("before") and request.POST.get("before").isdigit():
+                # before принадлежит целевому блоку
+                before = Topic.objects.filter(
+                    pk=int(request.POST["before"]), block=target_block
+                ).first()
+            new_topic = _clone_topic_to_block(topic, target_block, before=before)
+            msg = f"Тема скопирована в класс «{target_block.name}»: {new_topic.title} ({new_topic.assignments.count()} заданий)"
+            logger.info(
+                "topic_copy src=%s -> block=%s new=%s", topic.pk, target_block.pk, new_topic.pk
+            )
+            return _quick_outcome(request, True, msg, "")
+        # если target_block совпадает с исходным — это обычный reorder внутри блока (fallthrough)
+
     if "before" in request.POST:
         before = None
         if request.POST.get("before"):
+            # before может быть из того же блока (reorder) или уже обработан выше как copy
             before = get_object_or_404(Topic, pk=request.POST["before"], block=topic.block)
         _place_topic(topic, before)
         return _quick_outcome(request, True, f"Порядок темы изменён: {topic.title}", "")
@@ -880,6 +1050,31 @@ def topic_move(request, pk):
         f"Порядок темы изменён: {topic.title}",
         "Крайняя тема в блоке: перемещать некуда.",
     )
+
+
+@teacher_required
+@require_POST
+def topic_copy(request, pk):
+    """Скопировать тему в другой класс: оригинал остаётся, копия — черновиками."""
+    topic = get_object_or_404(Topic.objects.select_related("block"), pk=pk)
+    target_block_id = request.POST.get("target_block") or request.POST.get("block")
+    if not target_block_id or not str(target_block_id).isdigit():
+        messages.error(request, "Не выбран целевой класс для копирования темы.")
+        return redirect(request.POST.get("next") or "teacher_curriculum")
+    target_block = get_object_or_404(Block, pk=int(target_block_id))
+    before = None
+    if request.POST.get("before") and str(request.POST["before"]).isdigit():
+        before = Topic.objects.filter(pk=int(request.POST["before"]), block=target_block).first()
+    new_topic = _clone_topic_to_block(topic, target_block, before=before)
+    messages.success(
+        request,
+        f"Тема «{topic.title}» скопирована в класс «{target_block.name}» как «{new_topic.title}». "
+        f"Скопировано заданий: {new_topic.assignments.count()}. Копии — черновики.",
+    )
+    nxt = request.POST.get("next")
+    if nxt:
+        return redirect(nxt)
+    return redirect("teacher_curriculum")
 
 
 @teacher_required
@@ -912,8 +1107,10 @@ def assignment_form(request, pk=None):
             if single:
                 new_files = [single]
         if new_files:
-            from .models import AssignmentAttachment
             from django.db.models import Max
+
+            from .models import AssignmentAttachment
+
             last_order = instance.attachments.aggregate(m=Max("order"))["m"] or 0
             for idx, f in enumerate(new_files, start=1):
                 AssignmentAttachment.objects.create(
@@ -923,6 +1120,7 @@ def assignment_form(request, pk=None):
         delete_ids = request.POST.getlist("delete_attachments")
         if delete_ids:
             from .models import AssignmentAttachment
+
             instance.attachments.filter(pk__in=[i for i in delete_ids if i.isdigit()]).delete()
 
         messages.success(
@@ -1039,6 +1237,82 @@ def assignment_rename(request, pk):
         return JsonResponse({"ok": True, "title": assignment.title})
     messages.success(request, f"Задание переименовано: {assignment.title}")
     return redirect(request.POST.get("next") or "teacher_curriculum")
+
+
+@teacher_required
+@require_POST
+def assignment_quick_edit(request, pk):
+    """Быстрое редактирование задания прямо в доске темы: заголовок, описание, статус, порядок + файлы."""
+    assignment = get_object_or_404(Assignment, pk=pk)
+    title = request.POST.get("title", "").strip()
+    description = request.POST.get("description", "")
+    status_val = request.POST.get("status", "")
+    order_val = request.POST.get("order", "")
+    changed = []
+    if title:
+        if len(title) > 200:
+            title = title[:200]
+        if assignment.title != title:
+            assignment.title = title
+            changed.append("title")
+    if description != "" and assignment.description != description:
+        assignment.description = description
+        changed.append("description")
+    if status_val in Assignment.Publication.values:
+        if assignment.status != status_val:
+            assignment.status = status_val
+            changed.append("status")
+            if (
+                status_val == Assignment.Publication.PUBLISHED
+                and assignment.publish_at
+                and assignment.publish_at > timezone.now()
+            ):
+                assignment.publish_at = None
+    if order_val:
+        try:
+            order_int = int(order_val)
+            if assignment.order != order_int:
+                assignment.order = order_int
+                changed.append("order")
+        except (ValueError, TypeError):
+            pass
+    if changed:
+        assignment.save(update_fields=changed + ["updated_at"])
+    # attachments: new files
+    new_files = request.FILES.getlist("new_attachments")
+    if new_files:
+        from django.db.models import Max
+
+        from .models import AssignmentAttachment
+
+        last_order = assignment.attachments.aggregate(m=Max("order"))["m"] or 0
+        for idx, f in enumerate(new_files, start=1):
+            AssignmentAttachment.objects.create(
+                assignment=assignment, file=f, order=last_order + idx
+            )
+        changed.append("attachments")
+    # delete marked
+    delete_ids = request.POST.getlist("delete_attachments")
+    if delete_ids:
+        assignment.attachments.filter(pk__in=[i for i in delete_ids if i.isdigit()]).delete()
+    # material file clear?
+    if request.POST.get("material_file-clear") == "on":
+        if assignment.material_file:
+            assignment.material_file.delete(save=False)
+            assignment.material_file = ""
+            assignment.save(update_fields=["material_file", "updated_at"])
+    # material file new?
+    if request.FILES.get("material_file"):
+        assignment.material_file = request.FILES["material_file"]
+        assignment.save(update_fields=["material_file", "updated_at"])
+    if changed:
+        messages.success(request, f"Задание обновлено: {assignment.title}")
+    else:
+        messages.info(request, "Изменений нет.")
+    nxt = request.POST.get("next") or request.GET.get("next")
+    if nxt:
+        return redirect(nxt)
+    return redirect("teacher_topic_board", pk=assignment.topic_id)
 
 
 @teacher_required
@@ -1186,7 +1460,6 @@ def assignment_preview(request, pk):
     )
 
 
-
 @teacher_required
 @require_GET
 def topic_board(request, pk):
@@ -1203,12 +1476,6 @@ def topic_board(request, pk):
         .order_by("order", "pk")
     )
     # Собираем навыки присутствующие в теме
-    from .models import Skill
-    skill_ids = set()
-    for a in assignments:
-        for s in a.skills.all():
-            skill_ids.add(s.pk)
-    all_skills = list(Skill.objects.filter(pk__in=skill_ids).order_by("order", "name")) if skill_ids else []
     # Для фильтра
     selected_skill = request.GET.get("skill", "").strip().lower()
     if selected_skill:
@@ -1217,17 +1484,37 @@ def topic_board(request, pk):
             slugs = [s.slug for s in a.skills.all()]
             kinds = [s.kind for s in a.skills.all()]
             # match by slug or kind or english name lower
-            if selected_skill in slugs or selected_skill in kinds or any(selected_skill == (s.name or "").lower() for s in a.skills.all()):
+            if (
+                selected_skill in slugs
+                or selected_skill in kinds
+                or any(selected_skill == (s.name or "").lower() for s in a.skills.all())
+            ):
                 filtered.append(a)
             # also match english names
-            eng_map = {"reading": "reading", "listening": "listening", "speaking": "speaking", "writing": "writing", "grammar": "grammar", "vocabulary": "vocabulary"}
+            eng_map = {
+                "reading": "reading",
+                "listening": "listening",
+                "speaking": "speaking",
+                "writing": "writing",
+                "grammar": "grammar",
+                "vocabulary": "vocabulary",
+            }
             if selected_skill in eng_map:
                 if eng_map[selected_skill] in kinds or eng_map[selected_skill] in slugs:
                     if a not in filtered:
                         filtered.append(a)
         # if filter by english but no match via slug, try kind
-        if not filtered and selected_skill in ["reading","listening","speaking","writing","grammar","vocabulary"]:
-            filtered = [a for a in assignments if any(s.kind == selected_skill for s in a.skills.all())]
+        if not filtered and selected_skill in [
+            "reading",
+            "listening",
+            "speaking",
+            "writing",
+            "grammar",
+            "vocabulary",
+        ]:
+            filtered = [
+                a for a in assignments if any(s.kind == selected_skill for s in a.skills.all())
+            ]
         assignments_filtered = filtered
     else:
         assignments_filtered = assignments
@@ -1235,12 +1522,54 @@ def topic_board(request, pk):
     # Полный список навыков для меню (английские названия)
     skill_menu = [
         {"slug": "all", "label": "All", "count": len(assignments), "kind": "all"},
-        {"slug": "reading", "label": "Reading", "count": len([a for a in assignments if any(s.kind == "reading" for s in a.skills.all())]), "kind": "reading"},
-        {"slug": "listening", "label": "Listening", "count": len([a for a in assignments if any(s.kind == "listening" for s in a.skills.all())]), "kind": "listening"},
-        {"slug": "speaking", "label": "Speaking", "count": len([a for a in assignments if any(s.kind == "speaking" for s in a.skills.all())]), "kind": "speaking"},
-        {"slug": "writing", "label": "Writing", "count": len([a for a in assignments if any(s.kind == "writing" for s in a.skills.all())]), "kind": "writing"},
-        {"slug": "grammar", "label": "Grammar", "count": len([a for a in assignments if any(s.kind == "grammar" for s in a.skills.all())]), "kind": "grammar"},
-        {"slug": "vocabulary", "label": "Vocabulary", "count": len([a for a in assignments if any(s.kind == "vocabulary" for s in a.skills.all())]), "kind": "vocabulary"},
+        {
+            "slug": "reading",
+            "label": "Reading",
+            "count": len(
+                [a for a in assignments if any(s.kind == "reading" for s in a.skills.all())]
+            ),
+            "kind": "reading",
+        },
+        {
+            "slug": "listening",
+            "label": "Listening",
+            "count": len(
+                [a for a in assignments if any(s.kind == "listening" for s in a.skills.all())]
+            ),
+            "kind": "listening",
+        },
+        {
+            "slug": "speaking",
+            "label": "Speaking",
+            "count": len(
+                [a for a in assignments if any(s.kind == "speaking" for s in a.skills.all())]
+            ),
+            "kind": "speaking",
+        },
+        {
+            "slug": "writing",
+            "label": "Writing",
+            "count": len(
+                [a for a in assignments if any(s.kind == "writing" for s in a.skills.all())]
+            ),
+            "kind": "writing",
+        },
+        {
+            "slug": "grammar",
+            "label": "Grammar",
+            "count": len(
+                [a for a in assignments if any(s.kind == "grammar" for s in a.skills.all())]
+            ),
+            "kind": "grammar",
+        },
+        {
+            "slug": "vocabulary",
+            "label": "Vocabulary",
+            "count": len(
+                [a for a in assignments if any(s.kind == "vocabulary" for s in a.skills.all())]
+            ),
+            "kind": "vocabulary",
+        },
     ]
     # Only show skills that have at least 1 assignment, plus All
     skill_menu_visible = [item for item in skill_menu if item["slug"] == "all" or item["count"] > 0]
@@ -1265,6 +1594,7 @@ def topic_board(request, pk):
 def attachment_delete(request, pk):
     """Удалить одно вложение задания."""
     from .models import AssignmentAttachment
+
     att = get_object_or_404(AssignmentAttachment, pk=pk)
     assignment_id = att.assignment_id
     topic_id = att.assignment.topic_id
@@ -1288,6 +1618,7 @@ def ai_extract_text(request):
         return JsonResponse({"ok": False, "error": "Файл не передан."}, status=400)
     try:
         from . import ai
+
         blob = upload.read()
         filename = upload.name
         text = ai.extract_text(filename, blob)
@@ -1301,7 +1632,13 @@ def ai_extract_text(request):
                         prompt = "Извлеки весь текст с картинки дословно, сохрани форматирование. Верни только текст."
                         payload = ai._provider_material(
                             spec,
-                            ai.build_prompt("", prompt=prompt, target="assignment", filename=filename, kind=ai.upload_kind(filename)),
+                            ai.build_prompt(
+                                "",
+                                prompt=prompt,
+                                target="assignment",
+                                filename=filename,
+                                kind=ai.upload_kind(filename),
+                            ),
                             filename=filename,
                             blob=blob,
                         )
@@ -1318,16 +1655,21 @@ def ai_extract_text(request):
                 except Exception as e:
                     # Логируем но не падаем
                     import logging
+
                     logging.getLogger("lms.ai").warning("extract_image_failed %s", e)
         if not text:
-            return JsonResponse({"ok": False, "error": "Не удалось извлечь текст. Попробуйте другой файл или вставьте вручную."}, status=400)
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "error": "Не удалось извлечь текст. Попробуйте другой файл или вставьте вручную.",
+                },
+                status=400,
+            )
         # Ограничиваем
         text = text[:10000]
         return JsonResponse({"ok": True, "text": text})
     except Exception as exc:
         return JsonResponse({"ok": False, "error": str(exc)}, status=400)
-
-
 
 
 @teacher_required

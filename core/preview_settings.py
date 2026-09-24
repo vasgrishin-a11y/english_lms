@@ -1,5 +1,5 @@
 """Preview settings for E2B iframe demo."""
-import os
+
 from .settings import *  # noqa
 
 # Allow iframe embedding in Arena preview
