@@ -137,7 +137,7 @@
     all.checked = count === boxes.length;
     all.indeterminate = count > 0 && count < boxes.length;
     if(submit) submit.disabled = count === 0;
-    if(note) note.textContent = count ? 'Выбрано тем: ' + count : 'Выберите темы для копирования.';
+    if(note) note.textContent = 'Выбрано тем: ' + count;
   }
   all.addEventListener('change', () => { boxes.forEach(box => box.checked = all.checked); update(); });
   boxes.forEach(box => box.addEventListener('change', update));
