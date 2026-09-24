@@ -324,6 +324,15 @@ class MultipleFileInput(forms.FileInput):
     allow_multiple_selected = True
 
 
+class MaterialFileInput(forms.ClearableFileInput):
+    clear_checkbox_label = "Удалить основной файл после сохранения"
+
+    def get_context(self, name, value, attrs):
+        context = super().get_context(name, value, attrs)
+        context["widget"]["checkbox_id"] = context["widget"]["attrs"].get("id", name) + "-clear"
+        return context
+
+
 class AssignmentForm(forms.ModelForm):
     assigned_students = forms.ModelMultipleChoiceField(
         queryset=None,
@@ -367,6 +376,7 @@ class AssignmentForm(forms.ModelForm):
             "is_active",
         ]
         widgets = {
+            "material_file": MaterialFileInput(),
             "title": forms.TextInput(
                 attrs={"placeholder": "Например: Опишите свою обычную субботу"}
             ),
@@ -508,6 +518,7 @@ class AssignmentQuickForm(forms.ModelForm):
             "material_file",
         ]
         widgets = {
+            "material_file": MaterialFileInput(),
             "description": forms.Textarea(attrs={"rows": 4}),
             "deadline": _datetime_widget(),
             "publish_at": _datetime_widget(),

@@ -896,7 +896,7 @@ def _json_mode(spec):
     return bool(configured)
 
 
-def _provider_material(spec, prompt_text, *, filename="", blob=b""):
+def _provider_material(spec, prompt_text, *, filename="", blob=b"", raw_text=False):
     """Отправить материал локальной модели (Ollama, LM Studio, свой шлюз).
 
     Единый транспорт: ``POST {endpoint}/chat/completions``. Фото уходит
@@ -929,7 +929,7 @@ def _provider_material(spec, prompt_text, *, filename="", blob=b""):
         "messages": [{"role": "user", "content": content}],
         "temperature": 0.2,
     }
-    if _json_mode(spec):
+    if not raw_text and _json_mode(spec):
         body["response_format"] = {"type": "json_object"}
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
     if ai_api_key():  # локальные Ollama и LM Studio ключа не требуют
@@ -940,7 +940,8 @@ def _provider_material(spec, prompt_text, *, filename="", blob=b""):
         headers=headers,
         method="POST",
     )
-    return _json_from_text(_chat_text(_http_json(request, provider=spec["label"])))
+    text = _chat_text(_http_json(request, provider=spec["label"]))
+    return text if raw_text else _json_from_text(text)
 
 
 # ── Нормализация и валидация ──────────────────────────────────────────────

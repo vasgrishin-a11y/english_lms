@@ -927,7 +927,9 @@ def _card_set(key, title, subtitle, cards, student, now, assignment=None):
 def regrade_assignment(assignment):
     """Recalculate automatic marks without rewriting submitted answers/manual grades."""
     questions = {q.pk: q for q in assignment.questions.prefetch_related("choices")}
-    for response in QuestionResponse.objects.select_for_update().filter(assignment=assignment):
+    for response in QuestionResponse.objects.select_for_update(of=("self",)).filter(
+        assignment=assignment
+    ):
         question = questions.get(response.question_id)
         if question is None or question.is_manual or not response.tries:
             continue
@@ -946,7 +948,7 @@ def regrade_assignment(assignment):
             response.state = QuestionResponse.State.OPEN
         response.save(update_fields=["tries", "points", "state", "updated_at"])
 
-    for attempt in QuizAttempt.objects.select_for_update().filter(
+    for attempt in QuizAttempt.objects.select_for_update(of=("self",)).filter(
         submission__assignment=assignment
     ):
         details = dict(attempt.answers)

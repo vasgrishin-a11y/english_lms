@@ -897,26 +897,40 @@ def _flat_presets(groups):
 @require_http_methods(["GET", "POST"])
 def block_form(request, pk=None):
     block = get_object_or_404(Block, pk=pk) if pk else None
-    # Копирование темы из другого класса прямо в форме редактирования класса
-    if request.method == "POST" and request.POST.get("copy_topic_id"):
+    # Accept the legacy single-copy field as well as checkbox selections.
+    if request.method == "POST" and (
+        request.POST.get("copy_topics") or request.POST.get("copy_topic_id")
+    ):
         if not block:
             messages.error(request, "Сначала сохраните класс, затем копируйте темы.")
             return redirect("teacher_block_new")
-        copy_topic_id = request.POST.get("copy_topic_id")
-        if copy_topic_id.isdigit():
-            source_topic = get_object_or_404(
-                Topic.objects.select_related("block"), pk=int(copy_topic_id)
-            )
-            if source_topic.block_id == block.pk:
-                messages.info(request, f"Тема «{source_topic.title}» уже в этом классе.")
-            else:
-                new_topic = _clone_topic_to_block(source_topic, block)
-                messages.success(
-                    request,
-                    f"Тема «{source_topic.title}» скопирована в класс «{block.name}» как «{new_topic.title}» "
-                    f"({new_topic.assignments.count()} заданий, черновики).",
+        ids = request.POST.getlist("copy_topic_ids") or request.POST.getlist("copy_topic_id")
+        if not ids:
+            messages.error(request, "Выберите хотя бы одну тему.")
+        elif len(ids) > 100 or any(not value.isdigit() for value in ids):
+            messages.error(request, "Выберите не более 100 тем из списка.")
+        else:
+            ids = set(map(int, ids))
+            with transaction.atomic():
+                Block.objects.select_for_update().get(pk=block.pk)
+                sources = list(
+                    Topic.objects.filter(pk__in=ids, is_active=True)
+                    .exclude(block=block)
+                    .select_related("block")
+                    .order_by("block__order", "order", "pk")
                 )
-                return redirect("teacher_block_edit", pk=block.pk)
+                if len(sources) != len(ids):
+                    messages.error(
+                        request, "Список тем изменился. Выберите темы из других классов заново."
+                    )
+                else:
+                    for source in sources:
+                        _clone_topic_to_block(source, block)
+                    messages.success(
+                        request,
+                        f"Скопировано тем: {len(sources)}. Задания сохранены как черновики.",
+                    )
+        return redirect("teacher_block_edit", pk=block.pk)
     form = BlockForm(request.POST or None, instance=block)
     if request.method == "POST" and form.is_valid():
         instance = form.save()
@@ -1606,63 +1620,57 @@ def ai_extract_text(request):
     Принимает файл, извлекает текст офлайн (docx/xlsx/pdf/txt) или через vision-модель если доступна,
     возвращает JSON с текстом.
     """
-    upload = request.FILES.get("file")
-    if not upload:
-        return JsonResponse({"ok": False, "error": "Файл не передан."}, status=400)
-    try:
-        from . import ai
+    from . import ai
+    from .models import AssignmentAttachment
+    from .validators import validate_upload
 
-        blob = upload.read()
+    for field in ("attachment_id", "material_assignment_id"):
+        if request.POST.get(field) and not request.POST[field].isdigit():
+            return JsonResponse({"ok": False, "error": "Некорректный файл."}, status=400)
+    upload = request.FILES.get("file")
+    if not upload and request.POST.get("attachment_id"):
+        upload = get_object_or_404(AssignmentAttachment, pk=request.POST["attachment_id"]).file
+    if not upload and request.POST.get("material_assignment_id"):
+        upload = get_object_or_404(
+            Assignment, pk=request.POST["material_assignment_id"]
+        ).material_file
+    if not upload:
+        return JsonResponse({"ok": False, "error": "Выберите файл для распознавания."}, status=400)
+    try:
+        if upload.size > ai.max_upload_bytes():
+            raise ValidationError("Файл слишком большой для распознавания.")
+        validate_upload(upload)
+        upload.open("rb")
+        blob = upload.read(ai.max_upload_bytes() + 1)
+        upload.close()
         filename = upload.name
         text = ai.extract_text(filename, blob)
-        if not text:
-            # Если это картинка и есть online модель с vision — пробуем через провайдера
-            if ai.ai_mode() == "online":
-                try:
-                    spec = ai.provider_spec()
-                    if "image" in ai.provider_uploads(spec):
-                        # Собираем промпт для OCR
-                        prompt = "Извлеки весь текст с картинки дословно, сохрани форматирование. Верни только текст."
-                        payload = ai._provider_material(
-                            spec,
-                            ai.build_prompt(
-                                "",
-                                prompt=prompt,
-                                target="assignment",
-                                filename=filename,
-                                kind=ai.upload_kind(filename),
-                            ),
-                            filename=filename,
-                            blob=blob,
-                        )
-                        # Если модель вернула структуру, берем описание первого задания
-                        if payload.get("blocks"):
-                            first_block = payload["blocks"][0]
-                            if first_block.get("topics"):
-                                first_topic = first_block["topics"][0]
-                                if first_topic.get("assignments"):
-                                    text = first_topic["assignments"][0].get("description", "")
-                        if not text:
-                            # fallback: попробуем взять title + description
-                            text = payload.get("title", "")
-                except Exception as e:
-                    # Логируем но не падаем
-                    import logging
-
-                    logging.getLogger("lms.ai").warning("extract_image_failed %s", e)
-        if not text:
-            return JsonResponse(
-                {
-                    "ok": False,
-                    "error": "Не удалось извлечь текст. Попробуйте другой файл или вставьте вручную.",
-                },
-                status=400,
+        if not text and ai.upload_kind(filename) == "image":
+            spec = ai.provider_spec()
+            if ai.ai_mode() != "online" or "image" not in ai.provider_uploads(spec):
+                raise ai.AiError(
+                    "Для распознавания картинки подключите ИИ-модель с поддержкой изображений."
+                )
+            text = ai._provider_material(
+                spec,
+                "Перепиши весь видимый текст изображения дословно, сохраняя абзацы. "
+                "Не решай задания, не добавляй пояснений или новых заданий. Верни только распознанный текст.",
+                filename=filename,
+                blob=blob,
+                raw_text=True,
             )
-        # Ограничиваем
-        text = text[:10000]
-        return JsonResponse({"ok": True, "text": text})
-    except Exception as exc:
-        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+        if not text.strip():
+            raise ai.AiError(
+                "Не удалось извлечь текст. Попробуйте более чёткое изображение или вставьте текст вручную."
+            )
+        return JsonResponse({"ok": True, "text": text[:10000]})
+    except (ValidationError, ai.AiError) as exc:
+        error = " ".join(exc.messages) if isinstance(exc, ValidationError) else str(exc)
+        return JsonResponse({"ok": False, "error": error}, status=400)
+    except (FileNotFoundError, OSError):
+        return JsonResponse(
+            {"ok": False, "error": "Файл недоступен. Загрузите его повторно."}, status=400
+        )
 
 
 @teacher_required

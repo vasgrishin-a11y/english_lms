@@ -1332,7 +1332,7 @@
         clearBtn.hidden = false;
         zone.classList.add("is-filled");
         // Снимаем галку clear, если файлы выбраны заново
-        var clearBox = document.querySelector('input[name="' + input.name + '-clear"]');
+        var clearBox = (input.form || document).querySelector('input[name="' + input.name + '-clear"]');
         if (clearBox && files.length) clearBox.checked = false;
       }
 
@@ -1440,13 +1440,8 @@
           event.preventDefault();
           event.stopPropagation();
           input.value = "";
-          // Для Django ClearableFileInput: ставим галку clear
-          var clearBox = document.querySelector('input[name="' + input.name + '-clear"]');
-          if (clearBox) {
-            clearBox.checked = true;
-            // Также ищем по id с префиксом material_file-clear
-            clearBox.dispatchEvent(new Event("change", { bubbles: true }));
-          }
+          // Removing a newly selected replacement must not delete the saved file.
+          // Saved files are removed only via the explicit deletion checkbox.
           // Для multiple просто очищаем DataTransfer
           try {
             var dt = new DataTransfer();
@@ -1472,10 +1467,12 @@
         render();
       });
       // Если в шаблоне уже есть checkbox clear, слушаем его
-      var extClear = document.querySelector('input[name="' + input.name + '-clear"]');
+      var extClear = (input.form || document).querySelector('input[name="' + input.name + '-clear"]');
       if (extClear) {
         extClear.addEventListener("change", function () {
           if (extClear.checked) {
+            input.value = "";
+            input.dispatchEvent(new Event("change", { bubbles: true }));
             zone.classList.add("is-cleared");
           } else {
             zone.classList.remove("is-cleared");
