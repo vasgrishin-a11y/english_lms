@@ -108,13 +108,14 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
                             .map(el => {
                               const r = el.getBoundingClientRect();
                               return `${el.tagName}${el.id ? '#'+el.id : ''}${el.className ? '.'+String(el.className).split(' ').slice(0,3).join('.') : ''} scrollW=${el.scrollWidth} rectW=${Math.round(r.width)} left=${Math.round(r.left)}`;
-                            }).slice(0,50);
+                            }).slice(0,80);
                           const inside = Array.from(document.querySelectorAll('#assignment-form *'))
-                            .filter(el => el.scrollWidth > 300)
+                            .filter(el => el.scrollWidth > 260)
                             .map(el => {
                               const r = el.getBoundingClientRect();
-                              return `FORM-INNER ${el.tagName}${el.id ? '#'+el.id : ''}${el.className ? '.'+String(el.className).split(' ').slice(0,3).join('.') : ''} scrollW=${el.scrollWidth} rectW=${Math.round(r.width)} left=${Math.round(r.left)} outerHTML=${el.outerHTML.slice(0,120)}`;
-                            }).slice(0,50);
+                              const cls = el.className ? String(el.className).slice(0,80) : '';
+                              return `FORM-INNER ${el.tagName}${el.id ? '#'+el.id : ''} .${cls} scrollW=${el.scrollWidth} rectW=${Math.round(r.width)} left=${Math.round(r.left)} html=${el.outerHTML.slice(0,200).replace(/\\n/g,' ')}`;
+                            }).slice(0,100);
                           return `docScroll=${document.documentElement.scrollWidth} inner=${innerWidth} bodyScroll=${document.body.scrollWidth}\\n` + els.join('\\n') + '\\n--- inside form ---\\n' + inside.join('\\n');
                         }"""
                     )
