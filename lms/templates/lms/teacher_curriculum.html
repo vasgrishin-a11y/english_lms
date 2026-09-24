@@ -112,14 +112,17 @@
                     </form>
                     <a class="btn btn-ghost btn-sm" href="{% url 'teacher_block_edit' block.pk %}" title="Изменить класс">{% icon "pencil" %}</a>
                     <form method="post" action="{% url 'teacher_archive_item' 'block' block.pk %}" data-confirm="Переместить класс «{{ block.name }}» в архив вместе со всеми темами и заданиями?">
-                        {% csrf_token %}<button class="btn btn-ghost btn-sm" type="submit" title="В архив">{% icon "archive" %}</button>
+                        {% csrf_token %}<button class="btn btn-ghost btn-sm" type="submit" title="В архив" aria-label="В архив">{% icon "archive" %}</button>
                     </form>
                     <details class="danger-zone">
                         <summary class="btn btn-danger-ghost btn-sm" title="Удалить класс целиком" aria-label="Удалить класс целиком">{% icon "trash" %}</summary>
                         <div class="panel danger-panel">
                             <p class="small strong mb-0">Удалить класс «{{ block.name }}» целиком?</p>
                             <p class="tiny muted mb-0">Тем {{ block_item.topics|length }}, заданий {{ block_item.assignments }}. Работы учеников защищены.</p>
-                            <div class="row row-tight">
+                            <div class="row row-tight" style="flex-wrap:wrap">
+                                <form method="post" action="{% url 'teacher_archive_item' 'block' block.pk %}" data-confirm="Переместить класс «{{ block.name }}» в архив вместе со всеми темами и заданиями?">
+                                    {% csrf_token %}<button class="btn btn-ghost btn-sm" type="submit">{% icon "archive" %}В архив</button>
+                                </form>
                                 <form method="post" action="{% url 'teacher_block_delete' block.pk %}" data-confirm="Удалить класс «{{ block.name }}» вместе со всеми темами и заданиями?">
                                     {% csrf_token %}<input type="hidden" name="confirm" value="1"><button class="btn btn-danger btn-sm" type="submit">{% icon "trash" %}Удалить всё</button>
                                 </form>
@@ -170,7 +173,7 @@
                                     </div>
                                 </div>
                                 <form method="post" action="{% url 'teacher_archive_item' 'topic' topic.pk %}" data-confirm="В архив тему «{{ topic.title }}»?">
-                                    {% csrf_token %}<button class="btn btn-ghost btn-sm" type="submit" title="Архив">{% icon "archive" "icon icon-sm" %}</button>
+                                    {% csrf_token %}<button class="btn btn-ghost btn-sm" type="submit" title="Архив" aria-label="Архив">{% icon "archive" "icon icon-sm" %}</button>
                                 </form>
                             </div>
                         </div>
