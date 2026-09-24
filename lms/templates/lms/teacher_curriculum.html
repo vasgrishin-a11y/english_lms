@@ -49,7 +49,6 @@
 <div class="classes-head">
     <div>
         <h1 class="classes-title">Классы</h1>
-        <p class="muted small mb-0" style="max-width:60ch">Минималистичная карта: классы и темы. Перетаскивайте темы между классами — копия создаётся автоматически. Нажмите на тему, чтобы открыть все задания. Задания можно перетаскивать внутри темы.</p>
     </div>
     <div class="classes-toolbar">
         <a class="btn btn-secondary btn-sm" href="{% url 'teacher_library' %}">{% icon "database" %}{% t "Библиотека" %}</a>
@@ -103,7 +102,6 @@
                         {% if block.cefr_level %}<span class="tag tag-cefr">{{ block.cefr_level }}</span>{% endif %}
                         {% if not block.is_active %}<span class="badge badge-outline">скрыт</span>{% endif %}
                     </div>
-                    {% if block.description %}<p class="muted small mb-0" style="margin-top:6px;max-width:70ch">{{ block.description }}</p>{% endif %}
                     <p class="tiny muted tnum" style="margin-top:6px">{{ block_item.topics|length }} тем · {{ block_item.assignments }} заданий{% if block_item.flashcards %} · {{ block_item.flashcards }} с карточками{% endif %}</p>
                 </div>
                 <div class="row row-tight" style="gap:6px;flex-wrap:wrap">

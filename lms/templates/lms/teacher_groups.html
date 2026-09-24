@@ -8,7 +8,6 @@
 <div class="content-head">
     <div>
         <h1>{% t "Группы" %}</h1>
-        <p class="page-note">Учебные группы для разделения учеников и назначения заданий.</p>
     </div>
     <div class="row row-gap">
         <form method="get" class="row row-tight" role="search">
@@ -40,9 +39,6 @@
                     <span>{% icon "users" "icon icon-sm" %}{{ group.student_count }} учеников</span>
                     <span>{% icon "book" "icon icon-sm" %}{{ group.assignment_count }} заданий</span>
                 </span>
-                {% if group.description %}
-                    <p class="row-desc">{{ group.description|truncatewords:15 }}</p>
-                {% endif %}
             </span>
             <span class="row-side">
                 <span class="badge {% if group.is_active %}badge-checked{% else %}badge-outline{% endif %}">

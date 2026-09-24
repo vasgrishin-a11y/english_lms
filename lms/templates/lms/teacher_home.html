@@ -8,7 +8,6 @@
 <section class="hero">
     <div>
         <h1>Консоль преподавателя</h1>
-        <p class="muted mb-0">Одно пространство для проверки работ и управления курсом: блоки, темы, задания, тесты и карточки.</p>
         <div class="row" style="margin-top:16px">
             <a class="btn" href="{% url 'teacher_review_queue' %}">{% icon "check-circle" %}К очереди проверки
                 {% if overview.queue.waiting %}<span class="chip count">{{ overview.queue.waiting }}</span>{% endif %}</a>

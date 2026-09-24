@@ -1147,7 +1147,22 @@ html[data-nav="collapsed"] .app-nav-link:has(.app-nav-count)::after {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--sp-5);
-    align-items: start;
+    align-items: stretch;
+}
+
+.archive-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    height: 100%;
+}
+
+.archive-section .card-head {
+    flex: 0 0 auto;
+}
+
+.archive-section .archive-item:last-child {
+    border-bottom: 0;
 }
 
 .archive-section--wide {
@@ -1164,6 +1179,8 @@ html[data-nav="collapsed"] .app-nav-link:has(.app-nav-count)::after {
     gap: var(--sp-4);
     padding: var(--sp-4) 0;
     border-top: 1px solid var(--border-subtle);
+    min-width: 0;
+    box-sizing: border-box;
 }
 
 .archive-item:first-of-type {
@@ -1190,6 +1207,7 @@ html[data-nav="collapsed"] .app-nav-link:has(.app-nav-count)::after {
 .archive-item__body h3 {
     margin: 0 0 var(--sp-1);
     font-size: var(--fs-14);
+    overflow-wrap: break-word;
 }
 
 .archive-item__actions {
@@ -1210,6 +1228,7 @@ html[data-nav="collapsed"] .app-nav-link:has(.app-nav-count)::after {
 @media (max-width: 720px) {
     .archive-grid {
         grid-template-columns: minmax(0, 1fr);
+        align-items: start;
     }
     .archive-section--wide {
         grid-column: auto;
