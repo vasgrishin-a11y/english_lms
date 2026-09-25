@@ -89,7 +89,7 @@
                 </div>
                 <div class="row row-tight" style="margin-top:6px;gap:6px;flex-wrap:wrap">
                     {% for skill in assignment.skills.all %}<span class="tag tag-skill">{{ skill.name }}</span>{% empty %}<span class="tiny muted">без навыка</span>{% endfor %}
-                    <span class="tiny muted tnum">{{ assignment.max_points }} б. · порядок {{ assignment.order }}</span>
+                    <span class="tiny muted tnum">{% if not assignment.is_material %}{{ assignment.max_points }} б. · {% endif %}порядок {{ assignment.order }}</span>
                 </div>
             </div>
             <div class="row row-tight" style="gap:4px;flex-wrap:wrap">

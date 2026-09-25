@@ -20,7 +20,7 @@
     <span class="pill is-active turquoise">{% icon assignment.assignment_type|type_icon "icon icon-sm" %}{{ assignment.get_assignment_type_display }}</span>
     {% if assignment.topic.block.cefr_level %}<span class="tag tag-cefr">{{ assignment.topic.block.cefr_level }}</span>{% endif %}
     {% for skill in assignment.skills.all %}<span class="tag">{% icon skill.kind|skill_icon "icon icon-sm" %}{{ skill.name }}</span>{% endfor %}
-    {% if not assignment.is_flashcards %}<span class="tiny muted tnum">{{ assignment.max_points }} баллов</span>{% endif %}
+    {% if not assignment.is_no_submission %}<span class="tiny muted tnum">{{ assignment.max_points }} баллов</span>{% endif %}
 </div>
 
 <div class="lesson-shell">
@@ -28,7 +28,7 @@
         <section class="card">
             <div class="card-head">
                 <h1 class="mb-0">{{ assignment.title }}</h1>
-                {% if assignment.deadline %}<span class="badge badge-{{ assignment.deadline|due_state }}">{{ assignment.deadline|human_due }}</span>{% endif %}
+                {% if assignment.deadline and not assignment.is_material %}<span class="badge badge-{{ assignment.deadline|due_state }}">{{ assignment.deadline|human_due }}</span>{% endif %}
             </div>
             <div class="col" style="gap:12px">
                 {{ assignment.description|linebreaks }}
@@ -63,7 +63,15 @@
                 {% else %}
                     <p class="small muted" style="margin-top:12px">Преподаватель ещё не добавил слова — загляните позже.</p>
                 {% endif %}
-            {% elif not assignment.is_quiz and not assignment.is_material %}
+            {% elif assignment.is_material %}
+                <div class="callout" style="margin-top:16px">
+                    {% icon "book" %}
+                    <div>
+                        <p class="mb-0 strong">Материалы для занятия</p>
+                        <p class="mb-0 small">Изучите материалы в своём темпе: отвечать на это задание и ждать оценку не нужно.</p>
+                    </div>
+                </div>
+            {% elif not assignment.is_quiz %}
                 <div class="callout" style="margin-top:16px">
                     {% icon "info" %}
                     <div>
@@ -105,7 +113,7 @@
                     </div>
                 {% endif %}
             </section>
-        {% else %}
+        {% elif not assignment.is_no_submission %}
             <section class="card">
                 <div class="card-head">
                     <h2 class="card-title">{% icon "pencil" %}{% if submission %}Отправить новую попытку{% else %}Ваш ответ{% endif %}</h2>
@@ -181,7 +189,7 @@
             <a class="lesson-section" href="#">{% icon "home" "icon icon-sm" %}Exercises</a>
         </div>
 
-        {% if not assignment.is_flashcards %}
+        {% if not assignment.is_no_submission %}
         <div class="card card-pad-sm">
             <p class="rail-title">Статус</p>
             {% if submission %}
@@ -205,7 +213,14 @@
         </div>
         {% endif %}
 
-        {% if assignment.deadline %}
+        {% if assignment.is_material %}
+        <div class="card card-pad-sm">
+            <p class="rail-title">Проверка не нужна</p>
+            <p class="small muted mb-0">Это материалы для занятия: оценок нет, ответ отправлять не нужно.</p>
+        </div>
+        {% endif %}
+
+        {% if assignment.deadline and not assignment.is_material %}
             <div class="card card-pad-sm">
                 <p class="rail-title">Срок</p>
                 <p class="strong mb-0">{{ assignment.deadline|date:"d.m.Y H:i" }}</p>

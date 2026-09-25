@@ -45,7 +45,7 @@
                 <div class="filter-pills" style="margin-top:12px">
                     {% if assignment.is_quiz %}<span class="pill">Вопросов: {{ question_count }}</span>{% endif %}
                     {% if assignment.is_flashcards %}<span class="pill">Карточек: {{ card_count }}</span>{% endif %}
-                    {% if not assignment.is_quiz and not assignment.is_flashcards %}<span class="pill">{{ assignment.max_points }} баллов</span>{% endif %}
+                    {% if not assignment.is_quiz and not assignment.is_no_submission %}<span class="pill">{{ assignment.max_points }} баллов</span>{% endif %}
                     {% if assignment.material_file %}<span class="pill">{% icon "file-text" "icon icon-sm" %}Вложение сохранится</span>{% endif %}
                     {% if assignment.status == 'published' %}<span class="pill">Опубликовано — статус не изменится</span>{% else %}<span class="pill">Черновик</span>{% endif %}
                 </div>
@@ -91,7 +91,7 @@
                     <div class="filter-pills" style="margin:12px 0">
                         {% if revision.questions %}<span class="pill">Вопросов: {{ revision.questions|length }}</span>{% endif %}
                         {% if revision.cards %}<span class="pill">Карточек: {{ revision.cards|length }}</span>{% endif %}
-                        {% if not assignment.is_quiz and not assignment.is_flashcards %}<span class="pill">{{ revision.max_points }} баллов</span>{% endif %}
+                        {% if not assignment.is_quiz and not assignment.is_no_submission %}<span class="pill">{{ revision.max_points }} баллов</span>{% endif %}
                     </div>
 
                     {% if revision.questions %}

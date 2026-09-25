@@ -6,7 +6,7 @@
     {% if inherited_audience and not inherited_audience.open %}
         <p class="callout callout-info audience-note">
             {% icon "info" "icon icon-sm" %}
-            <span>Уже назначено выше по иерархии: <strong>{{ inherited_audience.label }}</strong> — они видят всё внутри. Здесь можно добавить ещё группы или учеников: назначения складываются.</span>
+            <span>Уже назначено выше по иерархии: <strong>{% for group in inherited_audience.groups %}{% if not forloop.first %}, {% endif %}{{ group.name }}{% endfor %}{% for student in inherited_audience.students %}{% if not forloop.first or inherited_audience.groups %}, {% endif %}{{ student|display_name }}{% endfor %}</strong> — они видят всё внутри. Здесь можно добавить ещё группы или учеников: назначения складываются.</span>
         </p>
     {% else %}
         <p class="help-text audience-note">Пусто — как у родителя. Если ни на одном уровне ничего не выбрано, материал видят все ученики. Как только выбраны группы или ученики, доступ получают только они (плюс назначенные выше или ниже по иерархии).</p>
