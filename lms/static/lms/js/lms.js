@@ -1573,6 +1573,167 @@
    * перезагрузки. Без JS остаются обычные формы: кнопки ↑/↓ для порядка,
    * кнопка статуса и полная форма задания.
    */
+  // Раскрыть скрытую группу под курсором при перетаскивании (ставит curriculumCollapse).
+  var curriculumRevealGroups = null;
+
+  /* ── Карта курса: свёртка «классы → главы → темы» ────────────
+   * Три глубины: 1 — только классы, 2 — классы и главы (по умолчанию),
+   * 3 — классы, главы и темы. Общий переключатель задаёт глубину всему
+   * курсу, такой же мини-переключатель — каждому классу; заголовок класса
+   * и заголовок главы складываются и раскрываются по клику вручную.
+   */
+  function curriculumCollapse() {
+    var board = document.querySelector("[data-curriculum-board]");
+    if (!board) return;
+    // По умолчанию видны классы и главы; при поиске — всё, чтобы совпадения были видны.
+    var DEFAULT_LEVEL = parseInt(board.getAttribute("data-default-depth"), 10) || 2;
+
+    function isBlock(node) {
+      return !!node && !!node.getAttribute && node.getAttribute("data-block-drop") !== null;
+    }
+
+    function blocksIn(scope) {
+      return isBlock(scope) ? [scope] : Array.prototype.slice.call(scope.querySelectorAll("[data-block-drop]"));
+    }
+
+    function groupsIn(scope, kind) {
+      return Array.prototype.slice.call(scope.querySelectorAll('[data-curriculum-group="' + kind + '"]'));
+    }
+
+    function toggleFor(id) {
+      if (!id) return null;
+      var list = document.querySelectorAll("[data-collapse-toggle]");
+      for (var i = 0; i < list.length; i += 1) {
+        if (list[i].getAttribute("aria-controls") === id) return list[i];
+      }
+      return null;
+    }
+
+    function isOpen(group) {
+      return !!group && !group.hasAttribute("hidden");
+    }
+
+    function setGroup(group, open) {
+      if (!group) return;
+      if (open) group.removeAttribute("hidden");
+      else group.setAttribute("hidden", "");
+      var toggle = toggleFor(group.id);
+      if (toggle) toggle.setAttribute("aria-expanded", open ? "true" : "false");
+      // Кнопки «Глава/Тема» внизу класса живут и прячутся вместе с главами.
+      if (group.getAttribute("data-curriculum-group") === "chapters") {
+        var section = group.closest("[data-block-drop]");
+        var footer = section && section.querySelector("[data-block-footer]");
+        if (footer) {
+          if (open) footer.removeAttribute("hidden");
+          else footer.setAttribute("hidden", "");
+        }
+      }
+    }
+
+    // 1 — свёрнут весь класс, 2 — видны главы, 3 — видны и темы,
+    // 0 — смешанное состояние (главы раскрыты выборочно).
+    function levelOf(section) {
+      if (!isOpen(groupsIn(section, "chapters")[0])) return 1;
+      var topics = groupsIn(section, "topics");
+      if (!topics.length) return 2;
+      var opened = 0;
+      for (var i = 0; i < topics.length; i += 1) {
+        if (isOpen(topics[i])) opened += 1;
+      }
+      if (opened === 0) return 2;
+      return opened === topics.length ? 3 : 0;
+    }
+
+    function boardLevel() {
+      var sections = blocksIn(board);
+      if (!sections.length) return DEFAULT_LEVEL;
+      var level = levelOf(sections[0]);
+      for (var i = 1; i < sections.length; i += 1) {
+        if (levelOf(sections[i]) !== level) return 0;
+      }
+      return level;
+    }
+
+    function markControl(control, level) {
+      Array.prototype.forEach.call(control.querySelectorAll("[data-depth-option]"), function (option) {
+        var value = parseInt(option.getAttribute("data-depth-level"), 10);
+        option.setAttribute("aria-pressed", value === level ? "true" : "false");
+      });
+    }
+
+    function refreshControls() {
+      Array.prototype.forEach.call(document.querySelectorAll("[data-depth-control]"), function (control) {
+        if (control.getAttribute("data-depth-control") === "all") {
+          markControl(control, boardLevel());
+          return;
+        }
+        var section = control.closest ? control.closest("[data-block-drop]") : null;
+        if (section) markControl(control, levelOf(section));
+      });
+    }
+
+    function applyLevel(scope, level) {
+      blocksIn(scope).forEach(function (section) {
+        setGroup(groupsIn(section, "chapters")[0], level >= 2);
+        groupsIn(section, "topics").forEach(function (group) {
+          setGroup(group, level >= 3);
+        });
+      });
+      refreshControls();
+    }
+
+    function revealChaptersOf(node) {
+      var section = node && node.closest ? node.closest("[data-block-drop]") : null;
+      if (!section) return;
+      var chapters = groupsIn(section, "chapters")[0];
+      if (chapters && !isOpen(chapters)) {
+        setGroup(chapters, true);
+        refreshControls();
+      }
+    }
+
+    // Тему тащат в свёрнутую главу — раскрываем её, чтобы место падения было видно.
+    curriculumRevealGroups = function (node) {
+      var chapter = node && node.closest ? node.closest("[data-chapter-panel]") : null;
+      if (!chapter) return;
+      var group = groupsIn(chapter, "topics")[0];
+      if (group && !isOpen(group)) {
+        setGroup(group, true);
+        refreshControls();
+      }
+    };
+
+    document.addEventListener("click", function (event) {
+      var target = event.target.closest ? event.target : null;
+      if (!target) return;
+      var option = target.closest("[data-depth-option]");
+      if (option) {
+        var control = option.closest("[data-depth-control]");
+        if (!control) return;
+        event.preventDefault();
+        var level = parseInt(option.getAttribute("data-depth-level"), 10) || DEFAULT_LEVEL;
+        var section = control.closest("[data-block-drop]");
+        if (control.getAttribute("data-depth-control") === "all" || !section) applyLevel(board, level);
+        else applyLevel(section, level);
+        return;
+      }
+      var toggle = target.closest("[data-collapse-toggle]");
+      if (toggle) {
+        var group = document.getElementById(toggle.getAttribute("aria-controls") || "");
+        if (!group) return;
+        event.preventDefault();
+        setGroup(group, !isOpen(group));
+        refreshControls();
+        return;
+      }
+      // Карточка класса ведёт к классу: если он свёрнут — раскрываем.
+      var jump = target.closest('a[href^="#block-"]');
+      if (jump) revealChaptersOf(document.getElementById((jump.getAttribute("href") || "").slice(1)));
+    });
+
+    applyLevel(board, DEFAULT_LEVEL);
+  }
+
   function curriculumBoard() {
     var boardEl = document.querySelector("[data-curriculum-board]");
     if (!boardEl) return;
@@ -1824,6 +1985,8 @@
         targetChapter.classList.add(isBelowMiddle(event, targetChapter) ? "drop-below" : "drop-above");
         return;
       }
+      // Свёрнутая глава под курсором раскрывается: иначе тема упала бы в невидимый список.
+      if (curriculumRevealGroups) curriculumRevealGroups(event.target);
       var target = topicTarget(event);
       if (!target) return;
       event.preventDefault();
@@ -2137,6 +2300,7 @@
     chapterSelectFilter();
     secretFields();
     descriptionEditors();
+    curriculumCollapse();
     curriculumBoard();
     studentAssignmentPreview();
   });

@@ -60,6 +60,32 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
             page.get_by_role("button", name="Показать содержимое как видит ученик").first
         ).to_be_visible()
 
+    def check_curriculum_depth(self, page):
+        """Карта курса: по умолчанию классы и главы, темы — общей кнопкой или кликом по главе."""
+        from playwright.sync_api import expect
+
+        page.goto(self.live_server_url + "/teacher/curriculum/")
+        board = page.locator("[data-curriculum-board]")
+        expect(board).to_be_visible()
+        chapters = board.locator('[data-curriculum-group="chapters"]').first
+        topics = board.locator('[data-curriculum-group="topics"]').first
+        # По умолчанию видны классы и главы, темы свёрнуты.
+        expect(chapters).to_be_visible()
+        expect(topics).to_be_hidden()
+        # Общий переключатель раскрывает темы.
+        page.locator('[data-depth-control="all"]').get_by_role("button", name="+ темы").click()
+        expect(topics).to_be_visible()
+        # Заголовок главы складывает и раскрывает только свои темы.
+        board.locator('[data-collapse-toggle][aria-controls^="chapter-"]').first.click()
+        expect(topics).to_be_hidden()
+        board.locator('[data-collapse-toggle][aria-controls^="chapter-"]').first.click()
+        expect(topics).to_be_visible()
+        # Переключатель класса оставляет только его заголовок.
+        board.locator('[data-depth-control^="block-"]').first.get_by_role(
+            "button", name="Класс", exact=True
+        ).click()
+        expect(chapters).to_be_hidden()
+
     def check_dropzone(self, page):
         """Файл, выбранный в скрытом поле, показывается в дропзоне с размером."""
         from playwright.sync_api import expect
@@ -189,6 +215,7 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
                 page.goto(self.live_server_url + "/teacher/curriculum/")
                 check_page("curriculum")
                 self.check_cascade_delete_panel(page)
+                self.check_curriculum_depth(page)
                 page.goto(self.live_server_url + "/teacher/analytics/")
                 check_page("analytics")
                 expect(page.get_by_role("link", name="Выгрузить XLSX", exact=False)).to_be_visible()

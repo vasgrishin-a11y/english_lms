@@ -5,6 +5,8 @@
 учитель — карточками внутри класса на странице курса и перетаскиванием.
 """
 
+import re
+
 from django.urls import reverse
 
 from lms.models import Assignment, Block, Chapter, Topic
@@ -264,3 +266,59 @@ class ChapterStudentTests(LMSCase):
         response = self.student_client.get("/assignments/?q=Хобби")
         self.assertContains(response, "Ответь на вопросы")
         self.assertNotContains(response, "Past tense")
+
+
+class CurriculumCollapseTests(LMSCase):
+    """Карта курса: темы свёрнуты по умолчанию, глубиной управляют переключатели."""
+
+    def setUp(self):
+        super().setUp()
+        self.hobby = Chapter.objects.create(block=self.block, title="Хобби", slug="hobby", order=5)
+        self.reading = Topic.objects.create(
+            block=self.block, chapter=self.hobby, title="Reading", slug="reading"
+        )
+
+    def page(self):
+        response = self.teacher_client.get(reverse("teacher_curriculum"))
+        self.assertEqual(response.status_code, 200)
+        return response.content.decode()
+
+    def test_topic_row_has_no_eye_button(self):
+        """В тему ведёт её название — отдельная кнопка-глаз только шумит."""
+        html = self.page()
+        self.assertNotIn("Открыть задания", html)
+        self.assertIn(reverse("teacher_topic_board", args=[self.topic.pk]), html)
+
+    def test_topics_are_collapsed_by_default(self):
+        """По умолчанию видны классы и главы, темы — нет (без JS их раскроет <noscript>)."""
+        html = self.page()
+        self.assertIn(f'id="block-{self.block.pk}-chapters"', html)
+        self.assertIn('data-curriculum-group="chapters"', html)
+        self.assertNotIn('data-curriculum-group="chapters" hidden', html)
+        for chapter in (self.topic.chapter, self.hobby):
+            self.assertIn(f'id="chapter-{chapter.pk}-topics"', html)
+        self.assertEqual(html.count('data-curriculum-group="topics" hidden'), 2)
+
+    def test_depth_controls_exist_for_course_and_for_each_class(self):
+        """Общий переключатель глубины и такой же — у каждого класса."""
+        html = self.page()
+        self.assertIn('data-depth-control="all"', html)
+        self.assertIn(f'data-depth-control="block-{self.block.pk}"', html)
+        for level in ("1", "2", "3"):
+            self.assertEqual(html.count(f'data-depth-level="{level}"'), 2, level)
+        self.assertIn('data-depth-level="2" aria-pressed="true"', html)
+
+    def test_collapse_toggles_point_to_their_groups(self):
+        """У каждой кнопки-заголовка есть aria-controls на существующий контейнер."""
+        html = self.page()
+        controls = re.findall(r'data-collapse-toggle[^>]*aria-controls="([^"]+)"', html)
+        self.assertIn(f"block-{self.block.pk}-chapters", controls)
+        self.assertIn(f"chapter-{self.hobby.pk}-topics", controls)
+        for control in controls:
+            self.assertIn(f'id="{control}"', html, control)
+        self.assertIn('class="curriculum-toggle"', html)
+
+    def test_noscript_keeps_map_fully_expanded(self):
+        html = self.page()
+        self.assertIn("<noscript>", html)
+        self.assertIn("[data-curriculum-group][hidden]", html)
