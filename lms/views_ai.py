@@ -117,8 +117,15 @@ def ai_import(request):
 
     _clear_session(request)
     message = (
-        "Черновики созданы: блоков {blocks}, тем {topics}, заданий {assignments}, "
-        "вопросов {questions}, карточек {cards}.".format(**created)
+        "Черновики созданы: блоков {blocks}, глав {chapters}, тем {topics}, заданий {assignments}, "
+        "вопросов {questions}, карточек {cards}.".format(
+            blocks=created.get('blocks', 0),
+            chapters=created.get('chapters', 0),
+            topics=created.get('topics', 0),
+            assignments=created.get('assignments', 0),
+            questions=created.get('questions', 0),
+            cards=created.get('cards', 0),
+        )
     )
     if created.get("skipped"):
         message += f" Повторов пропущено: {created['skipped']}."

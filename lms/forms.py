@@ -1176,23 +1176,40 @@ class AIMaterialForm(forms.Form):
             attrs={
                 "rows": 3,
                 "placeholder": (
-                    "Например: сделай класс B1 по теме Travel, три темы, тест на Present "
-                    "Perfect и набор карточек"
+                    "Например: сделай класс B1 по теме Travel, 2 главы (Airport, Hotel), "
+                    "в каждой по 2 темы, тест на Present Perfect и набор карточек"
                 ),
             }
         ),
+        help_text="Можно указать главы: «раздели на главы Airport / Hotel / Restaurant».",
     )
     text = forms.CharField(
         label="Или вставьте текст материала",
         required=False,
         widget=forms.Textarea(
             attrs={
-                "rows": 8,
+                "rows": 12,
                 "placeholder": (
-                    "# Блок\n## Тема\n### Задание [quiz]\n? Вопрос\n* верный вариант\n"
-                    "- неверный вариант\n- слово | перевод | пример"
+                    "# Класс A2 — Travel [B1]\n"
+                    "## Глава 1 — At the Airport [глава]\n"
+                    "### Тема: Check-in\n"
+                    "#### Задание: Слова [карточки]\n"
+                    "- check-in | регистрация\n"
+                    "#### Задание: Диалог [quiz]\n"
+                    "? Где выход на посадку?\n"
+                    "* Where is the gate?\n"
+                    "- Where is gate?\n"
+                    "## Глава 2 — At the Hotel\n"
+                    "### Тема: Booking\n"
+                    "#### Задание: Бронирование [material]\n"
+                    "Текст задания..."
                 ),
             }
+        ),
+        help_text=(
+            "Иерархия: # Класс → ## Глава → ### Тема → #### Задание. "
+            "Если глав нет — используйте # Блок / ## Тема / ### Задание, темы попадут в «Общее». "
+            "Тип задания в []: [quiz], [карточки], [material]."
         ),
     )
     upload = forms.FileField(

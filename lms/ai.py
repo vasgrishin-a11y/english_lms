@@ -75,7 +75,7 @@ AI_QUESTION_KINDS = {value for value, _ in Question.Kind.choices}
 AI_CEFR_LEVELS = {value for value, _ in CefrLevel.choices}
 
 TARGETS = (
-    ("mixed", "Структура целиком: класс → темы → задания"),
+    ("mixed", "Структура целиком: класс → главы → темы → задания"),
     ("assignment", "Одно задание"),
     ("quiz", "Тест с вопросами"),
     ("cards", "Набор карточек"),
@@ -112,6 +112,17 @@ KIND_MARKERS = {
     "сортировка": Question.Kind.SORT,
     "spell": Question.Kind.SPELL,
     "буквы": Question.Kind.SPELL,
+}
+CHAPTER_MARKERS = {
+    "глава": "chapter",
+    "chapter": "chapter",
+    "раздел": "chapter",
+}
+TOPIC_MARKERS = {
+    "тема": "topic",
+    "topic": "topic",
+    "юнит": "topic",
+    "unit": "topic",
 }
 
 
@@ -338,6 +349,7 @@ def _limit(name, default):
 def limits():
     return {
         "blocks": _limit("LMS_AI_MAX_BLOCKS", 5),
+        "chapters": _limit("LMS_AI_MAX_CHAPTERS", 20),
         "topics": _limit("LMS_AI_MAX_TOPICS", 30),
         "assignments": _limit("LMS_AI_MAX_ASSIGNMENTS", 60),
         "questions": _limit("LMS_AI_MAX_QUESTIONS", 20),
@@ -494,11 +506,21 @@ def _pdf_text(blob):
 # ── Офлайн-разбор в структуру курса ────────────────────────────────────────
 @dataclass
 class _OfflineBuilder:
-    """Сборка структуры из текста: заголовки, вопросы и карточки по строкам."""
+    """Сборка структуры из текста: заголовки, вопросы и карточки по строкам.
+
+    Иерархия курса: Класс → Глава → Тема → Задание.
+    Для совместимости поддерживаются оба формата:
+    - старый: # Блок, ## Тема, ### Задание
+    - новый:  # Блок, ## Глава, ### Тема, #### Задание
+    Определяется автоматически: если в тексте есть заголовки 4 уровня (####),
+    то уровень 2 считается главой, иначе — темой (как раньше).
+    Также работают маркеры [глава], [тема], [задание] в заголовке.
+    """
 
     source: str = ""
     blocks: list = field(default_factory=list)
     _block: dict | None = None
+    _chapter: dict | None = None
     _topic: dict | None = None
     _assignment: dict | None = None
     _question: dict | None = None
@@ -511,21 +533,44 @@ class _OfflineBuilder:
                 "name": (name or self.source or "Класс из материала")[:150],
                 "cefr_level": "",
                 "description": "",
-                "topics": [],
+                "chapters": [],
+                "topics": [],  # legacy: темы без главы попадут в «Общее» при импорте
             }
             self.blocks.append(self._block)
         return self._block
 
-    def ensure_topic(self, title=None):
+    def ensure_chapter(self, title=None):
         block = self.ensure_block()
-        if self._topic is None:
-            self._topic = {
-                "title": (title or "Материал")[:200],
+        if self._chapter is None:
+            self._chapter = {
+                "title": (title or "Общее")[:200],
                 "description": "",
-                "assignments": [],
-                "cards": [],
+                "topics": [],
             }
-            block["topics"].append(self._topic)
+            block["chapters"].append(self._chapter)
+        return self._chapter
+
+    def ensure_topic(self, title=None):
+        # Тема внутри главы, если глава есть, иначе — напрямую в блоке (legacy)
+        if self._chapter is not None:
+            if self._topic is None:
+                self._topic = {
+                    "title": (title or "Материал")[:200],
+                    "description": "",
+                    "assignments": [],
+                    "cards": [],
+                }
+                self._chapter["topics"].append(self._topic)
+        else:
+            block = self.ensure_block()
+            if self._topic is None:
+                self._topic = {
+                    "title": (title or "Материал")[:200],
+                    "description": "",
+                    "assignments": [],
+                    "cards": [],
+                }
+                block["topics"].append(self._topic)
         return self._topic
 
     def ensure_assignment(self, title=None, assignment_type=Assignment.Type.TEXT):
@@ -596,10 +641,54 @@ def _strip_markers(text):
 
 
 def parse_text(text, *, source=""):
-    """Офлайн-разбор: заголовки → блок/тема/задание, строки → вопросы и карточки."""
+    """Офлайн-разбор: заголовки → блок/глава/тема/задание, строки → вопросы и карточки.
+
+    Поддерживает два формата:
+    - старый: # Блок, ## Тема, ### Задание
+    - новый:  # Блок, ## Глава, ### Тема, #### Задание
+    Определяется автоматически: если в блоке есть заголовки уровня 4 (####),
+    то в этом блоке уровень 2 = глава. Маркеры [глава], [тема], [chapter], [topic]
+    переопределяют уровень в любом формате.
+    """
     builder = _OfflineBuilder(source=source)
     pending_cards = []
     saw_heading = False
+
+    # Предварительный проход по блокам: есть ли #### внутри каждого блока?
+    lines = (text or "").splitlines()
+    block_has_level4 = []  # список (block_start_index, has_level4)
+    current_has = False
+    current_block_start = 0
+    found_block = False
+    for idx, raw in enumerate(lines):
+        m = HEADING.match(raw.strip())
+        if not m:
+            continue
+        lvl = len(m.group(1))
+        if lvl == 1:
+            if found_block:
+                block_has_level4.append((current_block_start, current_has))
+            found_block = True
+            current_block_start = idx
+            current_has = False
+        elif lvl >= 4:
+            current_has = True
+    if found_block:
+        block_has_level4.append((current_block_start, current_has))
+    # Если нет явных блоков (#), считаем весь текст одним блоком
+    if not block_has_level4:
+        has_any_l4 = any(HEADING.match((l or "").strip()) and len(HEADING.match((l or "").strip()).group(1)) >= 4 for l in lines)
+        block_has_level4 = [(0, has_any_l4)]
+
+    def current_block_has_level4(line_idx):
+        # найти последний блок, начавшийся до line_idx
+        has_flag = False
+        for start, has_l4 in block_has_level4:
+            if start <= line_idx:
+                has_flag = has_l4
+            else:
+                break
+        return has_flag
 
     def flush_cards():
         nonlocal pending_cards
@@ -607,7 +696,7 @@ def parse_text(text, *, source=""):
             builder.add_cards(pending_cards)
         pending_cards = []
 
-    for raw_line in (text or "").splitlines():
+    for line_idx, raw_line in enumerate((text or "").splitlines()):
         line = raw_line.rstrip()
         if not line.strip():
             continue
@@ -619,23 +708,65 @@ def parse_text(text, *, source=""):
             builder._card_title = ""
             builder.close_question()
             level = len(heading.group(1))
-            title = _strip_markers(heading.group(2))
+            raw_title = heading.group(2)
+            title = _strip_markers(raw_title)
+
+            # Маркеры [глава]/[тема]/[задание] имеют приоритет над уровнем
+            chapter_marker = _marker_value(raw_title, CHAPTER_MARKERS, None)
+            topic_marker = _marker_value(raw_title, TOPIC_MARKERS, None)
+            assignment_marker = _marker_value(raw_title, TYPE_MARKERS, None)
+
             if level == 1:
+                builder._chapter = None
                 builder._topic = None
                 builder._block = None
                 builder.ensure_block(title)
-            elif level == 2:
+            elif chapter_marker is not None:
+                builder._topic = None
+                builder._chapter = None
+                builder.ensure_chapter(title)
+            elif topic_marker is not None:
+                builder._assignment = None
                 builder._topic = None
                 builder.ensure_topic(title)
-            else:
-                assignment_type = _marker_value(
-                    heading.group(2), TYPE_MARKERS, Assignment.Type.TEXT
-                )
-                if assignment_type == Assignment.Type.FLASHCARDS:
+            elif assignment_marker is not None:
+                if assignment_marker == Assignment.Type.FLASHCARDS:
                     builder._card_title = title
                 else:
                     builder._assignment = None
-                    builder.ensure_assignment(title, assignment_type)
+                    builder.ensure_assignment(title, assignment_marker)
+            else:
+                # Без маркеров — по уровню с учётом наличия #### в текущем блоке
+                has_l4 = current_block_has_level4(line_idx)
+                if has_l4:
+                    if level == 2:
+                        builder._topic = None
+                        builder._chapter = None
+                        builder.ensure_chapter(title)
+                    elif level == 3:
+                        builder._assignment = None
+                        builder._topic = None
+                        builder.ensure_topic(title)
+                    else:  # 4+
+                        atype = _marker_value(raw_title, TYPE_MARKERS, Assignment.Type.TEXT)
+                        if atype == Assignment.Type.FLASHCARDS:
+                            builder._card_title = title
+                        else:
+                            builder._assignment = None
+                            builder.ensure_assignment(title, atype)
+                else:
+                    # Старый формат: 2=тема, 3+=задание
+                    if level == 2:
+                        builder._chapter = None
+                        builder._topic = None
+                        builder.ensure_topic(title)
+                    else:
+                        atype = _marker_value(raw_title, TYPE_MARKERS, Assignment.Type.TEXT)
+                        if atype == Assignment.Type.FLASHCARDS:
+                            builder._card_title = title
+                        else:
+                            builder._assignment = None
+                            builder.ensure_assignment(title, atype)
             continue
 
         stripped = line.strip()
@@ -673,6 +804,8 @@ def parse_text(text, *, source=""):
                 assignment["description"] = f"{assignment['description']}\n• {body}".strip()
             elif builder._card_title:
                 builder._card_notes.append(body)
+            elif builder._chapter is not None and builder._topic is None:
+                builder._chapter["description"] = f"{builder._chapter.get('description','')}\n{body}".strip()
             continue
 
         if "|" in stripped or "—" in stripped:
@@ -689,13 +822,15 @@ def parse_text(text, *, source=""):
             )
         elif builder._topic is not None:
             builder._topic["description"] = f"{builder._topic['description']}\n{stripped}".strip()
+        elif builder._chapter is not None:
+            builder._chapter["description"] = f"{builder._chapter.get('description','')}\n{stripped}".strip()
         else:
             builder.ensure_topic()["description"] = stripped
 
     flush_cards()
     if not saw_heading:
         builder.blocks.clear()
-        builder._block = builder._topic = builder._assignment = None
+        builder._block = builder._chapter = builder._topic = builder._assignment = None
         builder.ensure_block()
         builder.ensure_topic("Материал")
         body = (text or "").strip()
@@ -733,22 +868,28 @@ PROMPT_SCHEMA = """Верни строго JSON без пояснений в ф�
 {"title": "Название материала",
  "blocks": [{"name": "Блок", "cefr_level": "A1|A2|B1|B2|C1|C2 или пусто",
    "description": "1–2 предложения",
-   "topics": [{"title": "Тема", "description": "1–2 предложения",
-     "assignments": [{"type": "text|file|audio|mixed|quiz", "title": "Название",
-        "description": "Условие для ученика: что сделать, объём, критерии",
-        "max_points": 10, "skills": ["grammar|vocabulary|listening|speaking|writing|reading"],
-        "questions": [{"kind": "mcq|multi|gap|match|order|sort|spell|text|voice", "text": "вопрос",
-            "points": 1, "explanation": "",
-            "choices": [{"text": "вариант", "correct": true, "match_text": ""}]}]}],
-     "cards": [{"title": "Карточки: тема", "description": "",
-        "cards": [{"front": "слово", "back": "перевод", "example": "пример"}]}]}]}]}
-Правила: для mcq/order ровно один верный вариант; для multi — от двух; для match/sort
-в choices используй пары text ↔ match_text; для gap/spell приведи принимаемые ответы
-как верные варианты; text (свободный письменный ответ) и voice (устный ответ) — без choices;
-questions и cards не выдумывай, если их нет в материале."""
+   "chapters": [{"title": "Глава", "description": "1–2 предложения",
+     "topics": [{"title": "Тема", "description": "1–2 предложения",
+       "assignments": [{"type": "text|file|audio|mixed|quiz|flashcards|material", "title": "Название",
+          "description": "Условие для ученика: что сделать, объём, критерии",
+          "max_points": 10, "skills": ["grammar|vocabulary|listening|speaking|writing|reading"],
+          "questions": [{"kind": "mcq|multi|gap|match|order|sort|spell|text|voice", "text": "вопрос",
+              "points": 1, "explanation": "",
+              "choices": [{"text": "вариант", "correct": true, "match_text": ""}]}]}],
+       "cards": [{"title": "Карточки: тема", "description": "",
+          "cards": [{"front": "слово", "back": "перевод", "example": "пример"}]}]}]}],
+   "topics": []  // legacy: темы без главы, попадут в главу «Общее»
+  }]}
+
+Правила:
+- Иерархия строгая: Класс → Глава → Тема → Задание. Если в материале есть разделы/главы — разложи по chapters, иначе оставь topics на уровне блока (они попадут в «Общее»).
+- Для mcq/order ровно один верный вариант; для multi — от двух; для match/sort в choices используй пары text ↔ match_text; для gap/spell приведи принимаемые ответы как верные варианты; text (свободный письменный ответ) и voice (устный ответ) — без choices.
+- questions и cards не выдумывай, если их нет в материале.
+- Не более 5 классов, 10 глав на класс, 30 тем, 60 заданий.
+"""
 
 TARGET_PROMPTS = {
-    "mixed": "Собери из материала класс курса с темами, заданиями, тестом и карточками.",
+    "mixed": "Собери из материала структуру курса: Класс → Главы → Темы → Задания (тесты, карточки, материалы). Если главы явно выделены в материале — используй их, иначе оставь темы в главе «Общее».",
     "assignment": "Собери одно задание с условием; если в материале есть упражнения — оформи их тестом.",
     "quiz": "Собери одно задание-тест с вопросами по материалу.",
     "cards": "Собери набор карточек: слово → перевод и пример употребления.",
@@ -953,8 +1094,66 @@ def _clean_text(value, limit=4000):
     return str(value or "").strip()[:limit]
 
 
+def _normalise_topic(topic_data, caps, counters):
+    """Тема из JSON → чистая тема с заданиями и карточками."""
+    if not isinstance(topic_data, dict):
+        return None
+    if counters["topics"] >= caps["topics"]:
+        return None
+    topic = {
+        "title": _clean(topic_data.get("title"), 200) or "Новая тема",
+        "description": _clean_text(topic_data.get("description")),
+        "assignments": [],
+        "cards": [],
+    }
+    for item in topic_data.get("assignments") or []:
+        if not isinstance(item, dict) or counters["assignments"] >= caps["assignments"]:
+            continue
+        assignment = _normalise_assignment(item, caps)
+        if assignment:
+            topic["assignments"].append(assignment)
+            counters["assignments"] += 1
+    for card_set in topic_data.get("cards") or []:
+        if not isinstance(card_set, dict):
+            continue
+        cards = []
+        for card in card_set.get("cards") or []:
+            if counters["cards"] + len(cards) >= caps["cards"] or not isinstance(card, dict):
+                break
+            front = _clean(card.get("front"), 200)
+            back = _clean(card.get("back"), 500)
+            if not front or not back:
+                continue
+            cards.append(
+                {
+                    "front": front,
+                    "back": back,
+                    "example": _clean(card.get("example"), 500),
+                }
+            )
+        if len(cards) >= 2:
+            topic["cards"].append(
+                {
+                    "title": _clean(card_set.get("title"), 200)
+                    or f"Карточки: {topic['title']}",
+                    "description": _clean_text(card_set.get("description")),
+                    "cards": cards,
+                }
+            )
+            counters["cards"] += len(cards)
+    if topic["assignments"] or topic["cards"]:
+        counters["topics"] += 1
+        return topic
+    return None
+
+
 def normalise(payload, *, source=""):
-    """Привести ответ ИИ или офлайн-разбор к безопасной структуре курса."""
+    """Привести ответ ИИ или офлайн-разбор к безопасной структуре курса.
+
+    Поддерживает иерархию Класс → Глава → Тема → Задание.
+    Для совместимости: если блок содержит topics без chapters — они попадут
+    в главу «Общее» при импорте.
+    """
     caps = limits()
     if not isinstance(payload, dict):
         raise AiError("Материал не распознан: ожидался объект с блоками.")
@@ -964,9 +1163,7 @@ def normalise(payload, *, source=""):
 
     result = {"title": _clean(payload.get("title") or source, 150) or "Материал ИИ-помощника"}
     clean_blocks = []
-    topics_total = 0
-    assignments_total = 0
-    cards_total = 0
+    counters = {"topics": 0, "assignments": 0, "cards": 0, "chapters": 0}
     for block_data in blocks[: caps["blocks"]]:
         if not isinstance(block_data, dict):
             continue
@@ -974,58 +1171,35 @@ def normalise(payload, *, source=""):
             "name": _clean(block_data.get("name") or source, 150) or "Новый класс",
             "cefr_level": _clean(block_data.get("cefr_level"), 2).upper(),
             "description": _clean_text(block_data.get("description")),
+            "chapters": [],
             "topics": [],
         }
         if block["cefr_level"] not in AI_CEFR_LEVELS:
             block["cefr_level"] = ""
-        for topic_data in block_data.get("topics") or []:
-            if not isinstance(topic_data, dict) or topics_total >= caps["topics"]:
+        # Главы (новый формат)
+        for chapter_data in block_data.get("chapters") or []:
+            if not isinstance(chapter_data, dict):
                 continue
-            topic = {
-                "title": _clean(topic_data.get("title"), 200) or "Новая тема",
-                "description": _clean_text(topic_data.get("description")),
-                "assignments": [],
-                "cards": [],
+            if counters["chapters"] >= caps["chapters"]:
+                continue
+            chapter = {
+                "title": _clean(chapter_data.get("title"), 200) or "Новая глава",
+                "description": _clean_text(chapter_data.get("description")),
+                "topics": [],
             }
-            for item in topic_data.get("assignments") or []:
-                if not isinstance(item, dict) or assignments_total >= caps["assignments"]:
-                    continue
-                assignment = _normalise_assignment(item, caps)
-                if assignment:
-                    topic["assignments"].append(assignment)
-                    assignments_total += 1
-            for card_set in topic_data.get("cards") or []:
-                if not isinstance(card_set, dict):
-                    continue
-                cards = []
-                for card in card_set.get("cards") or []:
-                    if cards_total + len(cards) >= caps["cards"] or not isinstance(card, dict):
-                        break
-                    front = _clean(card.get("front"), 200)
-                    back = _clean(card.get("back"), 500)
-                    if not front or not back:
-                        continue
-                    cards.append(
-                        {
-                            "front": front,
-                            "back": back,
-                            "example": _clean(card.get("example"), 500),
-                        }
-                    )
-                if len(cards) >= 2:
-                    topic["cards"].append(
-                        {
-                            "title": _clean(card_set.get("title"), 200)
-                            or f"Карточки: {topic['title']}",
-                            "description": _clean_text(card_set.get("description")),
-                            "cards": cards,
-                        }
-                    )
-                    cards_total += len(cards)
-            if topic["assignments"] or topic["cards"]:
+            for topic_data in chapter_data.get("topics") or []:
+                topic = _normalise_topic(topic_data, caps, counters)
+                if topic:
+                    chapter["topics"].append(topic)
+            if chapter["topics"]:
+                block["chapters"].append(chapter)
+                counters["chapters"] += 1
+        # Темы без главы (legacy и офлайн-разбор)
+        for topic_data in block_data.get("topics") or []:
+            topic = _normalise_topic(topic_data, caps, counters)
+            if topic:
                 block["topics"].append(topic)
-                topics_total += 1
-        if block["topics"]:
+        if block["chapters"] or block["topics"]:
             clean_blocks.append(block)
     if not clean_blocks:
         raise AiError("В материале не нашлось ни заданий, ни карточек.")
@@ -1092,8 +1266,12 @@ def _normalise_assignment(item, caps):
         assignment_type = Assignment.Type.QUIZ
     title = _clean(item.get("title"), 200)
     description = _clean_text(item.get("description"))
-    if not title or not description:
+    if not title:
         return None
+    if not description and not questions:
+        return None
+    if not description and questions:
+        description = f"{title}. Выполните тест."
     skills = [
         _clean(skill, 20).lower()
         for skill in item.get("skills") or []
@@ -1114,13 +1292,17 @@ def _normalise_assignment(item, caps):
 
 
 def material_summary(material):
-    """Счётчики для превью: сколько чего создаст импорт."""
+    """Счётчики для превью: сколько чего создаст импорт (с учётом глав)."""
     blocks = material.get("blocks") or []
-    topics = [topic for block in blocks for topic in block["topics"]]
+    chapters = [ch for block in blocks for ch in block.get("chapters", [])]
+    topics_from_chapters = [topic for ch in chapters for topic in ch.get("topics", [])]
+    topics_direct = [topic for block in blocks for topic in block.get("topics", [])]
+    topics = topics_from_chapters + topics_direct
     assignments = [assignment for topic in topics for assignment in topic.get("assignments", [])]
     card_sets = [item for topic in topics for item in topic.get("cards", [])]
     return {
         "blocks": len(blocks),
+        "chapters": len(chapters),
         "topics": len(topics),
         "assignments": len(assignments),
         "questions": sum(len(item["questions"]) for item in assignments),
@@ -1232,11 +1414,16 @@ def import_material(material, *, target_topic=None):
     """Создать материалы черновиками. Ничего не публикуется и не меняется.
 
     ``target_topic`` — существующая тема: тогда новые задания и карточки
-    добавляются в неё, а структура блоков/тем из материала игнорируется.
+    добавляются в неё, а структура блоков/тем/глав из материала игнорируется.
+    Иначе создаётся иерархия Класс → Глава → Тема → Задание.
+    Темы без главы попадают в главу «Общее» блока (логика Topic.save).
     """
+    from .models import Chapter
+
     ensure_skill_catalog()
     created = {
         "blocks": 0,
+        "chapters": 0,
         "topics": 0,
         "assignments": 0,
         "questions": 0,
@@ -1245,36 +1432,75 @@ def import_material(material, *, target_topic=None):
     }
     for block_data in material.get("blocks", []):
         if target_topic is not None:
+            # При импорте в существующую тему — главы/блоки из материала игнорируются
             topic = target_topic
-        else:
-            block = Block.objects.filter(name=block_data["name"]).first()
-            if block is None:
-                block = Block.objects.create(
-                    slug=_unique_slug(Block, block_data["name"]),
-                    name=block_data["name"],
-                    description=block_data["description"],
-                    cefr_level=block_data["cefr_level"],
-                    order=Block.objects.count(),
+            for topic_data in block_data.get("topics", []) + [
+                t for ch in block_data.get("chapters", []) for t in ch.get("topics", [])
+            ]:
+                created["assignments"] += _import_assignments(topic, topic_data, created)
+                created["cards"] += _import_cards(topic, topic_data, created)
+            continue
+
+        block = Block.objects.filter(name=block_data["name"]).first()
+        if block is None:
+            block = Block.objects.create(
+                slug=_unique_slug(Block, block_data["name"]),
+                name=block_data["name"],
+                description=block_data["description"],
+                cefr_level=block_data["cefr_level"],
+                order=Block.objects.count(),
+            )
+            created["blocks"] += 1
+
+        # Главы (новый формат)
+        for chapter_data in block_data.get("chapters", []) or []:
+            chapter = block.chapters.filter(title=chapter_data["title"]).first()
+            if chapter is None:
+                chapter = Chapter.objects.create(
+                    block=block,
+                    slug=_unique_slug(Chapter, chapter_data["title"], block=block),
+                    title=chapter_data["title"][:200],
+                    description=chapter_data.get("description", "")[:4000],
+                    order=block.chapters.count(),
                 )
-                created["blocks"] += 1
-            topic = None
-        for topic_data in block_data["topics"]:
-            if target_topic is None:
-                topic = block.topics.filter(title=topic_data["title"]).first()
+                created["chapters"] += 1
+            for topic_data in chapter_data.get("topics", []) or []:
+                topic = block.topics.filter(title=topic_data["title"], chapter=chapter).first()
                 if topic is None:
                     topic = Topic.objects.create(
                         block=block,
+                        chapter=chapter,
                         slug=_unique_slug(Topic, topic_data["title"], block=block),
                         title=topic_data["title"],
                         description=topic_data["description"],
-                        order=block.topics.count(),
+                        order=chapter.topics.count(),
                     )
                     created["topics"] += 1
+                created["assignments"] += _import_assignments(topic, topic_data, created)
+                created["cards"] += _import_cards(topic, topic_data, created)
+
+        # Темы без главы (legacy)
+        for topic_data in block_data.get("topics", []) or []:
+            topic = block.topics.filter(title=topic_data["title"]).first()
+            if topic is None:
+                # Без главы — попадёт в «Общее» через Topic.save, но создадим явно в default_chapter для ясности
+                default_ch = block.default_chapter()
+                topic = Topic.objects.create(
+                    block=block,
+                    chapter=default_ch,
+                    slug=_unique_slug(Topic, topic_data["title"], block=block),
+                    title=topic_data["title"],
+                    description=topic_data["description"],
+                    order=default_ch.topics.count(),
+                )
+                created["topics"] += 1
             created["assignments"] += _import_assignments(topic, topic_data, created)
             created["cards"] += _import_cards(topic, topic_data, created)
+
     logger.info(
-        "ai_import blocks=%s topics=%s assignments=%s questions=%s cards=%s",
+        "ai_import blocks=%s chapters=%s topics=%s assignments=%s questions=%s cards=%s",
         created["blocks"],
+        created.get("chapters", 0),
         created["topics"],
         created["assignments"],
         created["questions"],
