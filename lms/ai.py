@@ -677,7 +677,11 @@ def parse_text(text, *, source=""):
         block_has_level4.append((current_block_start, current_has))
     # Если нет явных блоков (#), считаем весь текст одним блоком
     if not block_has_level4:
-        has_any_l4 = any(HEADING.match((l or "").strip()) and len(HEADING.match((l or "").strip()).group(1)) >= 4 for l in lines)
+        has_any_l4 = any(
+            HEADING.match((ln or "").strip())
+            and len(HEADING.match((ln or "").strip()).group(1)) >= 4
+            for ln in lines
+        )
         block_has_level4 = [(0, has_any_l4)]
 
     def current_block_has_level4(line_idx):
@@ -805,7 +809,9 @@ def parse_text(text, *, source=""):
             elif builder._card_title:
                 builder._card_notes.append(body)
             elif builder._chapter is not None and builder._topic is None:
-                builder._chapter["description"] = f"{builder._chapter.get('description','')}\n{body}".strip()
+                builder._chapter["description"] = (
+                    f"{builder._chapter.get('description', '')}\n{body}".strip()
+                )
             continue
 
         if "|" in stripped or "—" in stripped:
@@ -823,7 +829,9 @@ def parse_text(text, *, source=""):
         elif builder._topic is not None:
             builder._topic["description"] = f"{builder._topic['description']}\n{stripped}".strip()
         elif builder._chapter is not None:
-            builder._chapter["description"] = f"{builder._chapter.get('description','')}\n{stripped}".strip()
+            builder._chapter["description"] = (
+                f"{builder._chapter.get('description', '')}\n{stripped}".strip()
+            )
         else:
             builder.ensure_topic()["description"] = stripped
 
@@ -1134,8 +1142,7 @@ def _normalise_topic(topic_data, caps, counters):
         if len(cards) >= 2:
             topic["cards"].append(
                 {
-                    "title": _clean(card_set.get("title"), 200)
-                    or f"Карточки: {topic['title']}",
+                    "title": _clean(card_set.get("title"), 200) or f"Карточки: {topic['title']}",
                     "description": _clean_text(card_set.get("description")),
                     "cards": cards,
                 }

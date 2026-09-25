@@ -2535,15 +2535,9 @@ def student_assignment_preview(request, student_pk, assignment_pk):
     # Видно ли задание этому ученику сейчас (учитывает группы, персоналки, архив, публикацию)
     is_visible = visible_assignments(student).filter(pk=assignment.pk).exists()
 
-    questions = list(
-        assignment.questions.prefetch_related("choices").order_by("order", "pk")
-    )
+    questions = list(assignment.questions.prefetch_related("choices").order_by("order", "pk"))
     attachments = list(assignment.attachments.order_by("order", "pk"))
-    cards = (
-        list(assignment.cards.order_by("order", "pk"))
-        if assignment.is_flashcards
-        else []
-    )
+    cards = list(assignment.cards.order_by("order", "pk")) if assignment.is_flashcards else []
 
     context = {
         "student": student,
@@ -2557,9 +2551,7 @@ def student_assignment_preview(request, student_pk, assignment_pk):
 
     # HTMX inline preview inside student_detail
     if request.headers.get("HX-Request"):
-        return render(
-            request, "lms/parts/student_assignment_preview_content.html", context
-        )
+        return render(request, "lms/parts/student_assignment_preview_content.html", context)
 
     return render(request, "lms/teacher_student_assignment_preview.html", context)
 
