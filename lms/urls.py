@@ -304,6 +304,11 @@ urlpatterns = [
     path("teacher/students/create/", views_teacher.student_create, name="teacher_student_create"),
     path("teacher/students/<int:pk>/", views_teacher.student_detail, name="teacher_student_detail"),
     path(
+        "teacher/students/<int:student_pk>/assignments/<int:assignment_pk>/preview/",
+        views_teacher.student_assignment_preview,
+        name="teacher_student_assignment_preview",
+    ),
+    path(
         "teacher/students/<int:pk>/edit/", views_teacher.student_edit, name="teacher_student_edit"
     ),
     path(

@@ -2514,6 +2514,48 @@ def student_detail(request, pk):
     )
 
 
+@teacher_required
+@require_GET
+def student_assignment_preview(request, student_pk, assignment_pk):
+    """Предпросмотр задания глазами конкретного ученика (без правильных ответов).
+
+    Два режима:
+    - полный — отдельная страница teacher_student_assignment_preview.html
+    - фрагмент — если запрос HTMX (hx-get из карточки ученика), отдаём только
+      содержимое lms/parts/student_assignment_preview_content.html для inline-раскрытия.
+    """
+    from .curriculum import visible_assignments
+
+    student = get_object_or_404(
+        User.objects.select_related("profile"), pk=student_pk, profile__role=Profile.Role.STUDENT
+    )
+    assignment = get_object_or_404(
+        Assignment.objects.select_related("topic__block", "topic__chapter"), pk=assignment_pk
+    )
+    # Видно ли задание этому ученику сейчас (учитывает группы, персоналки, архив, публикацию)
+    is_visible = visible_assignments(student).filter(pk=assignment.pk).exists()
+
+    questions = list(assignment.questions.prefetch_related("choices").order_by("order", "pk"))
+    attachments = list(assignment.attachments.order_by("order", "pk"))
+    cards = list(assignment.cards.order_by("order", "pk")) if assignment.is_flashcards else []
+
+    context = {
+        "student": student,
+        "assignment": assignment,
+        "questions": questions,
+        "attachments": attachments,
+        "cards": cards,
+        "is_visible": is_visible,
+        "workspace": "students",
+    }
+
+    # HTMX inline preview inside student_detail
+    if request.headers.get("HX-Request"):
+        return render(request, "lms/parts/student_assignment_preview_content.html", context)
+
+    return render(request, "lms/teacher_student_assignment_preview.html", context)
+
+
 # ── Пространство «Аналитика» ───────────────────────────────────────────────
 @teacher_required
 @require_GET

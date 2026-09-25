@@ -1,0 +1,36 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}{{ assignment.title }} — как видит {{ student|display_name }}{% endblock %}
+{% block workspace_class %}workspace-wide{% endblock %}
+
+{% block content %}
+<nav aria-label="Хлебные крошки">
+    <ol class="crumbs">
+        <li><a href="{% url 'teacher_students' %}">{% t "Ученики" %}</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_student_detail' student.pk %}">{{ student|display_name }}</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">Предпросмотр: {{ assignment.title }}</span></li>
+    </ol>
+</nav>
+
+<div class="content-head">
+    <div>
+        <h1 class="mb-0">Предпросмотр глазами ученика</h1>
+        <p class="page-note mb-0">Ученик: <strong>{{ student|display_name }}</strong> @{{ student.username }} · Задание: {{ assignment.title }}</p>
+    </div>
+    <div class="row">
+        <a class="btn btn-secondary btn-sm" href="{% url 'teacher_student_detail' student.pk %}">{% icon "arrow-left" %} К ученику</a>
+        <form method="post" action="{% url 'teacher_impersonate_start' student.pk %}" data-confirm="Открыть English LMS глазами ученика «{{ student|display_name }}»? Вернуться можно кнопкой в верхнем баннере.">
+            {% csrf_token %}<button class="btn btn-primary btn-sm" type="submit">{% icon "eye" %} Открыть как ученик</button>
+        </form>
+    </div>
+</div>
+
+<div class="alert alert-info" role="status">
+    {% icon "eye" %}
+    <span>Режим просмотра — без настроек, правильных ответов и пояснений. Так задание видит ученик до сдачи.</span>
+</div>
+
+{% include "lms/parts/student_assignment_preview_content.html" %}
+
+{% endblock %}
