@@ -18,6 +18,7 @@ RUN groupadd --gid 10001 lms \
     && chmod +x docker-entrypoint.sh \
     && DJANGO_DEBUG=True DJANGO_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(64))')" python manage.py collectstatic --noinput
 
+VOLUME ["/app/var/media"]
 USER 10001:10001
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \

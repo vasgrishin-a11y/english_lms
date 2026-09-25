@@ -4138,3 +4138,56 @@ ul.audience-list input[type="checkbox"] {
 a.audience-badge:hover {
     border-color: var(--accent-400);
 }
+
+/* ── Предпросмотр задания как видит ученик (в карточке ученика) ── */
+.assignment-preview-wrapper {
+    border-radius: var(--r-md);
+    background: var(--surface-sunken);
+    padding: var(--sp-2);
+}
+
+.assignment-preview-content {
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    background: var(--surface);
+    padding: var(--sp-3);
+}
+
+.assignment-preview-content .student-preview {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+}
+
+.assignment-preview-content .media-frame img {
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--r-md);
+}
+
+.assignment-preview-content .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: var(--sp-2);
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.assignment-preview-content .tiles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.assignment-preview-content .tile {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
+    background: var(--surface-sunken);
+    font-size: var(--fs-14);
+}

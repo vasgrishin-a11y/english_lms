@@ -1,0 +1,167 @@
+{% load lms_tags %}
+<div class="student-preview" data-student-preview>
+    {% if not is_visible %}
+        <div class="alert alert-warning" role="alert">
+            {% icon "alert" "icon icon-sm" %}
+            <span>Задание не назначено ученику {{ student|display_name }} (не попадает в его видимый курс). Показано как есть — ученик его сейчас не видит.</span>
+        </div>
+    {% endif %}
+
+    <div class="card card-pad-sm" style="margin-bottom:12px">
+        <div class="row row-tight" style="margin-bottom:8px">
+            <span class="pill is-active turquoise">{% icon assignment.assignment_type|type_icon "icon icon-sm" %}{{ assignment.get_assignment_type_display }}</span>
+            {% if assignment.topic.block.cefr_level %}<span class="tag tag-cefr">{{ assignment.topic.block.cefr_level }}</span>{% endif %}
+            {% for skill in assignment.skills.all %}<span class="tag">{% icon skill.kind|skill_icon "icon icon-sm" %}{{ skill.name }}</span>{% endfor %}
+            {% if not assignment.is_no_submission %}<span class="tiny muted tnum">{{ assignment.max_points }} баллов</span>{% endif %}
+            {% if assignment.deadline and not assignment.is_material %}<span class="badge badge-{{ assignment.deadline|due_state }}">{{ assignment.deadline|human_due }}</span>{% endif %}
+        </div>
+        <h3 class="mb-0" style="font-size:var(--fs-20)">{{ assignment.title }}</h3>
+        <p class="tiny muted mb-0">{{ assignment.topic.block.name }} · {{ assignment.topic.chapter.title }} · {{ assignment.topic.title }}</p>
+        {% if assignment.description %}
+            <div class="col" style="gap:8px;margin-top:12px">
+                {{ assignment.description|linebreaks }}
+            </div>
+        {% endif %}
+
+        {# Материалы как видит ученик #}
+        {% if assignment.material_file or attachments %}
+            <div style="margin-top:16px">
+                <p class="strong">Материалы урока</p>
+                {% if assignment.material_file %}
+                    <div class="media-frame">
+                        {% if assignment.material_file.name|media_kind == 'image' %}
+                            <a href="{% url 'media_preview' assignment.material_file.name %}" target="_blank" rel="noopener"><img src="{% url 'media_preview' assignment.material_file.name %}" alt="Материал задания" loading="lazy"></a>
+                        {% elif assignment.material_file.name|media_kind == 'audio' %}
+                            <audio controls src="{% url 'media_preview' assignment.material_file.name %}"></audio>
+                        {% endif %}
+                        <a href="{% url 'private_file' assignment.material_file.name %}">Скачать: {{ assignment.material_file.name }}</a>
+                    </div>
+                {% endif %}
+                {% for att in attachments %}
+                    <div class="media-frame">
+                        {% if att.file.name|media_kind == 'image' %}
+                            <a href="{% url 'media_preview' att.file.name %}" target="_blank" rel="noopener"><img src="{% url 'media_preview' att.file.name %}" alt="{{ att.file.name }}" loading="lazy" style="max-height:300px;object-fit:contain"></a>
+                        {% elif att.file.name|media_kind == 'audio' %}
+                            <audio controls src="{% url 'media_preview' att.file.name %}"></audio>
+                        {% endif %}
+                        <a href="{% url 'private_file' att.file.name %}">Скачать: {{ att.file.name }}</a>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+
+    {% if assignment.is_flashcards %}
+        <div class="card card-pad-sm">
+            <div class="card-head"><h4 class="card-title">{% icon "cards" %} Карточки-тренажёр ({{ cards|length }})</h4></div>
+            {% if cards %}
+                <ul class="card-grid" style="margin-top:8px">
+                    {% for card in cards %}
+                        <li>
+                            <div class="panel" style="height:100%;display:flex;flex-direction:column;gap:6px">
+                                <strong style="font-size:var(--fs-18)">{{ card.front }}</strong>
+                                <span class="small">{{ card.back }}</span>
+                                {% if card.example %}<span class="tiny muted">«{{ card.example }}»</span>{% endif %}
+                            </div>
+                        </li>
+                    {% endfor %}
+                </ul>
+                <p class="tiny muted" style="margin-top:12px">Ученик учит эти слова в тренажёре, сдачи не требуется. Режим просмотра — без настроек повторения.</p>
+            {% else %}
+                <p class="small muted mb-0">Карточек пока нет.</p>
+            {% endif %}
+        </div>
+    {% elif assignment.is_material %}
+        <div class="card card-pad-sm">
+            <p class="small muted mb-0">{% icon "book" %} Материалы для занятия — ученик изучает в своём темпе, отвечать не нужно.</p>
+        </div>
+    {% elif questions %}
+        <div class="card">
+            <div class="card-head">
+                <h4 class="card-title">{% icon "target" %} Вопросы ({{ questions|length }}) — как видит ученик</h4>
+                {% if assignment.exam_mode %}<span class="badge badge-sand">{% icon "lock" "icon icon-sm" %}Контрольная</span>{% else %}<span class="badge badge-turquoise">Пошаговая проверка</span>{% endif %}
+            </div>
+            <div class="alert alert-info" role="status" style="margin-bottom:12px">
+                {% icon "eye" %}<span>Правильные ответы, пояснения и баллы преподавателя скрыты — так видит ученик до сдачи.</span>
+            </div>
+            <ol class="col" style="padding:0;list-style:none;margin:0">
+                {% for question in questions %}
+                    <li class="panel" style="margin-bottom:12px">
+                        <div class="row row-tight" style="margin-bottom:6px">
+                            <strong>{{ forloop.counter }}. {{ question.text|linebreaksbr }}</strong>
+                            <span class="tag">{{ question.get_kind_display }}</span>
+                            <span class="tiny muted tnum">{{ question.points }} б.</span>
+                        </div>
+
+                        {% if question.kind == 'mcq' or question.kind == 'multi' %}
+                            <ul class="col" style="padding-left:18px;margin:8px 0 0;gap:6px">
+                                {% for choice in question.choices.all %}
+                                    <li style="list-style:disc">{{ choice.text }}</li>
+                                {% empty %}
+                                    <li class="tiny muted">Вариантов пока нет</li>
+                                {% endfor %}
+                            </ul>
+                        {% elif question.kind == 'gap' %}
+                            <p class="small mb-0" style="margin-top:8px">Пропуск: ученик вписывает ответ в поле. {% if question.choices.exists %}<span class="tiny muted">Принимается {{ question.choices.count }} вариант(а).</span>{% endif %}</p>
+                        {% elif question.kind == 'match' %}
+                            <div class="table-scroll" style="margin-top:8px">
+                                <table>
+                                    <thead><tr><th>Термин</th><th>Определение (выбирается из списка)</th></tr></thead>
+                                    <tbody>
+                                        {% for choice in question.choices.all %}
+                                            <tr><td>{{ choice.text }}</td><td class="tiny muted">{{ choice.match_text|default:"—" }} (скрыто от ученика как правильный ответ, показывается в выпадающем списке)</td></tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p class="tiny muted" style="margin-top:6px">Ученик видит термины и выбирает определение из общего списка — соответствие скрыто.</p>
+                        {% elif question.kind == 'sort' %}
+                            <div class="table-scroll" style="margin-top:8px">
+                                <table>
+                                    <thead><tr><th>Элемент</th><th>Колонка (выбирается учеником)</th></tr></thead>
+                                    <tbody>
+                                        {% for choice in question.choices.all %}
+                                            <tr><td>{{ choice.text }}</td><td class="tiny muted">{{ choice.match_text }}</td></tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p class="tiny muted" style="margin-top:6px">Ученик распределяет элементы по колонкам — правильные колонки скрыты, показываются как варианты выбора.</p>
+                        {% elif question.kind == 'order' %}
+                            <p class="small mb-0" style="margin-top:8px">Слова для сборки:</p>
+                            <div class="tiles" style="margin-top:6px">
+                                {% for choice in question.choices.all %}
+                                    <span class="tile is-letter" style="cursor:default">{{ choice.text }}</span>
+                                {% endfor %}
+                            </div>
+                            <p class="tiny muted" style="margin-top:6px">Ученик собирает предложение из слов — порядок скрыт.</p>
+                        {% elif question.kind == 'spell' %}
+                            <p class="small mb-0" style="margin-top:8px">Буквы:</p>
+                            <div class="tiles" style="margin-top:6px">
+                                {% for letter in question.scrambled %}
+                                    <span class="tile is-letter" style="cursor:default">{{ letter }}</span>
+                                {% endfor %}
+                            </div>
+                            <p class="tiny muted" style="margin-top:6px">Ученик собирает слово из букв.</p>
+                        {% elif question.kind == 'text' %}
+                            <p class="small muted mb-0" style="margin-top:8px">Свободный ответ — проверяет преподаватель.</p>
+                        {% elif question.kind == 'voice' %}
+                            <p class="small muted mb-0" style="margin-top:8px">Голосовой ответ — до {{ question.voice_limit_display }}, проверяет преподаватель.</p>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ol>
+        </div>
+    {% else %}
+        {% if not assignment.is_flashcards and not assignment.is_material %}
+            <div class="card card-pad-sm">
+                <p class="small muted mb-0">В задании нет вопросов и файлов — ученик видит только описание.</p>
+            </div>
+        {% endif %}
+    {% endif %}
+
+    <div class="row" style="margin-top:12px">
+        <a class="btn btn-secondary btn-sm" href="{% url 'assignment_detail' assignment.pk %}" target="_blank" rel="noopener">{% icon "eye" %} Открыть как ученик (если назначено)</a>
+        <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_form' assignment.pk %}">{% icon "pencil" %} Редактировать задание</a>
+    </div>
+</div>

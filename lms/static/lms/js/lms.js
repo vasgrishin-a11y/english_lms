@@ -2025,6 +2025,66 @@
     });
   }
 
+  function studentAssignmentPreview() {
+    // Кнопка «Показать содержимое как видит ученик» в карточке ученика:
+    // - первый клик грузит фрагмент через htmx (если ещё не загружен)
+    // - повторные клики просто скрывают/показывают уже загруженный контент
+    // - меняет подпись кнопки и aria-expanded
+    function togglePreview(button) {
+      var targetId = button.getAttribute("aria-controls");
+      var target = targetId ? document.getElementById(targetId) : null;
+      if (!target) return;
+      var label = button.querySelector("[data-preview-label]");
+      var isHidden = target.hasAttribute("hidden");
+      if (isHidden) {
+        target.removeAttribute("hidden");
+        button.setAttribute("aria-expanded", "true");
+        if (label) label.textContent = "Скрыть содержимое";
+      } else {
+        target.setAttribute("hidden", "");
+        button.setAttribute("aria-expanded", "false");
+        if (label) label.textContent = "Показать содержимое как видит ученик";
+      }
+    }
+
+    document.addEventListener("click", function (event) {
+      var button = event.target.closest ? event.target.closest("[data-preview-toggle]") : null;
+      if (!button) return;
+      var targetId = button.getAttribute("aria-controls");
+      var target = targetId ? document.getElementById(targetId) : null;
+      if (!target) return;
+      // Если контент ещё не загружен — htmx сам сделает запрос (hx-get),
+      // нам нужно только после загрузки показать блок.
+      // Если уже загружен — просто тогглим.
+      var alreadyLoaded = target.innerHTML.trim().length > 0;
+      if (alreadyLoaded) {
+        event.preventDefault();
+        togglePreview(button);
+      } else {
+        // Первый клик: покажем блок сразу после того как htmx вставит HTML
+        button.setAttribute("aria-expanded", "true");
+        var label = button.querySelector("[data-preview-label]");
+        if (label) label.textContent = "Скрыть содержимое";
+        // htmx:afterSwap снимет hidden
+      }
+    });
+
+    document.body.addEventListener("htmx:afterSwap", function (event) {
+      var target = event.detail && event.detail.target;
+      if (!target) return;
+      if (target.classList && target.classList.contains("assignment-preview-content")) {
+        target.removeAttribute("hidden");
+        // Найти кнопку, которая контролирует этот блок
+        var btn = document.querySelector('[aria-controls=\"' + target.id + '\"]');
+        if (btn) {
+          btn.setAttribute("aria-expanded", "true");
+          var label = btn.querySelector("[data-preview-label]");
+          if (label) label.textContent = "Скрыть содержимое";
+        }
+      }
+    });
+  }
+
   ready(function () {
     autohideAlerts();
     confirmForms();
@@ -2052,5 +2112,6 @@
     secretFields();
     descriptionEditors();
     curriculumBoard();
+    studentAssignmentPreview();
   });
 })();

@@ -140,6 +140,27 @@
                                                         {% endfor %}
                                                     </ol>
                                                 {% endif %}
+
+                                                {# ── Новый уровень: предпросмотр как видит ученик ── #}
+                                                <div class="assignment-preview-wrapper" data-assignment-preview="{{ assignment.pk }}" style="margin-top:12px;border-top:1px dashed var(--border-subtle);padding-top:10px">
+                                                    <div class="row row-tight">
+                                                        <button class="btn btn-ghost btn-sm" type="button"
+                                                                hx-get="{% url 'teacher_student_assignment_preview' student.pk assignment.pk %}"
+                                                                hx-target="#preview-{{ assignment.pk }}-{{ student.pk }}"
+                                                                hx-swap="innerHTML"
+                                                                hx-indicator="#indicator-{{ assignment.pk }}"
+                                                                data-preview-toggle
+                                                                aria-expanded="false"
+                                                                aria-controls="preview-{{ assignment.pk }}-{{ student.pk }}">
+                                                            {% icon "eye" "icon icon-sm" %}<span data-preview-label>Показать содержимое как видит ученик</span>
+                                                        </button>
+                                                        <a class="btn btn-ghost btn-sm" href="{% url 'teacher_student_assignment_preview' student.pk assignment.pk %}" target="_blank" rel="noopener" title="Открыть предпросмотр на отдельной странице">
+                                                            {% icon "external" "icon icon-sm" %} Отдельно
+                                                        </a>
+                                                        <span id="indicator-{{ assignment.pk }}" class="htmx-indicator tiny muted" style="margin-left:8px">Загрузка…</span>
+                                                    </div>
+                                                    <div id="preview-{{ assignment.pk }}-{{ student.pk }}" class="assignment-preview-content" hidden style="margin-top:10px"></div>
+                                                </div>
                                             </article>
                                             {% endwith %}
                                         {% empty %}

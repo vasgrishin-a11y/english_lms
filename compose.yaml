@@ -33,6 +33,9 @@ services:
       # Дотянуться до Ollama/LM Studio, запущенной на хосте: host.docker.internal
       - 'host.docker.internal:host-gateway'
     volumes:
+      # Постоянное приватное хранилище файлов заданий и ответов учеников.
+      # Переживает пересборку образа и обновление кода. Никогда не делайте
+      # `down -v` для обычного redeploy — это удалит и БД, и файлы.
       - private-media:/app/var/media
     depends_on:
       db:
@@ -40,3 +43,6 @@ services:
 volumes:
   postgres-data:
   private-media:
+    # driver: local — по умолчанию; на площадке с несколькими нодами
+    # нужен общий volume (NFS, S3 через s3fs, и т.п.), иначе файлы будут
+    # видны только на одной реплике.

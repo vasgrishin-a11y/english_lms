@@ -157,7 +157,22 @@ MEDIA_URL = "/files/"
 _media_root = os.getenv("DJANGO_MEDIA_ROOT")
 if not DEBUG and not _media_root:
     raise ImproperlyConfigured("Set DJANGO_MEDIA_ROOT to a persistent private directory")
-MEDIA_ROOT = Path(_media_root or BASE_DIR / "media")
+# В разработке по умолчанию — <repo>/var/media (а не <repo>/media), чтобы
+# совпадать с путём в Docker (/app/var/media) и переживать git pull / rebuild:
+# папка var/ уже в .gitignore и .dockerignore, а volume private-media в
+# compose.yaml монтируется именно туда. Переопределить можно DJANGO_MEDIA_ROOT.
+# Для плавного перехода со старой папки <repo>/media: если var/media пуста,
+# а media/ содержит файлы — используем старую папку и подсказываем перенести.
+_default_media = BASE_DIR / "var" / "media"
+_legacy_media = BASE_DIR / "media"
+if DEBUG and not _media_root:
+    try:
+        if not _default_media.exists() or not any(_default_media.iterdir()):
+            if _legacy_media.exists() and any(_legacy_media.iterdir()):
+                _default_media = _legacy_media
+    except OSError:
+        pass
+MEDIA_ROOT = Path(_media_root or (_default_media if DEBUG else BASE_DIR / "media"))
 if not MEDIA_ROOT.is_absolute():
     raise ImproperlyConfigured("DJANGO_MEDIA_ROOT must be an absolute path")
 if (
@@ -169,6 +184,13 @@ if (
     raise ImproperlyConfigured("Private media must not be stored inside STATIC_ROOT")
 FILE_UPLOAD_PERMISSIONS = 0o600
 FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o700
+# Создаём каталог для файлов в разработке, чтобы первый upload не падал
+# из-за отсутствия папки (в production это делает entrypoint + volume).
+if DEBUG:
+    try:
+        MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
 # ── ИИ-помощник преподавателя ─────────────────────────────────────────────
 # Локальная модель: помощник не ходит в облако, материалы остаются на сервере.
 # Пустое включение не делается молча: без LMS_AI_LOCAL=1 (или ключа для своего
