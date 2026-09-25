@@ -4191,3 +4191,98 @@ a.audience-badge:hover {
     background: var(--surface-sunken);
     font-size: var(--fs-14);
 }
+
+/* ── Свёртка карты курса: классы → главы → темы ─────────────────
+   Группы прячем атрибутом hidden, но .col задаёт display:flex —
+   без !important свёртка не сработала бы. */
+[data-curriculum-group][hidden],
+[data-block-footer][hidden] {
+    display: none !important;
+}
+
+.curriculum-depth {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
+    background: var(--surface-sunken);
+}
+
+.curriculum-depth.is-compact {
+    padding: 1px;
+    border-color: transparent;
+    background: transparent;
+}
+
+.curriculum-depth__option {
+    padding: 3px 9px;
+    border: 0;
+    border-radius: var(--r-pill);
+    background: transparent;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: var(--fs-11);
+    font-weight: 600;
+    line-height: 1.35;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color var(--dur-1) var(--ease), background var(--dur-1) var(--ease);
+}
+
+.curriculum-depth__option:hover {
+    color: var(--accent-800);
+    background: var(--accent-soft);
+}
+
+.curriculum-depth__option[aria-pressed="true"] {
+    color: var(--text-inverse);
+    background: var(--accent-700);
+}
+
+.curriculum-depth__option:focus-visible {
+    outline: 2px solid var(--accent-600);
+    outline-offset: 2px;
+}
+
+/* Заголовок класса или главы как кнопка-аккордеон: без лишней рамки и шума. */
+.curriculum-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.curriculum-toggle:hover {
+    color: var(--accent-800);
+}
+
+.curriculum-toggle:focus-visible {
+    outline: 2px solid var(--accent-600);
+    outline-offset: 3px;
+    border-radius: 6px;
+}
+
+.curriculum-chevron {
+    flex: 0 0 auto;
+    transition: transform var(--dur-2) var(--ease);
+}
+
+.curriculum-toggle[aria-expanded="false"] .curriculum-chevron {
+    transform: rotate(-90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .curriculum-chevron {
+        transition: none;
+    }
+}

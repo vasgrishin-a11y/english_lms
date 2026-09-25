@@ -1,5 +1,7 @@
 """Доработки интерфейса: навыки, форма, поиск, меню, дашборд, язык, сцена."""
 
+import re
+
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
@@ -325,3 +327,31 @@ class RaccoonSceneTests(LMSCase):
             self.assertIsNotNone(finders.find(name), name)
         self.assertIsNone(finders.find("lms/img/fox-run.svg"))
         self.assertIsNone(finders.find("lms/img/raccoon-run.svg"))
+
+
+class StudentAssignmentPreviewTests(LMSCase):
+    """Предпросмотр задания в карточке ученика: разметка для htmx и сам фрагмент."""
+
+    def test_student_card_has_preview_toggle(self):
+        """Кнопка и блок связаны aria-controls: по этому id JS скрывает и показывает фрагмент."""
+        html = self.teacher_client.get(f"/teacher/students/{self.student.pk}/").content.decode()
+        target_id = f"preview-{self.assignment.pk}-{self.student.pk}"
+        self.assertIn("data-preview-toggle", html)
+        self.assertIn("Показать содержимое как видит ученик", html)
+        self.assertIn(f'aria-controls="{target_id}"', html)
+        block = re.search(r'<div id="%s"[^>]*>' % re.escape(target_id), html)
+        self.assertIsNotNone(block, f"нет блока #{target_id}")
+        self.assertIn("assignment-preview-content", block.group(0))
+        self.assertIn("hidden", block.group(0))
+
+    def test_preview_fragment_comes_without_base_layout(self):
+        """Для htmx отдаётся только фрагмент, а не страница целиком."""
+        url = f"/teacher/students/{self.student.pk}/assignments/{self.assignment.pk}/preview/"
+        fragment = self.teacher_client.get(url, headers={"HX-Request": "true"})
+        self.assertEqual(fragment.status_code, 200)
+        body = fragment.content.decode()
+        self.assertIn(self.assignment.title, body)
+        self.assertNotIn("<html", body)
+        page = self.teacher_client.get(url)
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("<html", page.content.decode())

@@ -39,6 +39,53 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
         page.get_by_role("button", name="Вернуть прежний размер", exact=False).click()
         expect(block).not_to_have_class(re.compile("is-expanded"))
 
+    def check_student_assignment_preview(self, page, student, assignment):
+        """Предпросмотр задания в карточке ученика раскрывается и скрывается обратно."""
+        from playwright.sync_api import expect
+
+        page.goto(self.live_server_url + f"/teacher/students/{student.pk}/")
+        # Темы свёрнуты в <details> — раскрываем, иначе кнопку не видно и клик не пройдёт.
+        page.locator("details.topic-progress summary").first.click()
+        target = page.locator(f"#preview-{assignment.pk}-{student.pk}")
+        show = page.get_by_role("button", name="Показать содержимое как видит ученик").first
+        expect(show).to_be_visible()
+        show.click()
+        expect(target).to_be_visible()
+        expect(target).to_contain_text(assignment.title)
+        # Второй клик прячет блок: повторный ответ htmx не должен снова его раскрывать.
+        page.get_by_role("button", name="Скрыть содержимое").first.click()
+        page.wait_for_timeout(1000)
+        expect(target).to_be_hidden()
+        expect(
+            page.get_by_role("button", name="Показать содержимое как видит ученик").first
+        ).to_be_visible()
+
+    def check_curriculum_depth(self, page):
+        """Карта курса: по умолчанию классы и главы, темы — общей кнопкой или кликом по главе."""
+        from playwright.sync_api import expect
+
+        page.goto(self.live_server_url + "/teacher/curriculum/")
+        board = page.locator("[data-curriculum-board]")
+        expect(board).to_be_visible()
+        chapters = board.locator('[data-curriculum-group="chapters"]').first
+        topics = board.locator('[data-curriculum-group="topics"]').first
+        # По умолчанию видны классы и главы, темы свёрнуты.
+        expect(chapters).to_be_visible()
+        expect(topics).to_be_hidden()
+        # Общий переключатель раскрывает темы.
+        page.locator('[data-depth-control="all"]').get_by_role("button", name="+ темы").click()
+        expect(topics).to_be_visible()
+        # Заголовок главы складывает и раскрывает только свои темы.
+        board.locator('[data-collapse-toggle][aria-controls^="chapter-"]').first.click()
+        expect(topics).to_be_hidden()
+        board.locator('[data-collapse-toggle][aria-controls^="chapter-"]').first.click()
+        expect(topics).to_be_visible()
+        # Переключатель класса оставляет только его заголовок.
+        board.locator('[data-depth-control^="block-"]').first.get_by_role(
+            "button", name="Класс", exact=True
+        ).click()
+        expect(chapters).to_be_hidden()
+
     def check_dropzone(self, page):
         """Файл, выбранный в скрытом поле, показывается в дропзоне с размером."""
         from playwright.sync_api import expect
@@ -164,9 +211,11 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
                 login("browser_teacher")
                 check_language(page)
                 check_page("queue")
+                self.check_student_assignment_preview(page, student, assignment)
                 page.goto(self.live_server_url + "/teacher/curriculum/")
                 check_page("curriculum")
                 self.check_cascade_delete_panel(page)
+                self.check_curriculum_depth(page)
                 page.goto(self.live_server_url + "/teacher/analytics/")
                 check_page("analytics")
                 expect(page.get_by_role("link", name="Выгрузить XLSX", exact=False)).to_be_visible()
