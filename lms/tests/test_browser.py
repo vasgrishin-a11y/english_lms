@@ -39,6 +39,27 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
         page.get_by_role("button", name="Вернуть прежний размер", exact=False).click()
         expect(block).not_to_have_class(re.compile("is-expanded"))
 
+    def check_student_assignment_preview(self, page, student, assignment):
+        """Предпросмотр задания в карточке ученика раскрывается и скрывается обратно."""
+        from playwright.sync_api import expect
+
+        page.goto(self.live_server_url + f"/teacher/students/{student.pk}/")
+        # Темы свёрнуты в <details> — раскрываем, иначе кнопку не видно и клик не пройдёт.
+        page.locator("details.topic-progress summary").first.click()
+        target = page.locator(f"#preview-{assignment.pk}-{student.pk}")
+        show = page.get_by_role("button", name="Показать содержимое как видит ученик").first
+        expect(show).to_be_visible()
+        show.click()
+        expect(target).to_be_visible()
+        expect(target).to_contain_text(assignment.title)
+        # Второй клик прячет блок: повторный ответ htmx не должен снова его раскрывать.
+        page.get_by_role("button", name="Скрыть содержимое").first.click()
+        page.wait_for_timeout(1000)
+        expect(target).to_be_hidden()
+        expect(
+            page.get_by_role("button", name="Показать содержимое как видит ученик").first
+        ).to_be_visible()
+
     def check_dropzone(self, page):
         """Файл, выбранный в скрытом поле, показывается в дропзоне с размером."""
         from playwright.sync_api import expect
@@ -164,6 +185,7 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
                 login("browser_teacher")
                 check_language(page)
                 check_page("queue")
+                self.check_student_assignment_preview(page, student, assignment)
                 page.goto(self.live_server_url + "/teacher/curriculum/")
                 check_page("curriculum")
                 self.check_cascade_delete_panel(page)

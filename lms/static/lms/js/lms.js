@@ -2027,61 +2027,87 @@
 
   function studentAssignmentPreview() {
     // Кнопка «Показать содержимое как видит ученик» в карточке ученика:
-    // - первый клик грузит фрагмент через htmx (если ещё не загружен)
-    // - повторные клики просто скрывают/показывают уже загруженный контент
-    // - меняет подпись кнопки и aria-expanded
-    function togglePreview(button) {
-      var targetId = button.getAttribute("aria-controls");
-      var target = targetId ? document.getElementById(targetId) : null;
-      if (!target) return;
+    // - первый клик грузит фрагмент через htmx (hx-get);
+    // - повторные клики только скрывают/показывают уже загруженный контент.
+    //
+    // Подводный камень: htmx вешает свой обработчик click прямо на кнопку,
+    // поэтому он срабатывает раньше нашего (на document) и шлёт GET при
+    // каждом клике. Ответ приходил уже после того, как мы прятали блок, и
+    // htmx:afterSwap снова его открывал — «Скрыть содержимое» будто не
+    // работало. Теперь повторные запросы отменяются в htmx:configRequest,
+    // а видимостью управляет состояние кнопки.
+    var LABEL_SHOW = "Показать содержимое как видит ученик";
+    var LABEL_HIDE = "Скрыть содержимое";
+
+    function targetOf(button) {
+      var id = button.getAttribute("aria-controls");
+      return id ? document.getElementById(id) : null;
+    }
+
+    function isLoaded(target) {
+      return !!target && target.innerHTML.trim().length > 0;
+    }
+
+    function setState(button, target, expanded) {
       var label = button.querySelector("[data-preview-label]");
-      var isHidden = target.hasAttribute("hidden");
-      if (isHidden) {
-        target.removeAttribute("hidden");
-        button.setAttribute("aria-expanded", "true");
-        if (label) label.textContent = "Скрыть содержимое";
-      } else {
-        target.setAttribute("hidden", "");
-        button.setAttribute("aria-expanded", "false");
-        if (label) label.textContent = "Показать содержимое как видит ученик";
+      button.dataset.previewState = expanded ? "expanded" : "collapsed";
+      button.setAttribute("aria-expanded", expanded ? "true" : "false");
+      if (target) {
+        if (expanded) target.removeAttribute("hidden");
+        else target.setAttribute("hidden", "");
       }
+      if (label) label.textContent = expanded ? LABEL_HIDE : LABEL_SHOW;
     }
 
     document.addEventListener("click", function (event) {
       var button = event.target.closest ? event.target.closest("[data-preview-toggle]") : null;
       if (!button) return;
-      var targetId = button.getAttribute("aria-controls");
-      var target = targetId ? document.getElementById(targetId) : null;
+      var target = targetOf(button);
       if (!target) return;
-      // Если контент ещё не загружен — htmx сам сделает запрос (hx-get),
-      // нам нужно только после загрузки показать блок.
-      // Если уже загружен — просто тогглим.
-      var alreadyLoaded = target.innerHTML.trim().length > 0;
-      if (alreadyLoaded) {
+      event.preventDefault();
+      if (button.dataset.previewState === "loading") return; // фрагмент уже в пути
+      if (isLoaded(target)) {
+        // Контент загружен — переключаем видимость сами: запрос отменён в
+        // htmx:configRequest, поэтому ответ сервера не откроет блок обратно.
+        setState(button, target, target.hasAttribute("hidden"));
+        return;
+      }
+      // Первый клик: htmx выполнит hx-get и вставит фрагмент,
+      // а htmx:afterSwap покажет блок и выставит подпись.
+      button.dataset.previewState = "loading";
+      button.setAttribute("aria-expanded", "true");
+    });
+
+    document.body.addEventListener("htmx:configRequest", function (event) {
+      var button = event.detail && event.detail.elt;
+      if (!button || !button.matches || !button.matches("[data-preview-toggle]")) return;
+      // Повторный GET нужен только если фрагмент ещё не загружен и не в пути.
+      if (button.dataset.previewState === "loading" || isLoaded(targetOf(button))) {
         event.preventDefault();
-        togglePreview(button);
-      } else {
-        // Первый клик: покажем блок сразу после того как htmx вставит HTML
-        button.setAttribute("aria-expanded", "true");
-        var label = button.querySelector("[data-preview-label]");
-        if (label) label.textContent = "Скрыть содержимое";
-        // htmx:afterSwap снимет hidden
       }
     });
 
     document.body.addEventListener("htmx:afterSwap", function (event) {
       var target = event.detail && event.detail.target;
-      if (!target) return;
-      if (target.classList && target.classList.contains("assignment-preview-content")) {
-        target.removeAttribute("hidden");
-        // Найти кнопку, которая контролирует этот блок
-        var btn = document.querySelector('[aria-controls=\"' + target.id + '\"]');
-        if (btn) {
-          btn.setAttribute("aria-expanded", "true");
-          var label = btn.querySelector("[data-preview-label]");
-          if (label) label.textContent = "Скрыть содержимое";
-        }
+      if (!target || !target.classList || !target.classList.contains("assignment-preview-content")) {
+        return;
       }
+      var wrapper = target.closest ? target.closest("[data-assignment-preview]") : null;
+      var button =
+        (wrapper && wrapper.querySelector("[data-preview-toggle]")) ||
+        (target.id ? document.querySelector('[aria-controls=\"' + target.id + '\"]') : null);
+      if (!button) return;
+      setState(button, target, true);
+    });
+
+    // Не удалось загрузить — возвращаем кнопку в исходное состояние,
+    // чтобы преподаватель мог повторить запрос.
+    Array.prototype.forEach.call(["htmx:responseError", "htmx:sendError", "htmx:swapError"], function (name) {
+      document.body.addEventListener(name, function (event) {
+        var button = event.detail && event.detail.elt;
+        if (!button || !button.matches || !button.matches("[data-preview-toggle]")) return;
+        setState(button, targetOf(button), false);
+      });
     });
   }
 
