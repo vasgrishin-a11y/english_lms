@@ -404,7 +404,9 @@ class OnlineModeTests(LMSCase):
     )
     def test_current_preview_can_be_revised_before_import(self):
         revised_payload = json.loads(json.dumps(self.AI_PAYLOAD))
-        revised_payload["blocks"][0]["topics"][0]["assignments"][0]["title"] = "Airport quiz revised"
+        revised_payload["blocks"][0]["topics"][0]["assignments"][0]["title"] = (
+            "Airport quiz revised"
+        )
         revised_payload["blocks"][0]["topics"][0]["assignments"][0]["description"] = (
             "Прочитайте текст ниже и ответьте на вопросы."
         )

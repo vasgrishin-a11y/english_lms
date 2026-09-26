@@ -110,9 +110,13 @@ def ai_assistant(request):
                 for note in meta.get("notes") or []:
                     messages.warning(request, note)
                 if meta.get("result") == "online":
-                    messages.success(request, "ИИ разобрал материал — проверьте подробный предпросмотр ниже.")
+                    messages.success(
+                        request, "ИИ разобрал материал — проверьте подробный предпросмотр ниже."
+                    )
                 else:
-                    messages.info(request, "Материал разобран офлайн — проверьте подробный предпросмотр ниже.")
+                    messages.info(
+                        request, "Материал разобран офлайн — проверьте подробный предпросмотр ниже."
+                    )
         else:
             material, meta = None, {}
 
