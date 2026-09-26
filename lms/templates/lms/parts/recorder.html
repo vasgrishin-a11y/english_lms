@@ -12,7 +12,7 @@
         <span class="recorder-dot hidden" data-recorder-dot aria-hidden="true"></span>
     </div>
     {% if limit %}<div class="progress recorder-meter" aria-hidden="true"><span data-recorder-meter style="width:0%"></span></div>{% endif %}
-    <p class="tiny muted mb-0" data-recorder-status role="status" aria-live="polite">Нажмите «Начать запись» и разрешите доступ к микрофону.{% if limit %} Запись остановится сама через {{ limit_label }}.{% endif %}</p>
+    <p class="tiny muted mb-0" data-recorder-status aria-live="polite">Нажмите «Начать запись» и разрешите доступ к микрофону.{% if limit %} Запись остановится сама через {{ limit_label }}.{% endif %}</p>
     <div class="recorder-take hidden" data-recorder-take>
         <audio controls preload="metadata" data-recorder-preview></audio>
         <button type="button" class="btn btn-ghost btn-sm" data-recorder-discard>{% icon "trash" %}Удалить запись</button>
