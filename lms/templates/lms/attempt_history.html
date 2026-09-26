@@ -29,6 +29,12 @@
                     {% if attempt.feedback.grade != None %}· {{ attempt.feedback.grade }} из {{ attempt.max_points_snapshot }}{% else %}· балл не выставлен{% endif %}
                 </p>
                 {{ attempt.feedback.comment|linebreaks }}
+                {% if attempt.feedback.audio_comment %}
+                    <div class="feedback-audio" style="margin-top:10px">
+                        <p class="tiny strong mb-0">{% icon "mic" "icon icon-sm" %} Голосовой комментарий преподавателя</p>
+                        <audio controls preload="metadata" src="{% url 'media_preview' attempt.feedback.audio_comment.name %}"></audio>
+                    </div>
+                {% endif %}
                 {% if attempt.feedback.teacher %}<p class="tiny mb-0">{{ attempt.feedback.teacher.get_full_name|default:attempt.feedback.teacher.username }} · {{ attempt.feedback.updated_at|date:"d.m.Y H:i" }}</p>{% else %}<p class="tiny mb-0">Автоматическая проверка</p>{% endif %}
             </div>
         </div>

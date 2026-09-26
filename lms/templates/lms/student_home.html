@@ -176,6 +176,12 @@
                             <span>Попытка {{ attempt.version }} · {{ attempt.submitted_at|date:"d.m.Y H:i" }}</span>
                         </span>
                         {% if attempt.feedback.comment %}<p class="feedback-note small muted mb-0">{{ attempt.feedback.comment|truncatechars:180 }}</p>{% endif %}
+                        {% if attempt.feedback.audio_comment %}
+                            <div class="feedback-audio" style="margin-top:8px">
+                                <span class="tiny strong">{% icon "mic" "icon icon-sm" %} Голосовой комментарий</span>
+                                <audio controls preload="metadata" src="{% url 'media_preview' attempt.feedback.audio_comment.name %}"></audio>
+                            </div>
+                        {% endif %}
                     </span>
                     <span class="row-side">
                         {% if attempt.feedback.grade != None %}

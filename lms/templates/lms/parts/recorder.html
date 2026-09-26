@@ -1,8 +1,8 @@
 {% load lms_tags %}
-{# Запись с микрофона. Параметры: input_id, input_name, limit (секунды или пусто), limit_label, external_input (поле файла рисует сама форма). #}
-<div class="recorder" data-recorder data-input="{{ input_id }}"{% if limit %} data-limit="{{ limit }}"{% endif %}>
+{# Запись с микрофона. Параметры: input_id, input_name, limit, limit_label, external_input, recorder_title. #}
+<div class="recorder" data-recorder data-input="{{ input_id }}" data-recorder-action="{{ recorder_action|default:'Принять или отправить' }}"{% if limit %} data-limit="{{ limit }}"{% endif %}>
     <div class="recorder-head">
-        <p class="strong mb-0">{% icon "mic" %} Запись ответа</p>
+        <p class="strong mb-0">{% icon "mic" %} {{ recorder_title|default:"Запись ответа" }}</p>
         {% if limit %}<span class="pill-note">{% icon "timer" "icon icon-sm" %} Лимит: {{ limit_label }}</span>{% endif %}
     </div>
     <div class="recorder-stage">

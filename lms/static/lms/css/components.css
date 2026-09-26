@@ -3692,6 +3692,44 @@ tr.row-bad td:first-child {
     width: 88px;
 }
 
+/* ── Комментарий преподавателя ──────────────────────────── */
+.feedback-composer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    padding: var(--sp-4);
+    margin-top: var(--sp-4);
+    background: var(--accent-soft);
+    border: 1px solid var(--accent-200);
+    border-radius: var(--r-md);
+}
+
+.feedback-composer-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--sp-3);
+}
+
+.feedback-current {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    padding: var(--sp-3);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+}
+
+.feedback-current audio,
+.feedback-audio audio {
+    height: 36px;
+}
+
+.feedback-remove-audio {
+    margin-top: calc(var(--sp-1) * -1);
+}
+
 /* ── Запись с микрофона ──────────────────────────────────── */
 .recorder {
     display: flex;

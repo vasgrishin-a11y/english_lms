@@ -30,6 +30,12 @@
                     {% if attempt.is_late %}<span class="badge badge-needs_revision">после дедлайна</span>{% endif %}
                 </span>
                 {% if attempt.feedback.comment %}<p class="small muted mb-0" style="margin-top:6px">{{ attempt.feedback.comment|truncatechars:220 }}</p>{% endif %}
+                {% if attempt.feedback.audio_comment %}
+                    <div class="feedback-audio" style="margin-top:8px">
+                        <span class="tiny strong">{% icon "mic" "icon icon-sm" %} Голосовой комментарий преподавателя</span>
+                        <audio controls preload="metadata" src="{% url 'media_preview' attempt.feedback.audio_comment.name %}"></audio>
+                    </div>
+                {% endif %}
             </span>
             <span class="row-side">
                 <span class="badge badge-{{ attempt.status }}">{% icon attempt.status|status_icon "icon icon-sm" %}{{ attempt.get_status_display }}</span>

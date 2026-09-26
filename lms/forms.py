@@ -8,6 +8,7 @@ from django.utils.text import slugify
 
 from . import ai
 from .models import (
+    TEACHER_FEEDBACK_RECORDING_LIMIT_SECONDS,
     Assignment,
     Block,
     Chapter,
@@ -115,8 +116,33 @@ class ReviewForm(forms.Form):
     comment = forms.CharField(
         required=False,
         max_length=10000,
-        label="Комментарий преподавателя",
-        widget=forms.Textarea(attrs={"rows": 6}),
+        label="Текстовый комментарий",
+        widget=forms.Textarea(
+            attrs={
+                "rows": 6,
+                "placeholder": "Напишите, что получилось хорошо и что улучшить…",
+            }
+        ),
+    )
+    audio_comment = forms.FileField(
+        required=False,
+        label="Голосовой комментарий",
+        validators=[validate_upload],
+        widget=forms.ClearableFileInput(
+            attrs={
+                "accept": ".mp3,.wav,.m4a,.ogg,.aac,audio/*",
+                "data-max-mb": str(settings.LMS_MAX_FILE_BYTES // (1024 * 1024)),
+            }
+        ),
+        help_text=(
+            "Запишите до 3 минут или загрузите MP3, WAV, M4A, OGG или AAC. "
+            "Новая запись заменит предыдущую."
+        ),
+    )
+    remove_audio = forms.BooleanField(
+        required=False,
+        label="Удалить опубликованный голосовой комментарий",
+        widget=forms.CheckboxInput(),
     )
     decision = forms.ChoiceField(
         choices=Feedback._meta.get_field("decision").choices, label="Решение"
@@ -158,6 +184,12 @@ class ReviewForm(forms.Form):
                 "comment": feedback.comment if feedback else "",
             }
         )
+
+    def clean_audio_comment(self):
+        audio = self.cleaned_data.get("audio_comment")
+        if audio:
+            validate_recording_limit(audio, TEACHER_FEEDBACK_RECORDING_LIMIT_SECONDS)
+        return audio
 
     def clean(self):
         data = super().clean()

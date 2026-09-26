@@ -5,7 +5,7 @@ from django.db import transaction
 from django.db.models.signals import post_delete, pre_save
 from django.dispatch import receiver
 
-from .models import Assignment, AssignmentAttachment, QuestionResponse, Submission
+from .models import Assignment, AssignmentAttachment, Feedback, QuestionResponse, Submission
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +17,7 @@ def delete_unreferenced_file(name, using="default"):
         Assignment.objects.using(using).filter(material_file=name).exists()
         or AssignmentAttachment.objects.using(using).filter(file=name).exists()
         or Submission.objects.using(using).filter(file_answer=name).exists()
+        or Feedback.objects.using(using).filter(audio_comment=name).exists()
         or QuestionResponse.objects.using(using).filter(file_answer=name).exists()
     ):
         return
@@ -30,12 +31,15 @@ def delete_unreferenced_file(name, using="default"):
 @receiver(post_delete, sender=Assignment)
 @receiver(post_delete, sender=AssignmentAttachment)
 @receiver(post_delete, sender=Submission)
+@receiver(post_delete, sender=Feedback)
 @receiver(post_delete, sender=QuestionResponse)
 def cleanup_deleted_file(sender, instance, using, **kwargs):
     if sender is Assignment:
         name = instance.material_file.name
     elif sender is AssignmentAttachment:
         name = instance.file.name
+    elif sender is Feedback:
+        name = instance.audio_comment.name
     else:
         name = instance.file_answer.name
     if name:
@@ -55,6 +59,22 @@ def cleanup_replaced_material(sender, instance, using, raw=False, **kwargs):
         .first()
     )
     if old and old != instance.material_file.name:
+        transaction.on_commit(
+            lambda: delete_unreferenced_file(old, using), using=using, robust=True
+        )
+
+
+@receiver(pre_save, sender=Feedback)
+def cleanup_replaced_feedback_audio(sender, instance, using, raw=False, **kwargs):
+    if raw or not instance.pk:
+        return
+    old = (
+        sender.objects.using(using)
+        .filter(pk=instance.pk)
+        .values_list("audio_comment", flat=True)
+        .first()
+    )
+    if old and old != instance.audio_comment.name:
         transaction.on_commit(
             lambda: delete_unreferenced_file(old, using), using=using, robust=True
         )

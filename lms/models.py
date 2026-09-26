@@ -42,6 +42,15 @@ def response_upload_to(instance, filename):
     )
 
 
+def feedback_audio_upload_to(instance, filename):
+    """Голосовой комментарий хранится в приватной зоне конкретной сдачи."""
+    submission = instance.submission
+    return (
+        f"submissions/{submission.assignment_id}/user_{submission.student_id}/feedback/"
+        f"{uuid.uuid4().hex}{_safe_extension(filename)}"
+    )
+
+
 #: Лимит длительности записи с микрофона: от 10 секунд до 10 минут.
 #: Верхняя граница держит WAV 16 кГц моно (~1,9 МБ/мин) в лимите файла 20 MiB.
 RECORDING_LIMIT_MIN_SECONDS = 10
@@ -50,6 +59,9 @@ recording_limit_validators = [
     MinValueValidator(RECORDING_LIMIT_MIN_SECONDS),
     MaxValueValidator(RECORDING_LIMIT_MAX_SECONDS),
 ]
+
+#: Голосовой комментарий короче ответа ученика: его удобно записать за один дубль.
+TEACHER_FEEDBACK_RECORDING_LIMIT_SECONDS = 180
 
 
 def format_duration(seconds):
@@ -759,6 +771,12 @@ class Feedback(models.Model):
         verbose_name="Балл",
     )
     comment = models.TextField(blank=True, max_length=10000, verbose_name="Комментарий")
+    audio_comment = models.FileField(
+        upload_to=feedback_audio_upload_to,
+        blank=True,
+        validators=[file_validator, validate_upload],
+        verbose_name="Голосовой комментарий",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
