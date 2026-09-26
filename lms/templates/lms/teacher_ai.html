@@ -159,8 +159,11 @@
 
             <section class="card card-pad-sm">
                 <p class="rail-title">Что собрать</p>
-                <p class="small muted">ИИ собирает структуру курса: <strong>класс → главы → темы → задания</strong>. Если в материале есть разделы или главы, они сохраняются в структуре.</p>
-                <p class="tiny muted mb-0">Подсказка: если выберете «Добавить в существующую тему», новые задания попадут прямо в эту тему, главы из материала игнорируются.</p>
+                <ul class="small muted" style="padding-left:18px">
+                    <li><strong>Класс → главы → темы → задания</strong> — ИИ создаст полную структуру курса.</li>
+                    <li><strong>Задание</strong> — выберите существующую тему, куда его добавить. Если тему не выбрать, ИИ создаст полную структуру курса.</li>
+                </ul>
+                <p class="tiny muted mb-0">Если в материале есть разделы или главы, они сохраняются в структуре.</p>
             </section>
 
             <section class="card card-pad-sm">
@@ -208,4 +211,24 @@
         </aside>
     </div>
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    var target = document.getElementById("id_target");
+    var targetTopic = document.getElementById("id_target_topic");
+    if (!target || !targetTopic) return;
+
+    var topicField = targetTopic.closest(".form-field");
+    function toggleTargetTopic() {
+        var isAssignment = target.value === "assignment";
+        targetTopic.disabled = !isAssignment;
+        if (topicField) topicField.hidden = !isAssignment;
+    }
+
+    target.addEventListener("change", toggleTargetTopic);
+    toggleTargetTopic();
+}());
+</script>
 {% endblock %}

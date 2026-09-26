@@ -285,7 +285,6 @@
             <p class="rail-title">{% icon "sparkles" %}{% t "ИИ-помощник" %}</p>
             <p class="small muted">Загрузите фото, Word, Excel, PDF или видео — помощник соберёт задание (а для упражнений — тест с вопросами) черновиком.</p>
             <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_ai' %}?target=assignment{% if form.instance.topic_id %}&amp;topic={{ form.instance.topic_id }}{% endif %}">{% t "Собрать задание из материала" %}</a>
-            <a class="btn btn-ghost btn-sm btn-block" href="{% url 'teacher_ai' %}?target=quiz">{% t "Собрать тест с вопросами" %}</a>
         </div>
         <div class="card card-pad-sm">
             <p class="rail-title">Как собрать задание</p>

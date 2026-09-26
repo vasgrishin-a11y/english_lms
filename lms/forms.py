@@ -1317,8 +1317,11 @@ class AIMaterialForm(forms.Form):
         queryset=Topic.objects.none(),
         required=False,
         label="Добавить в существующую тему",
-        empty_label="Нет — создать новые классы и темы",
-        help_text="Если выбрано, задания и карточки попадут прямо в эту тему.",
+        empty_label="Не выбрано — создать всю структуру",
+        help_text=(
+            "Для варианта «Задание» выберите тему. Если тему не выбрать, "
+            "ИИ соберёт всю структуру курса."
+        ),
         widget=forms.Select(attrs={"class": "form-select"}),
     )
 
@@ -1332,6 +1335,7 @@ class AIMaterialForm(forms.Form):
         self.fields["target_topic"].label_from_instance = lambda obj: (
             f"[{obj.block.name} → {obj.chapter.title}] {obj.title}"
         )
+        self.order_fields(["target", "target_topic", "prompt", "text", "upload"])
 
     def clean_upload(self):
         upload = self.cleaned_data.get("upload")
@@ -1354,6 +1358,18 @@ class AIMaterialForm(forms.Form):
 
     def clean(self):
         cleaned = super().clean()
+        target = cleaned.get("target")
+        target_topic = cleaned.get("target_topic")
+
+        # Одно задание можно добавить только в уже существующую тему. Без темы
+        # сохраняем материал как полную структуру, чтобы не создавать «висячее»
+        # задание вне класса, главы и темы.
+        if target == "assignment" and target_topic is None:
+            cleaned["target"] = "mixed"
+        elif target == "mixed":
+            # Выбранная тема относится только к варианту «Задание».
+            cleaned["target_topic"] = None
+
         has_input = any(
             (
                 cleaned.get("upload"),

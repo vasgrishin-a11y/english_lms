@@ -32,8 +32,10 @@ def _clear_session(request):
 def ai_assistant(request):
     """Окно ИИ-помощника: загрузка, подробный предпросмотр и правка до импорта."""
     mode = ai.ai_mode()
+    available_targets = {value for value, _label in ai.TARGETS}
+    requested_target = request.GET.get("target", "mixed")
     initial = {
-        "target": request.GET.get("target", "mixed"),
+        "target": requested_target if requested_target in available_targets else "mixed",
         "target_topic": request.GET.get("topic") or None,
     }
     revising = request.method == "POST" and "revise_material" in request.POST

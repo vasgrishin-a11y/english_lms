@@ -133,12 +133,17 @@ class AssistantAccessTests(LMSCase):
         self.assertContains(response, "Офлайн-разбор")
         self.assertContains(response, "Формат подсказки")
 
-    def test_target_menu_offers_only_course_structure(self):
+    def test_target_menu_offers_course_structure_and_assignment(self):
         response = self.teacher_client.get(reverse("teacher_ai"))
         choices = list(response.context["form"].fields["target"].choices)
         self.assertEqual(choices, list(ai.TARGETS))
-        self.assertEqual(choices, [("mixed", "Структура курса: класс → главы → темы → задания")])
-        self.assertNotContains(response, "Одно задание")
+        self.assertEqual(
+            choices,
+            [
+                ("mixed", "Класс → главы → темы → задания"),
+                ("assignment", "Задание"),
+            ],
+        )
         self.assertNotContains(response, "Тест с вопросами")
         self.assertNotContains(response, "Набор карточек")
 
@@ -265,6 +270,11 @@ class AssistantFormTests(LMSCase):
         self.assertContains(response, "to book")
         self.assertEqual(Assignment.objects.filter(title="Check-in").count(), 0)
 
+    def test_assignment_without_topic_falls_back_to_full_structure(self):
+        response = self.post_form(target="assignment", text=MARKDOWN)
+        self.assertEqual(response.context["form"].cleaned_data["target"], "mixed")
+        self.assertIsNone(response.context["meta"]["target_topic"])
+
     def test_preview_and_reset(self):
         response = self.post_form(text=MARKDOWN)
         self.assertContains(response, "Что получилось")
@@ -313,9 +323,9 @@ class OfflineImportTests(LMSCase):
             Assignment.objects.visible(self.student).filter(title="Слова темы").exists()
         )
 
-    def test_import_into_existing_topic_keeps_structure(self):
+    def test_import_assignment_into_existing_topic_keeps_structure(self):
         topic = Topic.objects.create(block=self.block, title="Airport", slug="airport")
-        self.build(target_topic=topic.pk)
+        self.build(target="assignment", target_topic=topic.pk)
         self.import_material()
         self.assertEqual(Block.objects.count(), 1)
         self.assertEqual(Topic.objects.filter(block=self.block).count(), 2)
