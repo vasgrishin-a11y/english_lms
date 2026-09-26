@@ -6,7 +6,13 @@ from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from lms.file_cleanup import delete_unreferenced_file
-from lms.models import Assignment, Feedback, QuestionResponse, Submission
+from lms.models import (
+    Assignment,
+    AssignmentAttachment,
+    Feedback,
+    QuestionResponse,
+    Submission,
+)
 
 
 class Command(BaseCommand):
@@ -27,6 +33,9 @@ class Command(BaseCommand):
         cutoff = (timezone.now() - timedelta(hours=options["min_age_hours"])).timestamp()
         referenced = set(
             Assignment.objects.exclude(material_file="").values_list("material_file", flat=True)
+        )
+        referenced.update(
+            AssignmentAttachment.objects.exclude(file="").values_list("file", flat=True)
         )
         referenced.update(
             Submission.objects.exclude(file_answer="").values_list("file_answer", flat=True)

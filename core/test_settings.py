@@ -22,9 +22,11 @@ MEDIA_ROOT.mkdir()
 STATIC_ROOT = Path(_MEDIA_TEMP.name) / "static"
 STATIC_ROOT.mkdir()
 STORAGES = {
-    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "default": {"BACKEND": "lms.storage.PrivateMediaStorage"},
     "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
 }
+# Тесты не должны видеть реальные каталоги разработчика: подменяем точечно.
+LMS_MEDIA_FALLBACK_ROOTS = []
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 LOGGING = {

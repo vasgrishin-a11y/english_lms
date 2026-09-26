@@ -2,21 +2,29 @@
 {% if assignment.material_file or assignment.attachments.exists %}<p class="strong">Материалы урока</p>{% endif %}
 {% if assignment.material_file %}
 <div class="media-frame">
-    {% if assignment.material_file.name|media_kind == 'image' %}
-    <a href="{% url 'media_preview' assignment.material_file.name %}" target="_blank" rel="noopener"><img src="{% url 'media_preview' assignment.material_file.name %}" alt="Материал задания" loading="lazy"></a>
-    {% elif assignment.material_file.name|media_kind == 'audio' %}
-    <audio controls src="{% url 'media_preview' assignment.material_file.name %}"></audio>
+    {% if assignment.material_file.name|file_missing %}
+        {% include "lms/parts/missing_file.html" with name=assignment.material_file.name %}
+    {% else %}
+        {% if assignment.material_file.name|media_kind == 'image' %}
+        <a href="{% url 'media_preview' assignment.material_file.name %}" target="_blank" rel="noopener"><img src="{% url 'media_preview' assignment.material_file.name %}" alt="Материал задания" loading="lazy"></a>
+        {% elif assignment.material_file.name|media_kind == 'audio' %}
+        <audio controls src="{% url 'media_preview' assignment.material_file.name %}"></audio>
+        {% endif %}
+        <a href="{% url 'private_file' assignment.material_file.name %}">Скачать: {{ assignment.material_file.name }}</a>
     {% endif %}
-    <a href="{% url 'private_file' assignment.material_file.name %}">Скачать: {{ assignment.material_file.name }}</a>
 </div>
 {% endif %}
 {% for att in assignment.attachments.all %}
 <div class="media-frame">
-    {% if att.file.name|media_kind == 'image' %}
-    <a href="{% url 'media_preview' att.file.name %}" target="_blank" rel="noopener"><img src="{% url 'media_preview' att.file.name %}" alt="{{ att.file.name }}" loading="lazy" style="max-height:300px;object-fit:contain"></a>
-    {% elif att.file.name|media_kind == 'audio' %}
-    <audio controls src="{% url 'media_preview' att.file.name %}"></audio>
+    {% if att.file.name|file_missing %}
+        {% include "lms/parts/missing_file.html" with name=att.file.name %}
+    {% else %}
+        {% if att.file.name|media_kind == 'image' %}
+        <a href="{% url 'media_preview' att.file.name %}" target="_blank" rel="noopener"><img src="{% url 'media_preview' att.file.name %}" alt="{{ att.file.name }}" loading="lazy" style="max-height:300px;object-fit:contain"></a>
+        {% elif att.file.name|media_kind == 'audio' %}
+        <audio controls src="{% url 'media_preview' att.file.name %}"></audio>
+        {% endif %}
+        <a href="{% url 'private_file' att.file.name %}">Скачать: {{ att.file.name }}</a>
     {% endif %}
-    <a href="{% url 'private_file' att.file.name %}">Скачать: {{ att.file.name }}</a>
 </div>
 {% endfor %}

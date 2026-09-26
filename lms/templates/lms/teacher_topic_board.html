@@ -136,8 +136,6 @@
                     {% csrf_token %}
                     <input type="hidden" name="next" value="{% url 'teacher_topic_board' topic.pk %}#assignment-{{ assignment.pk }}">
                     {% include "lms/form_fields.html" with form=assignment.quick_form %}
-                    <label for="files-{{ assignment.pk }}">Добавить вложения</label>
-                    <input id="files-{{ assignment.pk }}" type="file" name="new_attachments" multiple>
                     {% if assignment.question_forms %}
                     <p class="alert">При сохранении правильных ответов автоматические результаты прошлых работ будут пересчитаны. Ручные оценки сохранятся.</p>
                     {% for question_form in assignment.question_forms %}

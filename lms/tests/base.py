@@ -13,6 +13,7 @@ class LMSCase(TestCase):
     def setUp(self):
         directory = tempfile.TemporaryDirectory(prefix="lms-regression-")
         self.addCleanup(directory.cleanup)
+        self.media_root = directory.name
         media = override_settings(MEDIA_ROOT=directory.name)
         media.enable()
         self.addCleanup(media.disable)

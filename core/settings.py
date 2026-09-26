@@ -1,6 +1,7 @@
 """Fail-closed production settings; opt into local development with DJANGO_DEBUG=True."""
 
 import os
+import re
 from datetime import timedelta
 from pathlib import Path
 from urllib.parse import quote
@@ -146,7 +147,9 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = Path(os.getenv("DJANGO_STATIC_ROOT", BASE_DIR / "staticfiles"))
 STORAGES = {
-    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    # Приватные файлы: пишем в MEDIA_ROOT, читаем и из прежних каталогов —
+    # см. LMS_MEDIA_FALLBACK_ROOTS ниже и lms/storage.py.
+    "default": {"BACKEND": "lms.storage.PrivateMediaStorage"},
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
         "OPTIONS": {"file_permissions_mode": 0o644, "directory_permissions_mode": 0o755},
@@ -161,17 +164,8 @@ if not DEBUG and not _media_root:
 # совпадать с путём в Docker (/app/var/media) и переживать git pull / rebuild:
 # папка var/ уже в .gitignore и .dockerignore, а volume private-media в
 # compose.yaml монтируется именно туда. Переопределить можно DJANGO_MEDIA_ROOT.
-# Для плавного перехода со старой папки <repo>/media: если var/media пуста,
-# а media/ содержит файлы — используем старую папку и подсказываем перенести.
 _default_media = BASE_DIR / "var" / "media"
 _legacy_media = BASE_DIR / "media"
-if DEBUG and not _media_root:
-    try:
-        if not _default_media.exists() or not any(_default_media.iterdir()):
-            if _legacy_media.exists() and any(_legacy_media.iterdir()):
-                _default_media = _legacy_media
-    except OSError:
-        pass
 MEDIA_ROOT = Path(_media_root or (_default_media if DEBUG else BASE_DIR / "media"))
 if not MEDIA_ROOT.is_absolute():
     raise ImproperlyConfigured("DJANGO_MEDIA_ROOT must be an absolute path")
@@ -182,6 +176,23 @@ if (
     or STATIC_ROOT.resolve() in MEDIA_ROOT.resolve().parents
 ):
     raise ImproperlyConfigured("Private media must not be stored inside STATIC_ROOT")
+# Прежние каталоги MEDIA_ROOT. В базе у файла хранится только относительное имя,
+# поэтому переезд каталога (<repo>/media → <repo>/var/media) молча превращал все
+# ранее загруженные картинки в 404. Читаем их со старого места — записи всё равно
+# идут в актуальный MEDIA_ROOT. Свести файлы в один каталог: manage.py
+# migrate_media_folder. Дополнительные каталоги — DJANGO_MEDIA_FALLBACK_ROOTS
+# (через «,» или os.pathsep).
+_fallback_separator = r"[,%s]" % re.escape(os.pathsep)
+_fallback_roots = [
+    Path(item.strip())
+    for item in re.split(_fallback_separator, os.getenv("DJANGO_MEDIA_FALLBACK_ROOTS", ""))
+    if item.strip()
+]
+LMS_MEDIA_FALLBACK_ROOTS = [
+    str(path)
+    for path in dict.fromkeys(_fallback_roots + [_legacy_media, _default_media])
+    if path.is_absolute() and path.resolve() != MEDIA_ROOT.resolve()
+]
 FILE_UPLOAD_PERMISSIONS = 0o600
 FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o700
 # Создаём каталог для файлов в разработке, чтобы первый upload не падал
