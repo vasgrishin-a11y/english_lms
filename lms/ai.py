@@ -79,10 +79,8 @@ AI_QUESTION_KINDS = {value for value, _ in Question.Kind.choices}
 AI_CEFR_LEVELS = {value for value, _ in CefrLevel.choices}
 
 TARGETS = (
-    ("mixed", "Структура целиком: класс → главы → темы → задания"),
-    ("assignment", "Одно задание"),
-    ("quiz", "Тест с вопросами"),
-    ("cards", "Набор карточек"),
+    ("mixed", "Класс → главы → темы → задания"),
+    ("assignment", "Задание"),
 )
 
 TYPE_MARKERS = {
