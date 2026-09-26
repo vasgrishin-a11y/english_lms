@@ -22,6 +22,7 @@ from django.views.decorators.http import require_GET
 from .decorators import get_user_role
 from .models import Assignment, Feedback, Profile, QuestionResponse, Submission
 from .search import student_suggest, teacher_suggest
+from .validators import audio_content_matches
 
 logger = logging.getLogger(__name__)
 
@@ -56,17 +57,15 @@ AUDIO_TYPES = {
     ".ogg": "audio/ogg",
 }
 PREVIEW_TYPES = {**IMAGE_TYPES, **AUDIO_TYPES}
+#: Magic-байты только для картинок. Аудио проверяется через mutagen
+#: (см. _signature_matches), чтобы не отбраковывать валидные, но не попавшие
+#: в узкий список форматы записи.
 PREVIEW_SIGNATURES = {
     ".png": (b"\x89PNG\r\n\x1a\n",),
     ".jpg": (b"\xff\xd8\xff",),
     ".jpeg": (b"\xff\xd8\xff",),
     ".gif": (b"GIF87a", b"GIF89a"),
     ".webp": (b"RIFF",),
-    ".wav": (b"RIFF",),
-    ".mp3": (b"ID3", b"\xff\xfb", b"\xff\xf3", b"\xff\xf2", b"\xff\xe3"),
-    ".m4a": (b"ftyp",),
-    ".aac": (b"\xff\xf1", b"\xff\xf9", b"ID3", b"ftyp"),
-    ".ogg": (b"OggS",),
 }
 
 
@@ -138,6 +137,11 @@ def _resolve_private_file(request, name):
 
 def _signature_matches(name, file):
     extension = Path(name).suffix.lower()
+    # Аудио: проверяем контейнер/кодек через mutagen — тем же способом, что и
+    # при загрузке. Так любой принятый на входе файл гарантированно можно
+    # воспроизвести (раньше узкий список magic-байтов давал ученику 404).
+    if extension in AUDIO_TYPES:
+        return audio_content_matches(file, extension)
     expected = PREVIEW_SIGNATURES.get(extension)
     if not expected:
         return False
@@ -147,10 +151,7 @@ def _signature_matches(name, file):
         header = file.read(16)
     finally:
         file.seek(position)
-    if any(header.startswith(prefix) for prefix in expected):
-        return True
-    # MP4-контейнер: 'ftyp' находится на смещении 4.
-    return extension in {".m4a", ".aac"} and header[4:8] == b"ftyp"
+    return any(header.startswith(prefix) for prefix in expected)
 
 
 def _file_response(file, *, inline, content_type):

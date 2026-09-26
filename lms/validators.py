@@ -10,6 +10,16 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 
 AUDIO_EXTENSIONS = {"mp3", "wav", "m4a", "ogg", "aac"}
+#: Соответствие расширения аудио и классов mutagen. Единый источник правды для
+#: проверки при загрузке (validate_upload) и при inline-превью (media_preview),
+#: чтобы файл, принятый на входе, всегда можно было воспроизвести.
+AUDIO_MUTAGEN_TYPES = {
+    "mp3": {"MP3"},
+    "wav": {"WAVE"},
+    "m4a": {"MP4"},
+    "aac": {"AAC"},
+    "ogg": {"OggVorbis", "OggOpus", "OggSpeex", "OggFLAC"},
+}
 ALLOWED_FILE_EXTENSIONS = [
     "pdf",
     "doc",
@@ -79,16 +89,9 @@ def validate_upload(file):
             file.seek(0)
             if extension in AUDIO_EXTENSIONS:
                 audio = mutagen.File(fileobj=file)
-                allowed_types = {
-                    "mp3": {"MP3"},
-                    "wav": {"WAVE"},
-                    "m4a": {"MP4"},
-                    "aac": {"AAC"},
-                    "ogg": {"OggVorbis", "OggOpus", "OggSpeex", "OggFLAC"},
-                }
                 valid = (
                     audio is not None
-                    and type(audio).__name__ in allowed_types[extension]
+                    and type(audio).__name__ in AUDIO_MUTAGEN_TYPES[extension]
                     and audio.info.length > 0
                 )
             elif extension == "txt":
@@ -140,6 +143,33 @@ def validate_upload(file):
         raise ValidationError(
             "Не удалось прочитать файл. Загрузите неповреждённый файл правильного формата."
         ) from exc
+
+
+def audio_content_matches(fileobj, extension):
+    """Содержимое действительно является аудио заявленного расширения.
+
+    Использует ту же проверку mutagen, что и ``validate_upload`` при приёме
+    файла, поэтому любой корректно загруженный аудиофайл гарантированно
+    проходит проверку при inline-превью (без хрупкого списка magic-байтов,
+    который отбраковывал валидные MP3/контейнеры и отдавал ученику 404).
+    """
+    extension = extension.lower().lstrip(".")
+    expected = AUDIO_MUTAGEN_TYPES.get(extension)
+    if not expected:
+        return False
+    position = fileobj.tell()
+    try:
+        fileobj.seek(0)
+        audio = mutagen.File(fileobj=fileobj)
+    except (OSError, ValueError, EOFError, mutagen.MutagenError):
+        return False
+    finally:
+        fileobj.seek(position)
+    return (
+        audio is not None
+        and type(audio).__name__ in expected
+        and getattr(audio.info, "length", 0) > 0
+    )
 
 
 #: Запас на округление кодеков и задержку остановки записи в браузере.
