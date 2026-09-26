@@ -12,6 +12,7 @@ from lms.models import (
     Question,
     QuestionResponse,
     QuizAttempt,
+    Submission,
 )
 from lms.services import regrade_assignment
 
@@ -375,3 +376,111 @@ class AssignmentTypeSwitchTests(LMSCase):
         plain.refresh_from_db()
         self.assertEqual(plain.assignment_type, Assignment.Type.QUIZ)
         self.assertEqual(plain.max_points, 4)
+
+
+class TypeSwitchWhileInProgressTests(LMSCase):
+    """Тип можно менять и после того, как задание отдано ученикам и в работе."""
+
+    def full_payload(self, assignment_type, **over):
+        data = {
+            "topic": self.topic.pk,
+            "title": self.assignment.title,
+            "description": self.assignment.description,
+            "assignment_type": assignment_type,
+            "max_points": 100,
+            "max_tries": 3,
+            "status": "published",
+            "order": self.assignment.order,
+            "is_active": "on",
+        }
+        data.update(over)
+        return data
+
+    def switch(self, assignment_type):
+        url = reverse("teacher_assignment_form", args=[self.assignment.pk])
+        response = self.teacher_client.post(url, self.full_payload(assignment_type))
+        self.assignment.refresh_from_db()
+        return response
+
+    def test_every_type_is_reachable_with_a_submitted_answer(self):
+        submission = self.submit()
+        self.assertEqual(submission.status, Submission.Status.SUBMITTED)
+        for target in (
+            Assignment.Type.QUIZ,
+            Assignment.Type.AUDIO,
+            Assignment.Type.FILE,
+            Assignment.Type.MIXED,
+            Assignment.Type.MATERIAL,
+            Assignment.Type.FLASHCARDS,
+            Assignment.Type.TEXT,
+        ):
+            with self.subTest(target=target):
+                self.assertEqual(self.switch(target).status_code, 302)
+                self.assertEqual(self.assignment.assignment_type, target)
+        # Сданная работа и её снапшот баллов не пострадали.
+        submission.refresh_from_db()
+        self.assertEqual(submission.max_points_snapshot, 100)
+
+    def test_quiz_with_a_graded_attempt_switches_and_switches_back(self):
+        self.assignment.assignment_type = Assignment.Type.QUIZ
+        self.assignment.save()
+        question = Question.objects.create(
+            assignment=self.assignment, kind="mcq", text="City?", points=3, order=1
+        )
+        Choice.objects.create(question=question, text="London", is_correct=True, order=0)
+        submission = self.submit()
+        QuizAttempt.objects.create(
+            submission=submission, score=3, max_score=3, total_count=1, answers={}
+        )
+        self.switch(Assignment.Type.TEXT)
+        self.assertEqual(self.assignment.assignment_type, Assignment.Type.TEXT)
+        self.switch(Assignment.Type.QUIZ)
+        self.assertEqual(self.assignment.assignment_type, Assignment.Type.QUIZ)
+        self.assertEqual(self.assignment.questions.count(), 1)
+
+    def test_student_page_survives_a_type_change_mid_flight(self):
+        self.submit()
+        for target in (
+            Assignment.Type.AUDIO,
+            Assignment.Type.QUIZ,
+            Assignment.Type.MATERIAL,
+            Assignment.Type.FLASHCARDS,
+            Assignment.Type.TEXT,
+        ):
+            with self.subTest(target=target):
+                Assignment.objects.filter(pk=self.assignment.pk).update(assignment_type=target)
+                page = self.student_client.get(
+                    reverse("assignment_detail", args=[self.assignment.pk])
+                )
+                self.assertEqual(page.status_code, 200)
+
+    def test_inline_editor_switches_type_with_a_submitted_answer(self):
+        self.submit()
+        response = self.teacher_client.post(
+            reverse("teacher_assignment_quick_edit", args=[self.assignment.pk]),
+            {
+                "assignment_type": Assignment.Type.AUDIO,
+                "title": self.assignment.title,
+                "description": self.assignment.description,
+                "status": "published",
+                "order": self.assignment.order,
+                "max_points": 100,
+                "max_tries": 3,
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assignment.refresh_from_db()
+        self.assertEqual(self.assignment.assignment_type, Assignment.Type.AUDIO)
+
+    def test_switching_to_a_no_submission_type_warns_about_hidden_work(self):
+        self.submit()
+        response = self.teacher_client.post(
+            reverse("teacher_assignment_form", args=[self.assignment.pk]),
+            self.full_payload(Assignment.Type.MATERIAL),
+            follow=True,
+        )
+        notes = [str(m) for m in response.context["messages"]]
+        self.assertTrue(
+            any("пропадут из проверки" in note for note in notes),
+            f"Учителя нужно предупредить о скрытых работах, получили: {notes}",
+        )

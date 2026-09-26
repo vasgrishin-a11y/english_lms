@@ -1381,6 +1381,7 @@ def assignment_form(request, pk=None):
         )
         if was_quiz and not instance.is_quiz:
             _warn_about_leftover_questions(request, instance, instance.questions.count())
+        _warn_about_hidden_submissions(request, instance)
         if request.POST.get("_save_questions") or (is_new and instance.is_quiz):
             return redirect("teacher_questions", pk=instance.pk)
         if instance.is_flashcards:
@@ -1504,6 +1505,22 @@ def _warn_about_leftover_questions(request, assignment, total):
     )
 
 
+def _warn_about_hidden_submissions(request, assignment):
+    """Тип без сдачи скрывает уже сданные работы из проверки — это стоит сказать вслух."""
+    if not assignment.is_no_submission:
+        return
+    total = assignment.submissions.count()
+    if not total:
+        return
+    messages.warning(
+        request,
+        f"У задания уже есть сданные работы ({total}), а тип "
+        f"«{assignment.get_assignment_type_display()}» сдачу не предполагает: эти работы "
+        "пропадут из проверки и из истории ученика. Данные сохранены — вернёте тип с ответом, "
+        "вернутся и работы.",
+    )
+
+
 @teacher_required
 @require_POST
 def assignment_quick_edit(request, pk):
@@ -1572,6 +1589,7 @@ def assignment_quick_edit(request, pk):
         ).delete()
     messages.success(request, "Задание сохранено. Автоматические результаты пересчитаны.")
     _warn_about_leftover_questions(request, assignment, leftover_questions)
+    _warn_about_hidden_submissions(request, assignment)
     return redirect(
         reverse("teacher_topic_board", args=[assignment.topic_id]) + f"#assignment-{assignment.pk}"
     )

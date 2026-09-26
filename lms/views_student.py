@@ -264,6 +264,11 @@ def student_assignments(request):
     )
 
 
+def _is_returned_for_revision(submission):
+    """Последняя попытка возвращена на доработку — задание снова открыто."""
+    return bool(submission) and submission.status == Submission.Status.NEEDS_REVISION
+
+
 @student_required
 @require_http_methods(["GET", "POST"])
 def assignment_detail(request, pk):
@@ -324,6 +329,7 @@ def assignment_detail(request, pk):
         {
             "assignment": assignment,
             "submission": submission,
+            "needs_revision": _is_returned_for_revision(submission),
             "form": form,
             "questions": [],
             "quiz_result": None,
@@ -370,6 +376,7 @@ def _quiz_context(request, assignment, attempts=None, submission=None):
     return {
         "assignment": assignment,
         "submission": submission,
+        "needs_revision": _is_returned_for_revision(submission),
         "attempts": attempts,
         "items": items,
         "questions": questions,

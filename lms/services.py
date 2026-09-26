@@ -380,19 +380,27 @@ def _student_and_quiz(student, assignment_id):
 
 
 def round_state(student, assignment):
-    """Текущий проход ученика: (номер, последняя версия сдачи, можно ли отвечать)."""
+    """Текущий проход ученика: (номер, последняя версия сдачи, можно ли отвечать).
+
+    Проход открыт, когда ученик ещё не сдавал, уже начал новый заход или
+    преподаватель вернул последнюю работу на доработку. «Нужно доработать» —
+    прямое указание переделать, поэтому оно открывает задание независимо от
+    галочки «Можно пройти заново»: иначе ученик видел статус «на доработке»,
+    но не мог ни ответить заново, ни начать новую попытку.
+    """
     latest = (
         Submission.objects.filter(student=student, assignment=assignment)
         .order_by("-version")
-        .values_list("version", flat=True)
+        .values("version", "status")
         .first()
-        or 0
     )
-    current = latest + 1
+    version = latest["version"] if latest else 0
+    current = version + 1
     started = QuestionResponse.objects.filter(
         student=student, assignment=assignment, round=current
     ).exists()
-    return current, latest, latest == 0 or started
+    reopened = bool(latest) and latest["status"] == Submission.Status.NEEDS_REVISION
+    return current, version, version == 0 or started or reopened
 
 
 def _open_round(student, assignment, expected_round):
@@ -554,7 +562,11 @@ def reset_item_answer(*, student, assignment_id, question_id, expected_round=Non
 
 
 def start_retake(*, student, assignment_id):
-    """Начать задание заново, если преподаватель это разрешил."""
+    """Начать задание заново.
+
+    Доступно, если преподаватель включил «Можно пройти заново» либо вернул
+    последнюю работу на доработку (тогда проход уже открыт в ``round_state``).
+    """
     with transaction.atomic():
         student, assignment = _student_and_quiz(student, assignment_id)
         current, latest, accepting = round_state(student, assignment)
