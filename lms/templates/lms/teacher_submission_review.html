@@ -171,7 +171,7 @@
                         <div class="form-field{% if form.audio_comment.errors %} field-error{% endif %}">
                             <label for="{{ form.audio_comment.id_for_label }}">Или загрузите готовую запись</label>
                             {{ form.audio_comment }}
-                            {% if form.audio_comment.help_text %}<div class="help-text">{{ form.audio_comment.help_text }}</div>{% endif %}
+                            {% if form.audio_comment.help_text %}<div class="help-text" id="{{ form.audio_comment.auto_id }}_helptext">{{ form.audio_comment.help_text }}</div>{% endif %}
                             {{ form.audio_comment.errors }}
                         </div>
                         {% if feedback and feedback.audio_comment %}

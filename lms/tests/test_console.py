@@ -248,8 +248,13 @@ class ReviewDetailTests(LMSCase):
         name = feedback.audio_comment.name
         self.assertEqual(self.student_client.get(f"/preview/{name}").status_code, 200)
         self.assertEqual(self.client_for(self.other).get(f"/preview/{name}").status_code, 404)
-        self.assertContains(self.student_client.get(self.url), "Голосовой комментарий преподавателя")
-        self.assertContains(self.teacher_client.get(f"/teacher/review/{attempt.pk}/"), "Опубликованный голосовой комментарий")
+        self.assertContains(
+            self.student_client.get(self.url), "Голосовой комментарий преподавателя"
+        )
+        self.assertContains(
+            self.teacher_client.get(f"/teacher/review/{attempt.pk}/"),
+            "Опубликованный голосовой комментарий",
+        )
 
     def test_save_and_go_next_moves_to_neighbour(self):
         second_task = Assignment.objects.create(

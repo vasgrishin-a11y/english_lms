@@ -116,7 +116,7 @@ class ReviewForm(forms.Form):
     comment = forms.CharField(
         required=False,
         max_length=10000,
-        label="Текстовый комментарий",
+        label="Комментарий преподавателя",
         widget=forms.Textarea(
             attrs={
                 "rows": 6,
