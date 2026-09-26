@@ -3066,6 +3066,28 @@ table .grade-col {
     border-radius: var(--r-md);
     cursor: pointer;
     transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+    /* Адаптируемся к ширине самого блока, а не окна: одна и та же зона живёт
+       и в широкой форме, и в узкой боковой колонке проверки (320px). */
+    container-type: inline-size;
+}
+
+.dropzone-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2);
+}
+
+/* Узкий контейнер (боковая колонка проверки, телефон): иконка и текст сверху,
+   кнопки — отдельной строкой на всю ширину, чтобы ничего не «сбивалось». */
+@container (max-width: 360px) {
+    .dropzone-actions {
+        flex: 1 1 100%;
+    }
+    .dropzone-actions .btn {
+        flex: 1 1 auto;
+        justify-content: center;
+    }
 }
 
 .dropzone:hover {

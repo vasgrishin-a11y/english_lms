@@ -7,6 +7,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, override_settings
+from django.urls import reverse
 
 from lms.forms import SubmissionForm
 from lms.models import Assignment, Submission, SubmissionEvent
@@ -18,14 +19,25 @@ def text_file(name="answer.txt", content=b"Actual text answer"):
     return SimpleUploadedFile(name, content, "text/plain")
 
 
-def wave_file():
+def wave_file(name="answer.wav"):
     stream = io.BytesIO()
     with wave.open(stream, "wb") as audio:
         audio.setnchannels(1)
         audio.setsampwidth(2)
         audio.setframerate(8000)
         audio.writeframes(b"\0\0" * 8000)
-    return SimpleUploadedFile("answer.wav", stream.getvalue(), "audio/wav")
+    return SimpleUploadedFile(name, stream.getvalue(), "audio/wav")
+
+
+def crc_mp3_file(name="comment.mp3"):
+    """Валидный MP3 (MPEG-1 Layer 3, 128 кбит/с, 44100 Гц) с CRC-защитой.
+
+    Заголовок начинается с 0xFFFA и не содержит тега ID3 — раньше такой файл
+    принимался при загрузке, но отбраковывался узким списком magic-байтов при
+    inline-превью, и ученик не мог включить запись.
+    """
+    frame = bytes([0xFF, 0xFA, 0x90, 0x00]) + b"\x00" * (417 - 4)
+    return SimpleUploadedFile(name, frame * 40, "audio/mpeg")
 
 
 class FileTests(LMSCase):
@@ -157,6 +169,50 @@ class FileTests(LMSCase):
             # again sends request_finished outside its signal guard and closes
             # the surrounding TestCase transaction on PostgreSQL.
             self.assertTrue(response.closed)
+
+    def test_crc_mp3_answer_previews_for_owner(self):
+        # MP3 с CRC-защитой (0xFFFA) валиден и должен воспроизводиться inline.
+        self.assignment.assignment_type = "audio"
+        self.assignment.save()
+        response = self.student_client.post(
+            self.url, {"expected_version": 0, "file_answer": crc_mp3_file("answer.mp3")}
+        )
+        self.assertEqual(response.status_code, 302)
+        name = Submission.objects.get().file_answer.name
+        preview = self.student_client.get(reverse("media_preview", args=[name]))
+        self.assertEqual(preview.status_code, 200)
+        self.assertEqual(preview["Content-Type"], "audio/mpeg")
+        b"".join(preview.streaming_content)
+
+    def test_student_can_play_teacher_feedback_audio(self):
+        # После сохранения проверки с голосовым комментарием ученик обязан
+        # видеть и воспроизводить приложенную запись (в т.ч. загруженный MP3).
+        attempt = self.submit(file_answer=text_file())
+        for audio, ctype in (
+            (wave_file("comment.wav"), "audio/wav"),
+            (crc_mp3_file("comment.mp3"), "audio/mpeg"),
+        ):
+            with self.subTest(audio=audio.name):
+                self.review(attempt, audio_comment=audio)
+                attempt.refresh_from_db()
+                name = attempt.feedback.audio_comment.name
+                # Владелец записи (ученик) может её воспроизвести.
+                owner = self.student_client.get(reverse("media_preview", args=[name]))
+                self.assertEqual(owner.status_code, 200)
+                self.assertEqual(owner["Content-Type"], ctype)
+                b"".join(owner.streaming_content)
+                # Преподаватель тоже.
+                teacher = self.teacher_client.get(reverse("media_preview", args=[name]))
+                self.assertEqual(teacher.status_code, 200)
+                b"".join(teacher.streaming_content)
+                # Чужой ученик — нет.
+                self.assertEqual(
+                    self.client_for(self.other)
+                    .get(reverse("media_preview", args=[name]))
+                    .status_code,
+                    404,
+                )
+                attempt.refresh_from_db()
 
     def test_private_files_work_without_debug_and_raw_media_never_works(self):
         attempt = self.submit(file_answer=text_file())

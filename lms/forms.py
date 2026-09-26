@@ -136,10 +136,7 @@ class ReviewForm(forms.Form):
                 "data-dropzone-hint": "Перетащите запись сюда или вставьте из буфера Ctrl+V",
             }
         ),
-        help_text=(
-            "Запишите до 3 минут или загрузите MP3, WAV, M4A, OGG или AAC. "
-            "Новая запись заменит предыдущую."
-        ),
+        help_text="Новая запись заменит предыдущую.",
     )
     remove_audio = forms.BooleanField(
         required=False,

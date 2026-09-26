@@ -1320,8 +1320,10 @@
         '<span class="dropzone-file" data-dropzone-name hidden></span>' +
         '<span class="dropzone-error" data-dropzone-error role="alert" hidden></span>' +
         "</span>" +
+        '<span class="dropzone-actions">' +
         '<button type="button" class="btn btn-secondary btn-sm" data-dropzone-pick>' + (isMultiple ? "Выбрать файлы" : "Выбрать файл") + '</button>' +
-        '<button type="button" class="btn btn-ghost btn-sm" data-dropzone-clear hidden>' + (isMultiple ? "Убрать все" : "Убрать файл") + '</button>';
+        '<button type="button" class="btn btn-ghost btn-sm" data-dropzone-clear hidden>' + (isMultiple ? "Убрать все" : "Убрать файл") + '</button>' +
+        "</span>";
 
       input.parentNode.insertBefore(zone, input);
       input.classList.add("dropzone-native");
