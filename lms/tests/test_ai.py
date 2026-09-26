@@ -443,13 +443,24 @@ class AssistantModelTests(LMSCase):
             self.assertEqual(ai.ai_mode(), "off")
             self.assertIn("выключен", ai.ai_mode_label())
 
-    def test_prompt_contains_schema_and_teacher_wishes(self):
+    def test_prompt_contains_schema_teacher_wishes_and_unknown_learner_rules(self):
         prompt = ai.build_prompt(
             "текст", prompt="побольше лексики", target="quiz", filename="a.txt"
         )
         self.assertIn("побольше лексики", prompt)
         self.assertIn("JSON", prompt)
         self.assertIn("текст", prompt)
+        self.assertIn("Ученик заранее неизвестен", prompt)
+        self.assertIn("Класс (Block)", prompt)
+        self.assertIn("Задание бывает типов", prompt)
+        self.assertIn("Импорт создаёт только черновики", prompt)
+
+    def test_revision_prompt_uses_course_context_without_student_data(self):
+        prompt = ai.build_revision_prompt(self.assignment, "Сделай инструкцию яснее")
+        self.assertIn("Сделай инструкцию яснее", prompt)
+        self.assertIn('"course_context"', prompt)
+        self.assertIn("не создаёшь профиль ученика", prompt)
+        self.assertIn("не добавляй имя", prompt)
 
 
 class ProviderSettingsTests(SimpleTestCase):
