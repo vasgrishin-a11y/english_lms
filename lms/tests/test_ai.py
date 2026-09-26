@@ -454,6 +454,13 @@ class AssistantModelTests(LMSCase):
         self.assertIn("Класс (Block)", prompt)
         self.assertIn("Задание бывает типов", prompt)
         self.assertIn("Импорт создаёт только черновики", prompt)
+        self.assertIn("Материал обязан быть доступен ученику", prompt)
+        self.assertIn("не считается автоматически вложенным", prompt)
+
+    def test_prompt_does_not_allow_hidden_source_material(self):
+        prompt = ai.build_prompt("", target="assignment")
+        self.assertIn("В запросе нет отдельного материала", prompt)
+        self.assertIn("Нельзя оставлять инструкцию", prompt)
 
     def test_revision_prompt_uses_course_context_without_student_data(self):
         prompt = ai.build_revision_prompt(self.assignment, "Сделай инструкцию яснее")
