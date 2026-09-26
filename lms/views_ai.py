@@ -30,22 +30,62 @@ def _clear_session(request):
 @teacher_required
 @require_http_methods(["GET", "POST"])
 def ai_assistant(request):
-    """Окно ИИ-помощника: загрузка материала, разбор и превью структуры."""
+    """Окно ИИ-помощника: загрузка, подробный предпросмотр и правка до импорта."""
     mode = ai.ai_mode()
     initial = {
         "target": request.GET.get("target", "mixed"),
         "target_topic": request.GET.get("topic") or None,
     }
-    form = AIMaterialForm(request.POST or None, request.FILES or None, initial=initial)
+    revising = request.method == "POST" and "revise_material" in request.POST
+    form = AIMaterialForm(
+        None if revising else request.POST or None,
+        None if revising else request.FILES or None,
+        initial=initial,
+    )
     material = request.session.get(SESSION_MATERIAL)
     meta = request.session.get(SESSION_META) or {}
+    revision_instruction = meta.get("revision_instruction", "")
 
     if request.method == "POST":
         if "reset" in request.POST:
             _clear_session(request)
             messages.info(request, "Черновик материала очищен.")
             return redirect("teacher_ai")
-        if mode == "off":
+        if revising:
+            instruction = request.POST.get("revision_instruction", "").strip()[:4000]
+            revision_instruction = instruction
+            if mode != "online":
+                messages.error(
+                    request,
+                    "Правка текущей версии доступна, когда подключена модель. "
+                    "Офлайн-разбор умеет только собирать новый материал.",
+                )
+            elif not material:
+                messages.error(request, "Текущая версия не найдена — соберите материал заново.")
+            elif not instruction:
+                messages.error(request, "Опишите, что изменить в текущей версии материала.")
+            else:
+                try:
+                    revised, revision_meta = ai.revise_material(material, instruction)
+                except ai.AiError as exc:
+                    messages.error(request, str(exc))
+                else:
+                    material = revised
+                    meta.update(revision_meta)
+                    try:
+                        revision_count = int(meta.get("revision_count", 0))
+                    except (TypeError, ValueError):
+                        revision_count = 0
+                    meta["revision_count"] = revision_count + 1
+                    meta["revision_instruction"] = instruction
+                    request.session[SESSION_MATERIAL] = material
+                    request.session[SESSION_META] = meta
+                    messages.success(
+                        request,
+                        "ИИ обновил текущую версию — проверьте подробный предпросмотр. "
+                        "В курс пока ничего не импортировано.",
+                    )
+        elif mode == "off":
             messages.error(request, ai.ai_mode_label(mode))
             _clear_session(request)
             material, meta = None, {}
@@ -70,9 +110,13 @@ def ai_assistant(request):
                 for note in meta.get("notes") or []:
                     messages.warning(request, note)
                 if meta.get("result") == "online":
-                    messages.success(request, "ИИ разобрал материал — проверьте структуру ниже.")
+                    messages.success(
+                        request, "ИИ разобрал материал — проверьте подробный предпросмотр ниже."
+                    )
                 else:
-                    messages.info(request, "Материал разобран офлайн — проверьте структуру ниже.")
+                    messages.info(
+                        request, "Материал разобран офлайн — проверьте подробный предпросмотр ниже."
+                    )
         else:
             material, meta = None, {}
 
@@ -89,6 +133,7 @@ def ai_assistant(request):
             "material": material,
             "meta": meta,
             "summary": summary,
+            "revision_instruction": revision_instruction,
             "limits": ai.limits(),
             "max_upload_mb": ai.max_upload_bytes() // (1024 * 1024),
             "workspace": "ai",
