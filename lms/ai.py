@@ -1003,6 +1003,22 @@ def build_prompt(text, *, prompt="", target="mixed", filename="", kind="text"):
     return "\n\n".join(parts)
 
 
+def build_material_revision_prompt(material, instruction):
+    """Промпт правки текущего предпросмотра до импорта в курс."""
+    current = json.dumps(material, ensure_ascii=False, indent=1)
+    return "\n\n".join(
+        [
+            AI_AUTHORING_CONTEXT,
+            "Ты редактируешь текущий предпросмотр материала ИИ до его импорта в LMS. "
+            "Верни полную новую версию материала в той же структуре: не описывай отличия "
+            "и не удаляй элементы, которые не затронуты пожеланием преподавателя.",
+            f"Пожелания преподавателя к текущей версии: {instruction.strip()}",
+            "Текущая версия материала (JSON):\n" + current,
+            PROMPT_SCHEMA,
+        ]
+    )
+
+
 def _image_part(blob, mime):
     """Картинка для vision-модели: base64 в data-url (Ollama и LM Studio так умеют)."""
     return base64.b64encode(blob).decode("ascii"), mime
@@ -1488,6 +1504,35 @@ def build_material(
     return material, meta
 
 
+def revise_material(material, instruction):
+    """Обновить предпросмотр материала, не создавая записи в базе данных."""
+    mode = ai_mode()
+    if mode == "off":
+        raise AiError("ИИ-помощник выключен администратором (LMS_AI_ENABLED=0).")
+    if mode != "online":
+        raise AiError(
+            "Правка текущей версии требует работающей модели. Подключите локальную модель "
+            "(LMS_AI_LOCAL=1) или задайте ключ LMS_AI_API_KEY и попробуйте снова."
+        )
+    instruction = (instruction or "").strip()[:4000]
+    if not instruction:
+        raise AiError("Опишите, что изменить в текущей версии материала.")
+    if not isinstance(material, dict) or not material.get("blocks"):
+        raise AiError("Текущая версия материала не найдена — соберите материал заново.")
+
+    spec = provider_spec()
+    payload = _provider_material(spec, build_material_revision_prompt(material, instruction))
+    revised = normalise(payload, source=material.get("title", "Материал ИИ-помощника"))
+    meta = {
+        "mode": mode,
+        "provider": spec["key"],
+        "provider_label": spec["label"],
+        "result": "online",
+        "revision_instruction": instruction,
+    }
+    return revised, meta
+
+
 # ── Импорт черновиками ────────────────────────────────────────────────────
 def _unique_slug(model, base, **filters):
     slug = slugify(base, allow_unicode=False)[:50] or "material"
@@ -1889,6 +1934,7 @@ __all__ = [
     "apply_revision",
     "assignment_payload",
     "build_material",
+    "build_material_revision_prompt",
     "build_prompt",
     "build_revision_prompt",
     "extension_of",
@@ -1905,6 +1951,7 @@ __all__ = [
     "provider_spec",
     "provider_uploads",
     "revise_assignment",
+    "revise_material",
     "unsupported_upload_note",
     "upload_kind",
 ]

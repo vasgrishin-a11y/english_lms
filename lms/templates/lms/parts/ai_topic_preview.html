@@ -1,0 +1,71 @@
+{% load lms_tags %}
+<section class="ai-topic-preview" aria-label="Тема: {{ topic.title }}">
+    <h3 class="tiny strong mb-0">Тема: {{ topic.title }}</h3>
+    {% if topic.description %}<p class="small muted mb-0">{{ topic.description|linebreaksbr }}</p>{% endif %}
+
+    <div class="col" style="gap:10px;margin-top:10px">
+        {% for assignment in topic.assignments %}
+            <details class="panel" open>
+                <summary class="strong" style="cursor:pointer">
+                    {% icon assignment.type|type_icon "icon icon-sm" %} {{ assignment.title }}
+                    <span class="pill" style="margin-left:6px">{{ assignment.type }}</span>
+                    {% if assignment.questions %}<span class="pill">{{ assignment.questions|length }} вопр.</span>{% endif %}
+                    {% if assignment.max_points %}<span class="pill">{{ assignment.max_points }} б.</span>{% endif %}
+                </summary>
+                <div class="col small" style="gap:10px;margin-top:12px">
+                    <div>
+                        <p class="tiny strong mb-0">Условие для ученика</p>
+                        <div>{{ assignment.description|linebreaks }}</div>
+                    </div>
+                    {% if assignment.skills %}
+                        <p class="tiny muted mb-0">Навыки: {{ assignment.skills|join:", " }}</p>
+                    {% endif %}
+                    {% if assignment.questions %}
+                        <div>
+                            <p class="tiny strong mb-0">Вопросы и ключи</p>
+                            <ol class="col" style="gap:10px;margin:6px 0 0;padding-left:22px">
+                                {% for question in assignment.questions %}
+                                    <li>
+                                        <p class="mb-0">{{ question.text }} <span class="tiny muted">{{ question.kind }} · {{ question.points }} б.</span></p>
+                                        {% if question.choices %}
+                                            <ul class="tiny muted" style="margin:4px 0 0;padding-left:20px">
+                                                {% for choice in question.choices %}
+                                                    <li>
+                                                        {% if choice.correct %}<strong>✓ {{ choice.text }}</strong>{% else %}{{ choice.text }}{% endif %}
+                                                        {% if choice.match_text %} — {{ choice.match_text }}{% endif %}
+                                                    </li>
+                                                {% endfor %}
+                                            </ul>
+                                        {% endif %}
+                                        {% if question.explanation %}<p class="tiny muted mb-0">Пояснение: {{ question.explanation }}</p>{% endif %}
+                                    </li>
+                                {% endfor %}
+                            </ol>
+                        </div>
+                    {% endif %}
+                </div>
+            </details>
+        {% endfor %}
+
+        {% for card_set in topic.cards %}
+            <details class="panel" open>
+                <summary class="strong" style="cursor:pointer">
+                    {% icon "cards" "icon icon-sm" %} {{ card_set.title }}
+                    <span class="pill" style="margin-left:6px">{{ card_set.cards|length }} карточек</span>
+                </summary>
+                <div class="col small" style="gap:10px;margin-top:12px">
+                    {% if card_set.description %}<div>{{ card_set.description|linebreaks }}</div>{% endif %}
+                    <div class="card-grid">
+                        {% for card in card_set.cards %}
+                            <div class="panel" style="height:100%;display:flex;flex-direction:column;gap:6px">
+                                <strong style="font-size:var(--fs-18)">{{ card.front }}</strong>
+                                <span>{{ card.back }}</span>
+                                {% if card.example %}<span class="tiny muted">«{{ card.example }}»</span>{% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </details>
+        {% endfor %}
+    </div>
+</section>

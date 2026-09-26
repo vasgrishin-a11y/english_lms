@@ -247,6 +247,15 @@ class AssistantFormTests(LMSCase):
         response = self.post_form(upload=upload)
         self.assertTrue(response.context["form"].errors["upload"])
 
+    def test_preview_is_detailed_before_import(self):
+        response = self.post_form(text=MARKDOWN)
+        self.assertContains(response, "Что получилось")
+        self.assertContains(response, "Импортировать черновиками")
+        self.assertContains(response, "Прочитайте диалог и ответьте на вопросы.")
+        self.assertContains(response, "passport")
+        self.assertContains(response, "to book")
+        self.assertEqual(Assignment.objects.filter(title="Check-in").count(), 0)
+
     def test_preview_and_reset(self):
         response = self.post_form(text=MARKDOWN)
         self.assertContains(response, "Что получилось")
@@ -393,6 +402,38 @@ class OnlineModeTests(LMSCase):
     @override_settings(
         LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="ollama", LMS_AI_LOCAL=True
     )
+    def test_current_preview_can_be_revised_before_import(self):
+        revised_payload = json.loads(json.dumps(self.AI_PAYLOAD))
+        revised_payload["blocks"][0]["topics"][0]["assignments"][0]["title"] = "Airport quiz revised"
+        revised_payload["blocks"][0]["topics"][0]["assignments"][0]["description"] = (
+            "Прочитайте текст ниже и ответьте на вопросы."
+        )
+        with patch("lms.ai._provider_material", side_effect=[self.AI_PAYLOAD, revised_payload]):
+            first = self.teacher_client.post(
+                reverse("teacher_ai"), {"target": "mixed", "prompt": "Сделай блок B1"}
+            )
+            self.assertContains(first, "Airport quiz")
+            self.assertNotContains(first, "Airport quiz revised")
+
+            revised = self.teacher_client.post(
+                reverse("teacher_ai"),
+                {
+                    "revise_material": "1",
+                    "revision_instruction": "Добавь текст для чтения перед вопросами",
+                },
+            )
+
+        self.assertContains(revised, "Airport quiz revised")
+        self.assertContains(revised, "Прочитайте текст ниже")
+        self.assertContains(revised, "ИИ обновил текущую версию")
+        self.assertEqual(Assignment.objects.filter(title="Airport quiz revised").count(), 0)
+
+        self.teacher_client.post(reverse("teacher_ai_import"))
+        self.assertTrue(Assignment.objects.filter(title="Airport quiz revised").exists())
+
+    @override_settings(
+        LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="ollama", LMS_AI_LOCAL=True
+    )
     def test_provider_failure_falls_back_to_offline(self):
         with patch("lms.ai._provider_material", side_effect=ai.AiError("Модель недоступна")):
             response = self.teacher_client.post(
@@ -461,6 +502,17 @@ class AssistantModelTests(LMSCase):
         prompt = ai.build_prompt("", target="assignment")
         self.assertIn("В запросе нет отдельного материала", prompt)
         self.assertIn("Нельзя оставлять инструкцию", prompt)
+
+    def test_material_revision_prompt_contains_current_version(self):
+        material = {
+            "title": "Travel",
+            "blocks": [{"name": "B1", "topics": [{"title": "Airport"}]}],
+        }
+        prompt = ai.build_material_revision_prompt(material, "Добавь текст для чтения")
+        self.assertIn("Добавь текст для чтения", prompt)
+        self.assertIn('"Airport"', prompt)
+        self.assertIn("Верни полную новую версию материала", prompt)
+        self.assertIn("Импорт создаёт только черновики", prompt)
 
     def test_revision_prompt_uses_course_context_without_student_data(self):
         prompt = ai.build_revision_prompt(self.assignment, "Сделай инструкцию яснее")

@@ -86,24 +86,12 @@
                                         {% for chapter in block.chapters %}
                                             <div class="ai-chapter" style="margin-bottom:10px;padding-left:12px;border-left:2px solid var(--border-subtle)">
                                                 <p class="tiny strong mb-0">{% icon "layers" "icon icon-sm" %} Глава: {{ chapter.title }}</p>
-                                                {% if chapter.description %}<p class="tiny muted mb-0">{{ chapter.description|truncatechars:200 }}</p>{% endif %}
-                                                <ul class="tiny muted" style="margin-top:4px">
+                                                {% if chapter.description %}<p class="tiny muted mb-0">{{ chapter.description|linebreaksbr }}</p>{% endif %}
+                                                <div class="col" style="gap:10px;margin-top:10px">
                                                     {% for topic in chapter.topics %}
-                                                        <li>
-                                                            <strong>{{ topic.title }}</strong>
-                                                            {% for assignment in topic.assignments %}
-                                                                <span class="library-item">
-                                                                    {% icon assignment.type|type_icon "icon icon-sm" %}{{ assignment.title }}
-                                                                    <span class="tnum">· {{ assignment.max_points }} б.</span>
-                                                                    {% if assignment.questions %}<span class="tnum">· {{ assignment.questions|length }} вопр.</span>{% endif %}
-                                                                </span>
-                                                            {% endfor %}
-                                                            {% for card_set in topic.cards %}
-                                                                <span class="library-item">{% icon "cards" "icon icon-sm" %}{{ card_set.title }} · {{ card_set.cards|length }} карточек</span>
-                                                            {% endfor %}
-                                                        </li>
+                                                        {% include "lms/parts/ai_topic_preview.html" with topic=topic %}
                                                     {% endfor %}
-                                                </ul>
+                                                </div>
                                             </div>
                                         {% endfor %}
                                     </div>
@@ -112,27 +100,38 @@
                                 {# Темы без главы (legacy) #}
                                 {% if block.topics %}
                                     {% if block.chapters %}<p class="tiny strong" style="margin-top:10px">Темы без главы (попадут в «Общее»):</p>{% endif %}
-                                    <ul class="tiny muted">
+                                    <div class="col" style="gap:10px;margin-top:10px">
                                         {% for topic in block.topics %}
-                                            <li>
-                                                <strong>{{ topic.title }}</strong>
-                                                {% for assignment in topic.assignments %}
-                                                    <span class="library-item">
-                                                        {% icon assignment.type|type_icon "icon icon-sm" %}{{ assignment.title }}
-                                                        <span class="tnum">· {{ assignment.max_points }} б.</span>
-                                                        {% if assignment.questions %}<span class="tnum">· {{ assignment.questions|length }} вопр.</span>{% endif %}
-                                                    </span>
-                                                {% endfor %}
-                                                {% for card_set in topic.cards %}
-                                                    <span class="library-item">{% icon "cards" "icon icon-sm" %}{{ card_set.title }} · {{ card_set.cards|length }} карточек</span>
-                                                {% endfor %}
-                                            </li>
+                                            {% include "lms/parts/ai_topic_preview.html" with topic=topic %}
                                         {% endfor %}
-                                    </ul>
+                                    </div>
                                 {% endif %}
                             </div>
                         {% endfor %}
                     </div>
+
+                    <section class="panel" aria-labelledby="ai-revision-title" style="margin-top:16px">
+                        <div class="card-head">
+                            <h3 class="card-title" id="ai-revision-title">{% icon "pencil" %}Проверить и доработать текущую версию</h3>
+                            {% if meta.revision_count %}<span class="badge badge-outline">Правок: {{ meta.revision_count }}</span>{% endif %}
+                        </div>
+                        <p class="small muted">Если нужно что-то изменить, опишите правку — ИИ обновит именно эту версию. До кнопки импорта в курс ничего не попадёт.</p>
+                        {% if mode == 'online' %}
+                            <form method="post" novalidate>
+                                {% csrf_token %}
+                                <div class="form-field">
+                                    <label for="id_revision_instruction">Что изменить в текущей версии</label>
+                                    <textarea id="id_revision_instruction" name="revision_instruction" rows="3" maxlength="4000" placeholder="Например: добавь текст для чтения перед вопросами, убери повторяющиеся вопросы, сделай инструкцию понятнее для B1">{{ revision_instruction }}</textarea>
+                                    <div class="help-text">ИИ вернёт материал целиком, сохранив структуру курса; предыдущая версия заменится только в этом предпросмотре.</div>
+                                </div>
+                                <div class="form-actions">
+                                    <button class="btn" type="submit" name="revise_material" value="1">{% icon "sparkles" %}{% t "Обновить текущую версию" %}</button>
+                                </div>
+                            </form>
+                        {% else %}
+                            <p class="small muted mb-0">Для правки нужен подключённый онлайн-провайдер. Сейчас доступен только офлайн-разбор нового материала.</p>
+                        {% endif %}
+                    </section>
 
                     <form method="post" action="{% url 'teacher_ai_import' %}">
                         {% csrf_token %}
