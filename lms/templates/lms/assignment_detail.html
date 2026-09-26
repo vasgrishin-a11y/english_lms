@@ -36,6 +36,28 @@
 
             {% include "lms/parts/material_files.html" %}
 
+            {% if needs_revision %}
+                <div class="callout callout-warning" style="margin-top:16px" id="revision-notice">
+                    {% icon "refresh" %}
+                    <div>
+                        <p class="mb-0 strong">Преподаватель вернул работу на доработку</p>
+                        {% if submission.feedback.comment %}
+                            <div class="small">{{ submission.feedback.comment|linebreaks }}</div>
+                        {% endif %}
+                        {% if submission.feedback.audio_comment %}
+                            <audio controls preload="metadata" src="{% url 'media_preview' submission.feedback.audio_comment.name %}"></audio>
+                        {% endif %}
+                        <p class="mb-0 small">
+                            {% if assignment.is_quiz %}
+                                Задание снова открыто: пройдите пункты заново ниже — прошлая попытка останется в истории.
+                            {% else %}
+                                Исправьте ответ в форме ниже и отправьте новую попытку — прошлая останется в истории.
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+            {% endif %}
+
             {% if assignment.is_flashcards %}
                 <div class="callout" style="margin-top:16px">
                     {% icon "cards" %}

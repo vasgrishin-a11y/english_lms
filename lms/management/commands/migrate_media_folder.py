@@ -1,9 +1,12 @@
-"""Перенос файлов из старой папки media/ в новую var/media/ для сохранения после обновления.
+"""Сведение файлов из прежних каталогов MEDIA_ROOT в актуальный.
 
-Старый путь <repo>/media/ был по умолчанию в DEBUG, новый — <repo>/var/media/,
-который совпадает с /app/var/media в Docker и монтируется как volume.
-Команда копирует файлы, если новая папка пуста, а старая содержит данные.
-Безопасна для повторного запуска: не перезаписывает существующие файлы.
+В базе у файла хранится только относительное имя, каталог берётся из MEDIA_ROOT.
+Поэтому переезд каталога (<repo>/media → <repo>/var/media, смена DJANGO_MEDIA_ROOT)
+оставлял старые файлы лежать по старому пути. Читать их приложение умеет и так —
+lms/storage.py заглядывает в settings.LMS_MEDIA_FALLBACK_ROOTS, — но держать всё
+в одном каталоге надёжнее: бэкап, volume и очистка «сирот» смотрят только туда.
+
+Команда безопасна для повторного запуска: существующие файлы не перезаписываются.
 """
 
 import shutil
@@ -14,64 +17,56 @@ from django.core.management.base import BaseCommand
 
 
 class Command(BaseCommand):
-    help = "Перенести файлы из <repo>/media в <repo>/var/media (если новая пуста)"
+    help = "Перенести файлы из прежних каталогов (например <repo>/media) в текущий MEDIA_ROOT"
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--dry-run", action="store_true", help="Только показать, что будет перенесено"
+        )
+        parser.add_argument(
+            "--move",
+            action="store_true",
+            help="Удалять исходный файл после успешного копирования",
+        )
 
     def handle(self, *args, **options):
-        base = Path(settings.BASE_DIR)
-        legacy = base / "media"
-        new = base / "var" / "media"
+        target = Path(settings.MEDIA_ROOT)
+        sources = [
+            path
+            for path in (Path(item) for item in getattr(settings, "LMS_MEDIA_FALLBACK_ROOTS", []))
+            if path.is_dir()
+        ]
+        self.stdout.write(f"Куда: {target}")
+        if not sources:
+            self.stdout.write("Прежних каталогов с файлами не найдено — переносить нечего.")
+            return
 
-        # Если задан DJANGO_MEDIA_ROOT извне — ничего не делаем, это production volume
-        import os
+        copied = skipped = 0
+        for source in sources:
+            files = [path for path in source.rglob("*") if path.is_file()]
+            self.stdout.write(f"Откуда: {source} (файлов: {len(files)})")
+            for src in files:
+                dst = target / src.relative_to(source)
+                if dst.exists():
+                    skipped += 1
+                    continue
+                copied += 1
+                if options["dry_run"]:
+                    self.stdout.write(f"  перенесли бы: {src.relative_to(source)}")
+                    continue
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+                if options["move"]:
+                    src.unlink()
 
-        if os.getenv("DJANGO_MEDIA_ROOT"):
+        if options["dry_run"]:
             self.stdout.write(
-                self.style.WARNING(
-                    "DJANGO_MEDIA_ROOT задан явно — это production volume, перенос не нужен."
-                )
+                self.style.WARNING(f"Пробный запуск: перенесли бы {copied}, пропустили {skipped}.")
             )
             return
-
-        if not legacy.exists():
-            self.stdout.write("Старая папка media/ не найдена — перенос не нужен.")
-            return
-
-        new.mkdir(parents=True, exist_ok=True)
-
-        legacy_files = list(legacy.rglob("*"))
-        if not legacy_files:
-            self.stdout.write("Старая папка media/ пуста — перенос не нужен.")
-            return
-
-        new_files = list(new.rglob("*"))
-        # Считаем только файлы, не директории
-        new_file_count = sum(1 for p in new_files if p.is_file())
-        if new_file_count > 0:
-            self.stdout.write(
-                self.style.WARNING(
-                    f"Новая папка {new} уже содержит {new_file_count} файлов — "
-                    "автоматический перенос пропущен, чтобы не перезаписать. "
-                    "Если нужно объединить, скопируйте вручную: cp -a media/* var/media/"
-                )
-            )
-            return
-
-        copied = 0
-        for src in legacy.rglob("*"):
-            if src.is_dir():
-                continue
-            rel = src.relative_to(legacy)
-            dst = new / rel
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            if dst.exists():
-                continue
-            shutil.copy2(src, dst)
-            copied += 1
-
         self.stdout.write(
             self.style.SUCCESS(
-                f"Скопировано файлов: {copied} из {legacy} в {new}. "
-                "Проверьте, что всё на месте, затем можете удалить старую папку "
-                "или оставить — настройки теперь используют var/media."
+                f"Перенесено файлов: {copied}, пропущено (уже есть на месте): {skipped}. "
+                "Проверьте результат: manage.py check_media_files"
             )
         )

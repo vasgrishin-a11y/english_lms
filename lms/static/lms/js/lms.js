@@ -1503,6 +1503,9 @@
           input.dispatchEvent(new Event("change", { bubbles: true }));
         });
       }
+      // Через это свойство вставка из буфера (pasteUploads) кладёт файл в зону
+      // с той же проверкой размера и формата, что и выбор файла руками.
+      input.lmsAcceptFiles = acceptFiles;
       input.addEventListener("change", function () {
         if (input.files) {
           for (var i = 0; i < input.files.length; i++) {
@@ -1531,6 +1534,183 @@
         });
       }
       render();
+    });
+  }
+
+  // ── Вставка из буфера (Ctrl+V) ───────────────────────────────────────────
+  // Скриншот из буфера должен добавляться как файл в любом редакторе, а не
+  // только в полной форме задания. Ищем зону загрузки в той же форме, что и
+  // место вставки, поэтому на доске тем работает каждый inline-редактор
+  // отдельно и файл не улетает в соседнее задание.
+  function clipboardFiles(event) {
+    var data = event.clipboardData || window.clipboardData;
+    var items = data ? data.items : null;
+    var files = [];
+    if (items) {
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].kind !== "file") continue;
+        var file = items[i].getAsFile();
+        if (file) files.push(file);
+      }
+    } else if (data && data.files) {
+      for (var j = 0; j < data.files.length; j++) files.push(data.files[j]);
+    }
+    return files;
+  }
+
+  function namedScreenshot(file) {
+    // Буфер отдаёт всё как image.png — от такого имени в списке вложений
+    // никакой пользы, поэтому подставляем дату и время.
+    if (file.name && file.name.toLowerCase() !== "image.png" && file.name !== "blob") return file;
+    var dot = file.name ? file.name.lastIndexOf(".") : -1;
+    var extension = dot > -1 ? file.name.slice(dot) : ".png";
+    var now = new Date();
+    function pad(value) {
+      return (value < 10 ? "0" : "") + value;
+    }
+    var stamp =
+      now.getFullYear() +
+      "-" +
+      pad(now.getMonth() + 1) +
+      "-" +
+      pad(now.getDate()) +
+      "-" +
+      pad(now.getHours()) +
+      pad(now.getMinutes()) +
+      pad(now.getSeconds());
+    var name = "screenshot-" + stamp + extension;
+    try {
+      return new File([file], name, { type: file.type, lastModified: file.lastModified });
+    } catch (error) {
+      return file;
+    }
+  }
+
+  function usableUpload(input) {
+    // Поле спрятано визуально (.dropzone-native), но остаётся на экране; так
+    // отсеиваются только закрытые "Быстрое редактирование" и скрытые блоки.
+    if (!input || input.disabled) return false;
+    return !!(input.offsetParent || input.getClientRects().length);
+  }
+
+  function pasteDestination(origin) {
+    // Явно указанная цель важнее всего: data-paste-target у поля с условиями.
+    var explicit = origin && origin.closest ? origin.closest("[data-paste-target]") : null;
+    var scope = origin && origin.closest ? origin.closest("form") : null;
+    if (explicit) {
+      var selector = explicit.getAttribute("data-paste-target");
+      if (selector && selector !== "1") {
+        var direct = (scope || document).querySelector(selector) || document.querySelector(selector);
+        if (usableUpload(direct)) return direct;
+      }
+    }
+    var forms = scope ? [scope] : [];
+    if (!scope) {
+      // Вставка мимо формы (клик по странице) — годится, только если на экране
+      // ровно одна форма с загрузкой: иначе непонятно, куда класть файл.
+      var candidates = Array.prototype.filter.call(document.forms, function (form) {
+        return Array.prototype.some.call(
+          form.querySelectorAll('input[type="file"][data-dropzone]'),
+          usableUpload
+        );
+      });
+      if (candidates.length !== 1) return null;
+      forms = candidates;
+    }
+    var inputs = Array.prototype.filter.call(
+      forms[0].querySelectorAll('input[type="file"][data-dropzone]'),
+      usableUpload
+    );
+    if (!inputs.length) return null;
+    // Несколько файлов принимает поле вложений — оно и приоритетнее.
+    for (var i = 0; i < inputs.length; i++) {
+      if (inputs[i].multiple) return inputs[i];
+    }
+    return inputs[0];
+  }
+
+  function addPastedFiles(input, files) {
+    if (input.lmsAcceptFiles) {
+      input.lmsAcceptFiles(files);
+      return true;
+    }
+    try {
+      var transfer = new DataTransfer();
+      if (input.multiple && input.files) {
+        for (var i = 0; i < input.files.length; i++) transfer.items.add(input.files[i]);
+      }
+      for (var j = 0; j < files.length; j++) {
+        transfer.items.add(files[j]);
+        if (!input.multiple) break;
+      }
+      input.files = transfer.files;
+    } catch (error) {
+      return false;
+    }
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  }
+
+  function announcePaste(input, files) {
+    var zone = input.closest(".dropzone");
+    if (zone) {
+      zone.classList.add("is-pasted");
+      window.setTimeout(function () {
+        zone.classList.remove("is-pasted");
+      }, 1200);
+    }
+    var status = document.getElementById("ai-extract-status");
+    if (status) status.textContent = "Из буфера добавлено: " + files[0].name;
+  }
+
+  function markInText(field, files) {
+    // Метка в тексте показывает, к какому месту условия относится картинка.
+    if (!field || field.tagName !== "TEXTAREA") return;
+    var text = files
+      .map(function (file) {
+        return "[Изображение: " + file.name + "]";
+      })
+      .join("\n");
+    var start = field.selectionStart;
+    var end = field.selectionEnd;
+    if (typeof start !== "number") {
+      field.value = field.value + "\n" + text + "\n";
+    } else {
+      var prefix = field.value.slice(0, start);
+      var suffix = field.value.slice(end);
+      var insert = (prefix && !/\n$/.test(prefix) ? "\n" : "") + text + "\n";
+      field.value = prefix + insert + suffix;
+      field.selectionStart = field.selectionEnd = start + insert.length;
+    }
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  function pasteUploads() {
+    if (document.documentElement.dataset.pasteUploads === "1") return;
+    document.documentElement.dataset.pasteUploads = "1";
+    document.addEventListener("paste", function (event) {
+      var origin = event.target;
+      if (origin && origin.isContentEditable) return;
+      // Word и Excel кладут в буфер и текст, и картинку. Если курсор в тексте,
+      // а текст в буфере есть — вставляем текст: иначе таблицу из Excel было бы
+      // не перенести в условия задания.
+      var clipboard = event.clipboardData || window.clipboardData;
+      var text = clipboard && clipboard.getData ? clipboard.getData("text/plain") : "";
+      var typing =
+        origin && origin.matches && origin.matches('textarea, input:not([type="file"])');
+      if (typing && text) return;
+      var files = clipboardFiles(event);
+      if (!files.length) return;
+      var input = pasteDestination(origin);
+      if (!input) return;
+      var named = files.map(namedScreenshot);
+      if (!input.multiple) named = named.slice(0, 1);
+      if (!addPastedFiles(input, named)) return;
+      event.preventDefault();
+      if (origin && origin.matches && origin.matches("textarea[data-paste-target]")) {
+        markInText(origin, named);
+      }
+      announcePaste(input, named);
     });
   }
 
@@ -2304,6 +2484,7 @@
     assignmentTypeForm();
     typeahead();
     uploadDropzones();
+    pasteUploads();
     chapterSelectFilter();
     secretFields();
     descriptionEditors();

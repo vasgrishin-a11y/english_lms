@@ -132,6 +132,8 @@ class ReviewForm(forms.Form):
             attrs={
                 "accept": ".mp3,.wav,.m4a,.ogg,.aac,audio/*",
                 "data-max-mb": str(settings.LMS_MAX_FILE_BYTES // (1024 * 1024)),
+                "data-dropzone": "1",
+                "data-dropzone-hint": "Перетащите запись сюда или вставьте из буфера Ctrl+V",
             }
         ),
         help_text=(
@@ -463,6 +465,44 @@ class MultipleFileInput(forms.FileInput):
     allow_multiple_selected = True
 
 
+class MultipleFileField(forms.FileField):
+    """Поле, которое действительно принимает несколько файлов сразу.
+
+    Обычный FileField с multiple-виджетом получает из запроса список и падает
+    на нём с «Ни одного файла не было отправлено»: выбрать два вложения разом
+    было нельзя, хотя подсказка это обещала. Проверяем каждый файл отдельно.
+    """
+
+    widget = MultipleFileInput
+
+    def clean(self, data, initial=None):
+        if isinstance(data, (list, tuple)):
+            return [super(MultipleFileField, self).clean(item, initial) for item in data]
+        return super().clean(data, initial)
+
+
+PASTE_HINT = "Перетащите файл сюда или вставьте скриншот Ctrl+V"
+
+
+def enable_paste_uploads(form, *, description=None, upload=None, hint=PASTE_HINT):
+    """Разрешить перетаскивание и вставку из буфера в полях формы.
+
+    Атрибут data-dropzone превращает поле в зону загрузки, data-paste-target —
+    отправляет картинку из Ctrl+V в файловое поле той же формы. Раньше это было
+    прописано только в полной форме задания, поэтому в быстром редактировании
+    вставка скриншота не работала.
+    """
+    max_mb = settings.LMS_MAX_FILE_BYTES // (1024 * 1024)
+    if upload and upload in form.fields:
+        attrs = form.fields[upload].widget.attrs
+        attrs.setdefault("accept", ",".join(f".{ext}" for ext in sorted(ALLOWED_FILE_EXTENSIONS)))
+        attrs["data-dropzone"] = "1"
+        attrs["data-max-mb"] = str(max_mb)
+        attrs.setdefault("data-dropzone-hint", hint)
+    if description and description in form.fields:
+        form.fields[description].widget.attrs["data-paste-target"] = "1"
+
+
 class MaterialFileInput(forms.ClearableFileInput):
     clear_checkbox_label = "Удалить основной файл после сохранения"
 
@@ -490,7 +530,7 @@ class AssignmentForm(forms.ModelForm):
         help_text="Открыть задание отдельным ученикам помимо групп",
         widget=forms.CheckboxSelectMultiple(attrs={"class": "audience-list"}),
     )
-    new_attachments = forms.FileField(
+    new_attachments = MultipleFileField(
         required=False,
         label="Дополнительные файлы",
         widget=MultipleFileInput(
@@ -600,22 +640,13 @@ class AssignmentForm(forms.ModelForm):
         )
 
         # Материалы можно прикрепить к заданию любого типа
-        accept_str = ",".join(f".{ext}" for ext in sorted(ALLOWED_FILE_EXTENSIONS))
         max_mb = settings.LMS_MAX_FILE_BYTES // (1024 * 1024)
-        self.fields["material_file"].widget.attrs["accept"] = accept_str
-        self.fields["material_file"].widget.attrs["data-dropzone"] = "1"
-        self.fields["material_file"].widget.attrs["data-max-mb"] = str(max_mb)
-        self.fields["material_file"].widget.attrs["data-dropzone-hint"] = (
-            "Перетащите файл сюда или вставьте скриншот Ctrl+V"
-        )
+        enable_paste_uploads(self, description="description", upload="material_file")
+        enable_paste_uploads(self, upload="new_attachments")
         self.fields["material_file"].help_text = (
             f"Файл до {max_mb} MiB: документ, картинка, аудио или архив. "
             "Можно перетащить или вставить из буфера (Ctrl+V). Ученик увидит его на странице задания."
         )
-        self.fields["new_attachments"].widget.attrs["accept"] = accept_str
-        self.fields["new_attachments"].widget.attrs["data-max-mb"] = str(max_mb)
-        # Поддержка paste для description
-        self.fields["description"].widget.attrs["data-paste-target"] = "1"
         self.fields["description"].widget.attrs["placeholder"] = (
             "Что нужно сделать, объём, критерии, пример ответа. Можно вставить картинку Ctrl+V — она добавится как вложение."
         )
@@ -645,6 +676,17 @@ class AssignmentForm(forms.ModelForm):
 
 
 class AssignmentQuickForm(forms.ModelForm):
+    # То же поле, что и в полной форме: вложения обрабатывает представление
+    # через request.FILES.getlist, а форма отвечает за вид и подсказки.
+    new_attachments = MultipleFileField(
+        required=False,
+        label="Добавить вложения",
+        widget=MultipleFileInput(
+            attrs={"data-dropzone-hint": "Перетащите файлы сюда или вставьте скриншот Ctrl+V"}
+        ),
+        help_text="Можно выбрать несколько файлов, перетащить или вставить картинку (Ctrl+V).",
+    )
+
     class Meta:
         model = Assignment
         fields = [
@@ -670,6 +712,13 @@ class AssignmentQuickForm(forms.ModelForm):
             "publish_at": _datetime_widget(),
             "skills": forms.CheckboxSelectMultiple,
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Быстрое редактирование должно принимать файлы так же, как полная форма:
+        # перетаскиванием и Ctrl+V, иначе скриншот некуда вставить прямо на доске.
+        enable_paste_uploads(self, description="description", upload="material_file")
+        enable_paste_uploads(self, upload="new_attachments")
 
 
 class QuestionForm(forms.ModelForm):

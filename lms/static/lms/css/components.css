@@ -3147,6 +3147,13 @@ table .grade-col {
     outline-offset: 2px;
 }
 
+/* Короткая подсветка: видно, что Ctrl+V сработал именно в этой зоне. */
+.dropzone.is-pasted {
+    border-color: var(--accent-600);
+    border-style: solid;
+    background: var(--accent-100);
+}
+
 .dropzone.is-filled {
     border-style: solid;
     border-color: var(--accent-300);

@@ -6,4 +6,4 @@ class LmsConfig(AppConfig):
     name = "lms"
 
     def ready(self):
-        from . import file_cleanup  # noqa: F401
+        from . import checks, file_cleanup  # noqa: F401

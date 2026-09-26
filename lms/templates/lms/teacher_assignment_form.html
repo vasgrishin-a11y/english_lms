@@ -197,8 +197,12 @@
                         <div class="col" style="gap:8px">
                             {% for att in assignment.attachments.all %}
                             <div class="row row-tight" style="gap:8px;align-items:center;background:var(--surface);border:1px solid var(--border-subtle);border-radius:8px;padding:8px 12px">
+                                {% if att.file.name|file_missing %}
+                                <span style="flex:1 1 auto;min-width:0">{% include "lms/parts/missing_file.html" with name=att.file.name|slice:"-40:" %}</span>
+                                {% else %}
                                 {% if att.file.name|media_kind == 'image' %}<img src="{% url 'media_preview' att.file.name %}" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:6px">{% endif %}
                                 <a href="{% url 'private_file' att.file.name %}" target="_blank" style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ att.file.name|slice:"-40:" }}</a>
+                                {% endif %}
                                 <label style="display:flex;align-items:center;gap:4px;margin:0;font-weight:500;font-size:12px"><input type="checkbox" name="delete_attachments" value="{{ att.pk }}"> Удалить</label>
                             </div>
                             {% endfor %}
@@ -416,89 +420,6 @@
       else extractFromFile(null, value);
     });
   }
-
-  // Paste handling for description and file inputs
-  function insertAtCursor(textarea, text){
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const before = textarea.value.substring(0,start);
-    const after = textarea.value.substring(end);
-    textarea.value = before + text + after;
-    const pos = start + text.length;
-    textarea.selectionStart = textarea.selectionEnd = pos;
-    textarea.dispatchEvent(new Event('input',{bubbles:true}));
-  }
-
-  if(desc){
-    desc.addEventListener('paste', function(e){
-      const items = (e.clipboardData||window.clipboardData).items;
-      if(!items) return;
-      for(let i=0;i<items.length;i++){
-        const item = items[i];
-        if(item.kind === 'file'){
-          const file = item.getAsFile();
-          if(file && file.type.startsWith('image/')){
-            e.preventDefault();
-            // Add to new_attachments via DataTransfer
-            if(newFiles){
-              try{
-                const dt = new DataTransfer();
-                // keep existing
-                if(newFiles.files){
-                  for(let f of newFiles.files) dt.items.add(f);
-                }
-                dt.items.add(file);
-                newFiles.files = dt.files;
-                newFiles.dispatchEvent(new Event('change',{bubbles:true}));
-              }catch(err){}
-            }
-            const placeholder = "\n[Изображение: "+file.name+"]\n";
-            insertAtCursor(desc, placeholder);
-            setStatus('Скриншот добавлен как вложение, вставлена метка');
-            break;
-          }
-        }
-      }
-    });
-  }
-
-  // Global paste for dropzones (if user pastes while focused elsewhere)
-  document.addEventListener('paste', function(e){
-    // if already handled in desc, skip
-    if(e.target && e.target.id === 'id_description') return;
-    const items = (e.clipboardData||window.clipboardData).items;
-    if(!items) return;
-    let hasImage = false;
-    for(let i=0;i<items.length;i++){
-      if(items[i].kind === 'file' && items[i].type.startsWith('image/')){
-        hasImage = true;
-        break;
-      }
-    }
-    if(!hasImage) return;
-    // find first dropzone file input
-    const input = newFiles || mainFile;
-    if(!input) return;
-    // If user pastes in file context, add file
-    for(let i=0;i<items.length;i++){
-      const item = items[i];
-      if(item.kind === 'file'){
-        const file = item.getAsFile();
-        if(file){
-          try{
-            const dt = new DataTransfer();
-            if(input.files){
-              for(let f of input.files) dt.items.add(f);
-            }
-            dt.items.add(file);
-            input.files = dt.files;
-            input.dispatchEvent(new Event('change',{bubbles:true}));
-            setStatus('Изображение из буфера добавлено: '+file.name);
-          }catch(err){}
-        }
-      }
-    }
-  });
 
 })();
 </script>

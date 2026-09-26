@@ -1,6 +1,8 @@
 import random
 
 from django import template
+from django.core.exceptions import SuspiciousFileOperation
+from django.core.files.storage import default_storage
 from django.utils import timezone
 from django.utils.html import format_html
 
@@ -294,6 +296,21 @@ def media_kind(name):
     if lowered.endswith(AUDIO_SUFFIXES):
         return "audio"
     return "other"
+
+
+@register.filter
+def file_missing(name):
+    """Запись в базе есть, а файла на диске нет: переезд MEDIA_ROOT или потерянный том.
+
+    Без этой проверки превью просто не грузилось, а «Скачать» вело на 404 —
+    и понять, что файл потерян, было невозможно.
+    """
+    if not name:
+        return False
+    try:
+        return not default_storage.exists(str(name))
+    except (OSError, SuspiciousFileOperation, ValueError):
+        return True
 
 
 @register.filter
