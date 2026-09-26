@@ -1,0 +1,173 @@
+ПРОПРИЕТАРНАЯ ЛИЦЕНЗИЯ / PROPRIETARY LICENSE
+
+Copyright (c) 2026 Гришин Василий Николаевич. Все права защищены.
+Copyright (c) 2026 Vasiliy Nikolaevich Grishin. All rights reserved.
+
+--------------------------------------------------------------------------
+РУССКАЯ ВЕРСИЯ (имеет преимущественную силу при расхождении толкований)
+--------------------------------------------------------------------------
+
+1. Определения
+
+   «Программа» — исходный код, конфигурации, миграции, шаблоны, стили,
+   изображения, документация и иные материалы настоящего репозитория,
+   за исключением компонентов третьих лиц, перечисленных в разделе 7.
+
+   «Правообладатель» — Гришин Василий Николаевич.
+
+2. Права правообладателя
+
+   Программа не является программным обеспечением с открытым исходным кодом
+   и не передаётся в общественное достояние. Исключительные права на неё
+   принадлежат Правообладателю и охраняются частью четвёртой Гражданского
+   кодекса Российской Федерации и международными договорами об авторском
+   праве. Размещение исходного кода в публичном репозитории не означает
+   предоставления какой-либо лицензии.
+
+3. Запрещённые действия
+
+   Без предварительного письменного разрешения Правообладателя запрещается:
+
+   а) воспроизводить, копировать и сохранять Программу или её части,
+      за исключением случаев, прямо разрешённых разделом 4;
+   б) использовать Программу, в том числе разворачивать и эксплуатировать
+      её в учебных заведениях, на коммерческой или некоммерческой основе,
+      для оказания услуг третьим лицам;
+   в) распространять, публиковать, передавать, сдавать в аренду, продавать
+      и сублицензировать Программу или её части;
+   г) модифицировать Программу, создавать производные произведения,
+      включать её код в другие проекты;
+   д) удалять или изменять уведомления об авторских правах.
+
+4. Разрешённое использование
+
+   Правообладатель разрешает любому лицу:
+
+   а) просматривать исходный код в целях ознакомления, изучения и оценки;
+   б) создавать форки и локальные копии средствами хостинга репозитория
+      исключительно для просмотра кода и подготовки предложений об
+      изменениях (pull request) в адрес Правообладателя;
+   в) цитировать фрагменты кода в обзорах, статьях и обсуждениях
+      с указанием источника.
+
+   Иное использование требует отдельного письменного соглашения.
+
+5. Вклады (contributions)
+
+   Направляя изменения в репозиторий, автор вклада безвозмездно
+   предоставляет Правообладателю неисключительное, бессрочное, действующее
+   на территории всего мира право использовать, изменять и распространять
+   такой вклад в составе Программы на любых условиях, включая условия
+   настоящей лицензии.
+
+6. Отсутствие гарантий и ограничение ответственности
+
+   ПРОГРАММА ПРЕДОСТАВЛЯЕТСЯ ДЛЯ ОЗНАКОМЛЕНИЯ «КАК ЕСТЬ», БЕЗ КАКИХ-ЛИБО
+   ГАРАНТИЙ, ЯВНЫХ ИЛИ ПОДРАЗУМЕВАЕМЫХ, ВКЛЮЧАЯ ГАРАНТИИ ПРИГОДНОСТИ ДЛЯ
+   ОПРЕДЕЛЁННОЙ ЦЕЛИ, ОТСУТСТВИЯ ДЕФЕКТОВ, БЕЗОПАСНОСТИ, СОХРАННОСТИ ДАННЫХ
+   И НЕНАРУШЕНИЯ ПРАВ ТРЕТЬИХ ЛИЦ. ПРАВООБЛАДАТЕЛЬ НИ ПРИ КАКИХ
+   ОБСТОЯТЕЛЬСТВАХ НЕ НЕСЁТ ОТВЕТСТВЕННОСТИ ЗА ЛЮБЫЕ УБЫТКИ, УТРАТУ ДАННЫХ
+   ИЛИ ИНОЙ УЩЕРБ, СВЯЗАННЫЕ С ПРОГРАММОЙ ИЛИ ЕЁ ИСПОЛЬЗОВАНИЕМ.
+
+7. Компоненты третьих лиц
+
+   В состав репозитория входят компоненты третьих лиц, которые
+   распространяются на собственных условиях и настоящей лицензией
+   не охватываются:
+
+   - htmx (`lms/static/lms/vendor/htmx.min.js`) — Zero-Clause BSD,
+     текст лицензии: `lms/static/lms/vendor/htmx.LICENSE`.
+
+   Зависимости, устанавливаемые из PyPI и npm (Django, django-axes,
+   gunicorn, psycopg2, whitenoise, mutagen, axe-core и другие), в
+   репозиторий не включены и используются на условиях их собственных
+   лицензий.
+
+8. Контакты и разрешения
+
+   Запросы на использование, лицензирование и сотрудничество направляйте
+   владельцу репозитория: https://github.com/vasgrishin-a11y/english_lms
+   (раздел Issues) или на адрес электронной почты, указанный в профиле
+   GitHub владельца.
+
+--------------------------------------------------------------------------
+ENGLISH VERSION (informal translation; the Russian text prevails)
+--------------------------------------------------------------------------
+
+1. Definitions
+
+   "Software" means the source code, configuration, migrations, templates,
+   styles, images, documentation and other materials of this repository,
+   excluding the third-party components listed in Section 7.
+
+   "Owner" means Vasiliy Nikolaevich Grishin.
+
+2. Reservation of rights
+
+   The Software is NOT open source and is not placed in the public domain.
+   All exclusive rights are retained by the Owner and are protected by the
+   copyright law of the Russian Federation and international treaties.
+   Publishing the source code in a public repository does not grant any
+   license.
+
+3. Prohibited actions
+
+   Without the Owner's prior written permission you may NOT:
+
+   (a) reproduce, copy or store the Software or any part of it, except as
+       expressly allowed by Section 4;
+   (b) use the Software, including deploying or operating it in schools or
+       any other organisation, commercially or non-commercially, or to
+       provide services to third parties;
+   (c) distribute, publish, transfer, rent, sell or sublicense the Software
+       or any part of it;
+   (d) modify the Software, create derivative works, or incorporate its
+       code into other projects;
+   (e) remove or alter any copyright notices.
+
+4. Permitted use
+
+   The Owner permits any person to:
+
+   (a) view the source code for the purposes of reading, study and
+       evaluation;
+   (b) create forks and local copies through the repository hosting
+       platform solely in order to read the code and prepare proposed
+       changes (pull requests) for the Owner;
+   (c) quote excerpts of the code in reviews, articles and discussions
+       with attribution.
+
+   Any other use requires a separate written agreement.
+
+5. Contributions
+
+   By submitting changes to this repository, the contributor grants the
+   Owner a royalty-free, non-exclusive, perpetual, worldwide right to use,
+   modify and distribute the contribution as part of the Software under any
+   terms, including the terms of this license.
+
+6. No warranty and limitation of liability
+
+   THE SOFTWARE IS PROVIDED FOR EVALUATION "AS IS", WITHOUT WARRANTY OF ANY
+   KIND, EXPRESS OR IMPLIED, INCLUDING WARRANTIES OF FITNESS FOR A
+   PARTICULAR PURPOSE, ABSENCE OF DEFECTS, SECURITY, DATA INTEGRITY AND
+   NON-INFRINGEMENT. IN NO EVENT SHALL THE OWNER BE LIABLE FOR ANY DAMAGES,
+   LOSS OF DATA OR OTHER HARM ARISING FROM THE SOFTWARE OR ITS USE.
+
+7. Third-party components
+
+   This repository includes third-party components distributed under their
+   own terms and not covered by this license:
+
+   - htmx (`lms/static/lms/vendor/htmx.min.js`) — Zero-Clause BSD, license
+     text in `lms/static/lms/vendor/htmx.LICENSE`.
+
+   Dependencies installed from PyPI and npm (Django, django-axes, gunicorn,
+   psycopg2, whitenoise, mutagen, axe-core and others) are not included in
+   this repository and remain subject to their own licenses.
+
+8. Contact
+
+   Send licensing, usage and partnership requests to the repository owner:
+   https://github.com/vasgrishin-a11y/english_lms (Issues), or to the email
+   address listed on the owner's GitHub profile.
