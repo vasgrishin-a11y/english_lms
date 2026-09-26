@@ -1347,6 +1347,7 @@ def assignment_form(request, pk=None):
     )
     if request.method == "POST" and form.is_valid():
         is_new = assignment is None
+        was_quiz = bool(assignment and assignment.is_quiz)
         instance = form.save()
         # Handle multiple attachments
         new_files = request.FILES.getlist("new_attachments")
@@ -1378,6 +1379,8 @@ def assignment_form(request, pk=None):
             if instance.status == Assignment.Publication.DRAFT
             else f"Задание сохранено: {instance.title}",
         )
+        if was_quiz and not instance.is_quiz:
+            _warn_about_leftover_questions(request, instance, instance.questions.count())
         if request.POST.get("_save_questions") or (is_new and instance.is_quiz):
             return redirect("teacher_questions", pk=instance.pk)
         if instance.is_flashcards:
@@ -1489,6 +1492,18 @@ def assignment_rename(request, pk):
     return redirect(request.POST.get("next") or "teacher_curriculum")
 
 
+def _warn_about_leftover_questions(request, assignment, total):
+    """Тип сменили с теста — предупреждаем, что пункты никуда не делись."""
+    if not total or assignment.is_quiz:
+        return
+    messages.info(
+        request,
+        f"Тип задания теперь «{assignment.get_assignment_type_display()}», поэтому пункты "
+        f"автопроверки ({total}) ученикам не показываются. Они сохранены: верните тип "
+        "«Тест с автопроверкой» — вопросы вернутся вместе с ним.",
+    )
+
+
 @teacher_required
 @require_POST
 def assignment_quick_edit(request, pk):
@@ -1496,11 +1511,23 @@ def assignment_quick_edit(request, pk):
     form = AssignmentQuickForm(
         request.POST, request.FILES, instance=assignment, auto_id=f"assignment-{pk}-%s"
     )
-    question_forms = [
-        QuestionForm(request.POST, instance=q, prefix=f"question-{q.pk}")
-        for q in assignment.questions.prefetch_related("choices")
-    ]
     valid = form.is_valid()
+    # Тип задания выбирает учитель. Если задание перестаёт быть тестом, оставшиеся
+    # пункты не участвуют в сохранении: они не должны ни блокировать форму своей
+    # валидацией, ни возвращать тип «Тест с автопроверкой». Сами вопросы остаются
+    # в базе и снова появятся, если тип переключить обратно на тест.
+    requested_type = (
+        form.cleaned_data.get("assignment_type") if valid else request.POST.get("assignment_type")
+    )
+    stays_quiz = requested_type == Assignment.Type.QUIZ
+    question_forms = (
+        [
+            QuestionForm(request.POST, instance=q, prefix=f"question-{q.pk}")
+            for q in assignment.questions.prefetch_related("choices")
+        ]
+        if stays_quiz
+        else []
+    )
     for question_form in question_forms:
         valid = question_form.is_valid() and valid
     from .models import AssignmentAttachment
@@ -1515,16 +1542,22 @@ def assignment_quick_edit(request, pk):
             valid = False
         attachments.append(attachment)
     if not valid:
+        messages.error(
+            request,
+            "Задание не сохранено: проверьте поля, отмеченные ошибкой в блоке "
+            "«Быстрое редактирование».",
+        )
         return _render_topic_board(
             request, assignment.topic_id, edit_errors=(assignment.pk, form, question_forms)
         )
+    leftover_questions = 0 if stays_quiz else assignment.questions.count()
     with transaction.atomic():
         form.save()
         for question_form in question_forms:
             question = question_form.save()
             question_form.save_choices(question)
         if question_forms:
-            _sync_quiz_points(assignment)
+            _sync_quiz_points(assignment, promote_to_quiz=False)
             from .services import regrade_assignment
 
             regrade_assignment(assignment)
@@ -1538,6 +1571,7 @@ def assignment_quick_edit(request, pk):
             ]
         ).delete()
     messages.success(request, "Задание сохранено. Автоматические результаты пересчитаны.")
+    _warn_about_leftover_questions(request, assignment, leftover_questions)
     return redirect(
         reverse("teacher_topic_board", args=[assignment.topic_id]) + f"#assignment-{assignment.pk}"
     )
@@ -1717,9 +1751,16 @@ def _render_topic_board(request, pk, edit_errors=None):
         assignment.quick_form = AssignmentQuickForm(
             instance=assignment, auto_id=f"assignment-{assignment.pk}-%s"
         )
-        assignment.question_forms = [
-            QuestionForm(instance=q, prefix=f"question-{q.pk}") for q in assignment.questions.all()
-        ]
+        # Пункты автопроверки правим только у теста: у задания другого типа они
+        # лежат «про запас» и в быстром редакторе не участвуют в сохранении.
+        assignment.question_forms = (
+            [
+                QuestionForm(instance=q, prefix=f"question-{q.pk}")
+                for q in assignment.questions.all()
+            ]
+            if assignment.is_quiz
+            else []
+        )
         if edit_errors and assignment.pk == edit_errors[0]:
             assignment.quick_form, assignment.question_forms = edit_errors[1:]
             assignment.edit_open = True
@@ -2080,14 +2121,25 @@ def item_results_export(request, pk):
     return response
 
 
-def _sync_quiz_points(assignment):
+def _sync_quiz_points(assignment, *, promote_to_quiz=True):
+    """Держит баллы теста равными сумме баллов его пунктов.
+
+    ``promote_to_quiz`` — сценарий редактора вопросов: учитель добавил пункт к
+    обычному заданию, значит это уже тест. Там, где тип задания приходит из формы
+    (быстрое редактирование на доске темы, правка и удаление отдельных пунктов),
+    промоушен выключен: иначе смена «Тест с автопроверкой» на любой другой тип
+    молча откатывалась назад, пока у задания оставался хотя бы один вопрос.
+
+    Максимум баллов подтягивается из пунктов только у теста. У задания другого
+    типа оставшиеся пункты не должны перетирать баллы, выставленные вручную.
+    """
     total = assignment.questions.aggregate(total=Count("pk"))["total"]
     points = sum(assignment.questions.values_list("points", flat=True))
     fields = []
-    if assignment.assignment_type != Assignment.Type.QUIZ and total:
+    if promote_to_quiz and assignment.assignment_type != Assignment.Type.QUIZ and total:
         assignment.assignment_type = Assignment.Type.QUIZ
         fields.append("assignment_type")
-    if total and assignment.max_points != points:
+    if total and assignment.is_quiz and assignment.max_points != points:
         assignment.max_points = points
         fields.append("max_points")
     if fields:
@@ -2105,7 +2157,9 @@ def question_form(request, pk):
         with transaction.atomic():
             form.save()
             form.save_choices(question)
-            _sync_quiz_points(question.assignment)
+            # Правка существующего пункта не меняет тип задания: учитель мог
+            # осознанно перевести бывший тест в задание другого типа.
+            _sync_quiz_points(question.assignment, promote_to_quiz=False)
             from .services import regrade_assignment
 
             regrade_assignment(question.assignment)
@@ -2130,7 +2184,7 @@ def question_delete(request, pk):
     assignment_id = question.assignment_id
     question.delete()
     assignment = Assignment.objects.get(pk=assignment_id)
-    _sync_quiz_points(assignment)
+    _sync_quiz_points(assignment, promote_to_quiz=False)
     messages.success(request, "Вопрос удалён.")
     return redirect("teacher_questions", pk=assignment_id)
 

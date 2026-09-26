@@ -5,6 +5,7 @@ from django.urls import reverse
 
 from lms.forms import QuestionForm
 from lms.models import (
+    Assignment,
     AssignmentAttachment,
     Choice,
     Feedback,
@@ -228,3 +229,149 @@ class TopicAttachmentTests(LMSCase):
                 ).status_code,
                 404,
             )
+
+
+class AssignmentTypeSwitchTests(LMSCase):
+    """Смена типа у уже созданного задания: «Тест с автопроверкой» → любой другой.
+
+    Регрессия: оставшиеся пункты теста молча возвращали тип обратно на quiz,
+    поэтому учителю казалось, что поле «Тип задания» не сохраняется.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.assignment.assignment_type = Assignment.Type.QUIZ
+        self.assignment.max_points = 3
+        self.assignment.save()
+        self.question = Question.objects.create(
+            assignment=self.assignment, kind="mcq", text="City?", points=3, order=1
+        )
+        Choice.objects.create(question=self.question, text="London", is_correct=True, order=0)
+        Choice.objects.create(question=self.question, text="Paris", order=1)
+
+    def quick_payload(self, assignment_type, with_questions=True):
+        data = {
+            "assignment_type": assignment_type,
+            "title": self.assignment.title,
+            "description": self.assignment.description,
+            "status": "published",
+            "order": self.assignment.order,
+            "max_points": 50,
+            "max_tries": 3,
+        }
+        if with_questions:
+            data.update(
+                {
+                    f"question-{self.question.pk}-kind": "mcq",
+                    f"question-{self.question.pk}-text": "City?",
+                    f"question-{self.question.pk}-points": 3,
+                    f"question-{self.question.pk}-order": 1,
+                    f"question-{self.question.pk}-choices_text": "*London\nParis",
+                }
+            )
+        return data
+
+    def full_payload(self, assignment_type):
+        return {
+            "topic": self.topic.pk,
+            "title": self.assignment.title,
+            "description": self.assignment.description,
+            "assignment_type": assignment_type,
+            "max_points": 50,
+            "max_tries": 3,
+            "status": "published",
+            "order": self.assignment.order,
+            "is_active": "on",
+        }
+
+    def test_inline_editor_switches_type_away_from_quiz(self):
+        url = reverse("teacher_assignment_quick_edit", args=[self.assignment.pk])
+        response = self.teacher_client.post(url, self.quick_payload(Assignment.Type.TEXT))
+        self.assertEqual(response.status_code, 302)
+        self.assignment.refresh_from_db()
+        self.assertEqual(self.assignment.assignment_type, Assignment.Type.TEXT)
+        # Баллы, выставленные вручную, больше не перетираются суммой пунктов.
+        self.assertEqual(self.assignment.max_points, 50)
+        # Пункты никуда не пропали — вернутся вместе с типом «Тест».
+        self.assertEqual(self.assignment.questions.count(), 1)
+
+    def test_inline_editor_switches_type_without_question_payload(self):
+        """Тип меняется, даже если пункты не пришли в POST и не прошли бы валидацию."""
+        url = reverse("teacher_assignment_quick_edit", args=[self.assignment.pk])
+        response = self.teacher_client.post(
+            url, self.quick_payload(Assignment.Type.MATERIAL, with_questions=False)
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assignment.refresh_from_db()
+        self.assertEqual(self.assignment.assignment_type, Assignment.Type.MATERIAL)
+        self.assertEqual(self.assignment.questions.count(), 1)
+
+    def test_inline_editor_still_syncs_points_while_assignment_stays_quiz(self):
+        url = reverse("teacher_assignment_quick_edit", args=[self.assignment.pk])
+        data = self.quick_payload(Assignment.Type.QUIZ)
+        data[f"question-{self.question.pk}-points"] = 7
+        self.assertEqual(self.teacher_client.post(url, data).status_code, 302)
+        self.assignment.refresh_from_db()
+        self.assertEqual(self.assignment.assignment_type, Assignment.Type.QUIZ)
+        self.assertEqual(self.assignment.max_points, 7)
+
+    def test_full_editor_switches_type_for_every_target(self):
+        url = reverse("teacher_assignment_form", args=[self.assignment.pk])
+        for target in (
+            Assignment.Type.TEXT,
+            Assignment.Type.FILE,
+            Assignment.Type.AUDIO,
+            Assignment.Type.MIXED,
+            Assignment.Type.FLASHCARDS,
+            Assignment.Type.MATERIAL,
+        ):
+            with self.subTest(target=target):
+                Assignment.objects.filter(pk=self.assignment.pk).update(
+                    assignment_type=Assignment.Type.QUIZ
+                )
+                self.teacher_client.post(url, self.full_payload(target))
+                self.assignment.refresh_from_db()
+                self.assertEqual(self.assignment.assignment_type, target)
+
+    def test_editing_or_deleting_leftover_items_keeps_the_new_type(self):
+        Assignment.objects.filter(pk=self.assignment.pk).update(
+            assignment_type=Assignment.Type.TEXT
+        )
+        extra = Question.objects.create(
+            assignment=self.assignment, kind="mcq", text="Second?", points=2, order=2
+        )
+        Choice.objects.create(question=extra, text="a", is_correct=True, order=0)
+        Choice.objects.create(question=extra, text="b", order=1)
+
+        self.teacher_client.post(
+            reverse("teacher_question_edit", args=[self.question.pk]),
+            {
+                "kind": "mcq",
+                "text": "City, really?",
+                "choices_text": "*London\nParis",
+                "points": 3,
+                "order": 1,
+            },
+        )
+        self.assignment.refresh_from_db()
+        self.assertEqual(self.assignment.assignment_type, Assignment.Type.TEXT)
+
+        self.teacher_client.post(reverse("teacher_question_delete", args=[extra.pk]))
+        self.assignment.refresh_from_db()
+        self.assertEqual(self.assignment.assignment_type, Assignment.Type.TEXT)
+
+    def test_adding_an_item_still_turns_a_plain_assignment_into_a_quiz(self):
+        plain = Assignment.objects.create(topic=self.topic, title="Plain", description="x", order=7)
+        self.teacher_client.post(
+            reverse("teacher_questions", args=[plain.pk]),
+            {
+                "kind": "mcq",
+                "text": "New?",
+                "choices_text": "*yes\nno",
+                "points": 4,
+                "order": 1,
+            },
+        )
+        plain.refresh_from_db()
+        self.assertEqual(plain.assignment_type, Assignment.Type.QUIZ)
+        self.assertEqual(plain.max_points, 4)
