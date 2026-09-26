@@ -19,6 +19,7 @@ from django.utils import timezone
 
 from .decorators import get_user_role
 from .models import (
+    TEACHER_FEEDBACK_RECORDING_LIMIT_SECONDS,
     AnswerDraft,
     Assignment,
     CardReview,
@@ -180,6 +181,8 @@ def review_submission(
     comment,
     decision,
     item_points=None,
+    audio_comment=None,
+    remove_audio=False,
 ):
     if not teacher.is_active or get_user_role(teacher) != Profile.Role.TEACHER:
         raise PermissionDenied
@@ -205,10 +208,28 @@ def review_submission(
         )
     if item_points:
         grade = _apply_item_points(submission, item_points, grade)
-    feedback, _ = Feedback.objects.update_or_create(
+    if audio_comment:
+        validate_recording_limit(audio_comment, TEACHER_FEEDBACK_RECORDING_LIMIT_SECONDS)
+    feedback, _ = Feedback.objects.select_for_update().get_or_create(
         submission=submission,
-        defaults={"teacher": teacher, "grade": grade, "comment": comment, "decision": decision},
+        defaults={
+            "teacher": teacher,
+            "grade": grade,
+            "comment": comment,
+            "decision": decision,
+        },
     )
+    feedback.teacher = teacher
+    feedback.grade = grade
+    feedback.comment = comment
+    feedback.decision = decision
+    # Empty upload means «оставить текущую запись». Explicit removal is separate
+    # so a teacher can edit the text without accidentally deleting useful audio.
+    if audio_comment:
+        feedback.audio_comment = audio_comment
+    elif remove_audio:
+        feedback.audio_comment = ""
+    feedback.save()
     submission.status = feedback.decision
     submission.review_revision += 1
     submission.save(update_fields=["status", "review_revision", "updated_at"])

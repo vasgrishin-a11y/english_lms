@@ -349,6 +349,7 @@ def review_detail(request, pk):
             manual_responses.append(item["response"])
     form = ReviewForm(
         request.POST if request.method == "POST" else None,
+        request.FILES if request.method == "POST" else None,
         submission=submission,
         feedback=feedback,
         manual_responses=manual_responses if is_latest else (),

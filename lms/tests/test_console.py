@@ -6,10 +6,12 @@
 """
 
 import io
+import wave
 import zipfile
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -22,6 +24,7 @@ from lms.models import (
     CardReview,
     Choice,
     CommentSnippet,
+    Feedback,
     Flashcard,
     Group,
     Profile,
@@ -41,6 +44,16 @@ from lms.services import (
 from .base import LMSCase
 
 User = get_user_model()
+
+
+def voice_comment():
+    stream = io.BytesIO()
+    with wave.open(stream, "wb") as audio:
+        audio.setnchannels(1)
+        audio.setsampwidth(2)
+        audio.setframerate(8000)
+        audio.writeframes(b"\0\0" * 8000)
+    return SimpleUploadedFile("teacher-comment.wav", stream.getvalue(), "audio/wav")
 
 
 class ConsoleAccessTests(LMSCase):
@@ -215,6 +228,33 @@ class ReviewDetailTests(LMSCase):
         self.assertEqual(attempt.feedback.grade, 91)
         self.assertEqual(attempt.feedback.comment, "Отличная работа")
         self.assertEqual(attempt.status, Submission.Status.CHECKED)
+
+    def test_review_accepts_voice_comment_and_student_can_play_it(self):
+        attempt = self.submit()
+        response = self.teacher_client.post(
+            f"/teacher/review/{attempt.pk}/",
+            {
+                "expected_version": attempt.version,
+                "expected_review_revision": attempt.review_revision,
+                "grade": 91,
+                "comment": "Отличная работа",
+                "decision": "checked",
+                "audio_comment": voice_comment(),
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        feedback = Feedback.objects.get(submission=attempt)
+        self.assertTrue(feedback.audio_comment.name.endswith(".wav"))
+        name = feedback.audio_comment.name
+        self.assertEqual(self.student_client.get(f"/preview/{name}").status_code, 200)
+        self.assertEqual(self.client_for(self.other).get(f"/preview/{name}").status_code, 404)
+        self.assertContains(
+            self.student_client.get(self.url), "Голосовой комментарий преподавателя"
+        )
+        self.assertContains(
+            self.teacher_client.get(f"/teacher/review/{attempt.pk}/"),
+            "Опубликованный голосовой комментарий",
+        )
 
     def test_save_and_go_next_moves_to_neighbour(self):
         second_task = Assignment.objects.create(

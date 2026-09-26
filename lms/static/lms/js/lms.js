@@ -304,6 +304,7 @@
     var errorBox = panel.querySelector("[data-recorder-error]");
     var input = document.getElementById(panel.getAttribute("data-input") || "");
     var limit = parseInt(panel.getAttribute("data-limit"), 10) || 0;
+    var actionLabel = panel.getAttribute("data-recorder-action") || "Принять или отправить";
     var form = panel.closest("form");
     if (!toggle) return;
 
@@ -313,6 +314,7 @@
     var timer = null;
     var startedAt = 0;
     var previewUrl = "";
+    var syncingInput = false;
 
     function say(text) {
       if (status) status.textContent = text;
@@ -386,9 +388,12 @@
         try {
           var transfer = new DataTransfer();
           transfer.items.add(file);
+          syncingInput = true;
           input.files = transfer.files;
           input.dispatchEvent(new Event("change", { bubbles: true }));
+          syncingInput = false;
         } catch (error) {
+          syncingInput = false;
           // Старый Safari: файл уйдёт в отправку формы напрямую (см. submit ниже).
         }
       }
@@ -397,7 +402,7 @@
       if (take) take.classList.remove("hidden");
       toggle.querySelector("span").textContent = "Записать заново";
       var length = seconds ? " (" + formatClock(seconds) + ")" : "";
-      say("Запись готова" + length + ". Прослушайте её и нажмите «Принять» или «Отправить».");
+      say("Запись готова" + length + ". Прослушайте её и нажмите «" + actionLabel + "».");
       showError("");
     }
 
@@ -470,8 +475,10 @@
     }
     if (input) {
       input.addEventListener("change", function () {
+        // Событие, которое мы вызвали сами после записи, не должно скрывать превью.
+        if (syncingInput) return;
         // Выбран файл вручную — он заменяет запись с микрофона.
-        if (input.files && input.files[0] && input.files[0] !== panel._recording) {
+        if (input.files && input.files[0]) {
           panel._recording = null;
           if (take) take.classList.add("hidden");
         }

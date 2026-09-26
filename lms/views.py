@@ -20,7 +20,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET
 
 from .decorators import get_user_role
-from .models import Assignment, Profile, QuestionResponse, Submission
+from .models import Assignment, Feedback, Profile, QuestionResponse, Submission
 from .search import student_suggest, teacher_suggest
 
 logger = logging.getLogger(__name__)
@@ -108,6 +108,7 @@ def _resolve_private_file(request, name):
     materials = Assignment.objects.filter(material_file=name)
     attachments = AssignmentAttachment.objects.filter(file=name)
     attempts = Submission.objects.filter(file_answer=name)
+    feedback = Feedback.objects.filter(audio_comment=name)
     items = QuestionResponse.objects.filter(file_answer=name)
     if not teacher:
         visible = Assignment.objects.visible(user=request.user)
@@ -117,11 +118,16 @@ def _resolve_private_file(request, name):
             student=request.user,
             assignment__in=visible,
         )
+        feedback = feedback.filter(
+            submission__student=request.user,
+            submission__assignment__in=visible,
+        )
         items = items.filter(student=request.user, assignment__in=visible)
     for queryset, field in (
         (materials, "material_file"),
         (attachments, "file"),
         (attempts, "file_answer"),
+        (feedback, "audio_comment"),
     ):
         found = queryset.first()
         if found:

@@ -141,7 +141,7 @@
                 <h2 class="card-title">{% icon "save" %}Решение</h2>
             </div>
             {% if is_latest %}
-                <form method="post" data-review-form id="review-form">
+                <form method="post" enctype="multipart/form-data" data-review-form id="review-form">
                     {% csrf_token %}
                     <input type="hidden" name="snippet_used" id="id_snippet_used" value="">
                     <div class="score-presets" style="margin-bottom:12px" data-grade-presets>
@@ -152,6 +152,35 @@
                         <button type="button" class="chip" data-grade-preset="0">0</button>
                     </div>
                     {% include "lms/form_fields.html" %}
+
+                    <div class="feedback-composer">
+                        <div class="feedback-composer-head">
+                            <div>
+                                <p class="rail-title mb-0">Комментарий ученику</p>
+                                <p class="tiny muted mb-0">Выберите удобный формат: текст, голос или оба.</p>
+                            </div>
+                            <span class="badge badge-turquoise">видит ученик</span>
+                        </div>
+                        {% if feedback and feedback.audio_comment %}
+                            <div class="feedback-current">
+                                <span class="tiny strong">Опубликованный голосовой комментарий</span>
+                                <audio controls preload="metadata" src="{% url 'media_preview' feedback.audio_comment.name %}"></audio>
+                            </div>
+                        {% endif %}
+                        {% include "lms/parts/recorder.html" with input_id=form.audio_comment.id_for_label input_name="audio_comment" limit=180 limit_label="3 минуты" recorder_title="Записать голосовой комментарий" recorder_action="Сохранить проверку" external_input=True %}
+                        <div class="form-field{% if form.audio_comment.errors %} field-error{% endif %}">
+                            <label for="{{ form.audio_comment.id_for_label }}">Или загрузите готовую запись</label>
+                            {{ form.audio_comment }}
+                            {% if form.audio_comment.help_text %}<div class="help-text" id="{{ form.audio_comment.auto_id }}_helptext">{{ form.audio_comment.help_text }}</div>{% endif %}
+                            {{ form.audio_comment.errors }}
+                        </div>
+                        {% if feedback and feedback.audio_comment %}
+                            <div class="checkline feedback-remove-audio">
+                                {{ form.remove_audio }}
+                                <label for="{{ form.remove_audio.id_for_label }}">{{ form.remove_audio.label }}</label>
+                            </div>
+                        {% endif %}
+                    </div>
                     {% if snippets %}
                         <p class="rail-title" style="margin-top:8px">Банк комментариев</p>
                         <ul class="snippet-list">
@@ -176,6 +205,12 @@
                 {% if feedback %}
                     <p class="mb-0"><strong>{{ feedback.get_decision_display }}</strong>{% if feedback.grade != None %} · {{ feedback.grade }} из {{ submission.max_points_snapshot }}{% endif %}</p>
                     {{ feedback.comment|linebreaks }}
+                    {% if feedback.audio_comment %}
+                        <div class="feedback-current" style="margin-top:12px">
+                            <span class="tiny strong">Голосовой комментарий</span>
+                            <audio controls preload="metadata" src="{% url 'media_preview' feedback.audio_comment.name %}"></audio>
+                        </div>
+                    {% endif %}
                 {% endif %}
                 <a class="btn btn-block" href="{% url 'teacher_submission_review' latest.pk %}">{% t "Открыть последнюю попытку" %}</a>
             {% endif %}
