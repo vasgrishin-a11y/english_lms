@@ -133,6 +133,15 @@ class AssistantAccessTests(LMSCase):
         self.assertContains(response, "Офлайн-разбор")
         self.assertContains(response, "Формат подсказки")
 
+    def test_target_menu_offers_only_course_structure(self):
+        response = self.teacher_client.get(reverse("teacher_ai"))
+        choices = list(response.context["form"].fields["target"].choices)
+        self.assertEqual(choices, list(ai.TARGETS))
+        self.assertEqual(choices, [("mixed", "Структура курса: класс → главы → темы → задания")])
+        self.assertNotContains(response, "Одно задание")
+        self.assertNotContains(response, "Тест с вопросами")
+        self.assertNotContains(response, "Набор карточек")
+
     @override_settings(LMS_AI_ENABLED=False)
     def test_disabled_assistant_explains_itself(self):
         response = self.teacher_client.get(reverse("teacher_ai"))
@@ -458,11 +467,11 @@ class OnlineModeTests(LMSCase):
 
         with patch("lms.ai._provider_material", side_effect=fake):
             self.teacher_client.post(
-                reverse("teacher_ai"), {"target": "cards", "text": "gate | выход"}
+                reverse("teacher_ai"), {"target": "mixed", "text": "gate | выход"}
             )
         self.assertEqual(captured["spec"]["key"], "ollama")
         self.assertEqual(captured["kwargs"], {"filename": "", "blob": b""})
-        self.assertIn("карточки", captured["prompt"].lower())
+        self.assertIn("структуру курса", captured["prompt"].lower())
         self.assertIn("gate | выход", captured["prompt"])
 
 
