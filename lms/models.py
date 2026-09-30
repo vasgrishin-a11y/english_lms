@@ -893,7 +893,9 @@ class FeedbackHighlight(models.Model):
         verbose_name_plural = "Комментарии к фрагментам ответа"
         ordering = ["start", "pk"]
         constraints = [
-            models.CheckConstraint(condition=Q(end__gt=F("start")), name="highlight_end_after_start"),
+            models.CheckConstraint(
+                condition=Q(end__gt=F("start")), name="highlight_end_after_start"
+            ),
         ]
 
     def __str__(self):

@@ -51,7 +51,12 @@ class HighlightedAnswerFilterTests(LMSCase):
         attempt = self.submit(text_answer="Hello brave world")
         feedback = self.review(attempt, grade=90)
         FeedbackHighlight.objects.create(
-            feedback=feedback, start=6, end=11, quote="brave", comment="Хорошее слово", source="teacher"
+            feedback=feedback,
+            start=6,
+            end=11,
+            quote="brave",
+            comment="Хорошее слово",
+            source="teacher",
         )
         html = str(highlighted_answer(attempt))
         self.assertIn('class="answer-highlight answer-highlight--teacher"', html)
@@ -79,7 +84,9 @@ class GradeOptionalWorkflowTests(LMSCase):
 class InlineHighlightSubmitTests(LMSCase):
     def test_teacher_can_attach_highlight_via_review_form(self):
         attempt = self.submit(text_answer="This is a sample answer.")
-        highlights = json.dumps([{"start": 0, "end": 4, "comment": "Хорошее начало", "source": "teacher"}])
+        highlights = json.dumps(
+            [{"start": 0, "end": 4, "comment": "Хорошее начало", "source": "teacher"}]
+        )
         response = self.teacher_client.post(
             reverse("teacher_submission_review", args=[attempt.pk]),
             {
@@ -103,7 +110,12 @@ class InlineHighlightSubmitTests(LMSCase):
         attempt = self.submit(text_answer="This is a sample answer.")
         feedback = self.review(attempt, grade=80)
         FeedbackHighlight.objects.create(
-            feedback=feedback, start=0, end=4, quote="This", comment="Хорошее начало", source="teacher"
+            feedback=feedback,
+            start=0,
+            end=4,
+            quote="This",
+            comment="Хорошее начало",
+            source="teacher",
         )
         response = self.student_client.get(self.url)
         self.assertContains(response, "answer-highlight")
@@ -114,7 +126,12 @@ class InlineHighlightSubmitTests(LMSCase):
         attempt = self.submit(text_answer="This is a sample answer.")
         feedback = self.review(attempt, grade=80)
         FeedbackHighlight.objects.create(
-            feedback=feedback, start=0, end=4, quote="This", comment="Есть комментарий", source="teacher"
+            feedback=feedback,
+            start=0,
+            end=4,
+            quote="This",
+            comment="Есть комментарий",
+            source="teacher",
         )
         attempt.refresh_from_db()
         response = self.teacher_client.post(
@@ -181,8 +198,12 @@ class MultiAudioCommentTests(LMSCase):
     def test_teacher_can_remove_one_of_several_existing_audio_comments(self):
         attempt = self.submit()
         feedback = self.review(attempt, grade=80)
-        first = FeedbackAudioComment.objects.create(feedback=feedback, audio=_wav_file("a1.wav"), order=0)
-        second = FeedbackAudioComment.objects.create(feedback=feedback, audio=_wav_file("a2.wav"), order=1)
+        first = FeedbackAudioComment.objects.create(
+            feedback=feedback, audio=_wav_file("a1.wav"), order=0
+        )
+        second = FeedbackAudioComment.objects.create(
+            feedback=feedback, audio=_wav_file("a2.wav"), order=1
+        )
         attempt.refresh_from_db()
 
         response = self.teacher_client.post(
@@ -209,7 +230,9 @@ class MultiAudioCommentTests(LMSCase):
         self.assertEqual(response.content.decode().count('class="feedback-audio"'), 2)
 
 
-@override_settings(LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="ollama", LMS_AI_LOCAL=True)
+@override_settings(
+    LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="ollama", LMS_AI_LOCAL=True
+)
 class AiGradeTextViewTests(LMSCase):
     def test_teacher_gets_grade_and_comment_from_ai(self):
         attempt = self.submit(text_answer="This is a sample answer with several words.")
@@ -232,7 +255,9 @@ class AiGradeTextViewTests(LMSCase):
 
     def test_student_cannot_call_ai_grade_endpoint(self):
         attempt = self.submit(text_answer="Something to grade.")
-        response = self.student_client.post(reverse("teacher_review_ai_grade_text", args=[attempt.pk]))
+        response = self.student_client.post(
+            reverse("teacher_review_ai_grade_text", args=[attempt.pk])
+        )
         self.assertIn(response.status_code, (302, 403))
 
     def test_ai_error_is_reported_as_json_error(self):
@@ -256,7 +281,9 @@ class AiGradeTextViewTests(LMSCase):
         self.assertFalse(response.json()["ok"])
 
 
-@override_settings(LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="ollama", LMS_AI_LOCAL=True)
+@override_settings(
+    LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="ollama", LMS_AI_LOCAL=True
+)
 class AiGradeAudioViewTests(LMSCase):
     def _audio_assignment(self):
         return Assignment.objects.create(

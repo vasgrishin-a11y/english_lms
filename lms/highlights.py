@@ -16,8 +16,7 @@ from __future__ import annotations
 
 import json
 
-from django.utils.html import escape
-from django.utils.safestring import mark_safe
+from django.utils.html import format_html, format_html_join
 
 MAX_HIGHLIGHTS_PER_SUBMISSION = 200
 MAX_AI_HIGHLIGHTS = 12
@@ -37,6 +36,8 @@ def render_highlighted_html(text, highlights):
     ``highlights`` — любые объекты (модели или словари) с полями
     start/end/comment/source. Пересекающиеся или выходящие за границы текста
     диапазоны отбрасываются защитно — так опечатка в данных не ломает страницу.
+    Собирается через ``format_html``/``format_html_join``: каждое значение
+    экранируется Django автоматически, ручного ``mark_safe`` не требуется.
     """
     text = text or ""
     length = len(text)
@@ -56,34 +57,38 @@ def render_highlighted_html(text, highlights):
         cursor_check = end
 
     if not ranges:
-        return mark_safe(escape(text))
+        return format_html("{}", text)
 
-    parts = []
+    pieces = []
     cursor = 0
     for start, end, item in ranges:
         if start > cursor:
-            parts.append(escape(text[cursor:start]))
-        comment = escape(str(_get(item, "comment", "") or ""))
+            pieces.append(format_html("{}", text[cursor:start]))
+        comment = str(_get(item, "comment", "") or "")
         source = _get(item, "source", "teacher") or "teacher"
         css_source = "ai" if source == "ai" else "teacher"
         highlight_id = _get(item, "pk", None) or _get(item, "id", "")
-        parts.append(
-            '<mark class="answer-highlight answer-highlight--{source}" '
-            'data-highlight-id="{hid}" data-comment="{comment}" '
-            'data-start="{start}" data-end="{end}" tabindex="0" role="note" '
-            'aria-label="Комментарий преподавателя">{segment}</mark>'.format(
-                source=css_source,
-                hid=escape(str(highlight_id)),
-                comment=comment,
-                start=start,
-                end=end,
-                segment=escape(text[start:end]),
+        pieces.append(
+            format_html(
+                '<mark class="answer-highlight answer-highlight--{}" '
+                'data-highlight-id="{}" data-comment="{}" '
+                'data-start="{}" data-end="{}" tabindex="0" role="note" '
+                'aria-label="Комментарий преподавателя">{}</mark>',
+                css_source,
+                str(highlight_id),
+                comment,
+                start,
+                end,
+                text[start:end],
             )
         )
         cursor = end
     if cursor < length:
-        parts.append(escape(text[cursor:]))
-    return mark_safe("".join(parts))
+        pieces.append(format_html("{}", text[cursor:]))
+
+    # Каждый кусок уже безопасен (format_html сам экранирует аргументы), поэтому
+    # склеиваем их через format_html_join, а не через mark_safe/f-строку.
+    return format_html_join("", "{}", ((piece,) for piece in pieces))
 
 
 def _find_free_occurrence(text, quote, taken):
