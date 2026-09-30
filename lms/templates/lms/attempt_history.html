@@ -10,7 +10,10 @@
             <span class="grade-pill tnum {{ attempt.feedback.grade|grade_class:attempt.max_points_snapshot }}">{{ attempt.feedback.grade }}<small>/{{ attempt.max_points_snapshot }}</small></span>
         {% endif %}
     </div>
-    {% if attempt.text_answer %}<pre>{{ attempt.text_answer }}</pre>{% endif %}
+    {% if attempt.text_answer %}
+        <p class="tiny muted mb-0">{{ attempt.text_answer|word_count }} {{ attempt.text_answer|word_count|pluralize_ru:"слово,слова,слов" }} · {{ attempt.text_answer|char_count }} симв.</p>
+        <pre class="answer-highlights-host">{{ attempt|highlighted_answer }}</pre>
+    {% endif %}
     {% if attempt.file_answer %}
         <div class="media-frame">
             {% if attempt.file_answer.name|media_kind == 'image' %}
@@ -35,6 +38,12 @@
                         <audio controls preload="metadata" src="{% url 'media_preview' attempt.feedback.audio_comment.name %}"></audio>
                     </div>
                 {% endif %}
+                {% for clip in attempt.feedback.audio_comments.all %}
+                    <div class="feedback-audio" style="margin-top:10px">
+                        <p class="tiny strong mb-0">{% icon "mic" "icon icon-sm" %} Голосовой комментарий {{ forloop.counter }}</p>
+                        <audio controls preload="metadata" src="{% url 'media_preview' clip.audio.name %}"></audio>
+                    </div>
+                {% endfor %}
                 {% if attempt.feedback.teacher %}<p class="tiny mb-0">{{ attempt.feedback.teacher.get_full_name|default:attempt.feedback.teacher.username }} · {{ attempt.feedback.updated_at|date:"d.m.Y H:i" }}</p>{% else %}<p class="tiny mb-0">Автоматическая проверка</p>{% endif %}
             </div>
         </div>

@@ -13,13 +13,21 @@ from django.conf import settings
 from django.core.files.storage import default_storage
 from django.core.management.base import BaseCommand
 
-from lms.models import Assignment, AssignmentAttachment, Feedback, QuestionResponse, Submission
+from lms.models import (
+    Assignment,
+    AssignmentAttachment,
+    Feedback,
+    FeedbackAudioComment,
+    QuestionResponse,
+    Submission,
+)
 
 SOURCES = (
     ("Материалы заданий", Assignment, "material_file"),
     ("Вложения заданий", AssignmentAttachment, "file"),
     ("Ответы учеников", Submission, "file_answer"),
     ("Голосовые комментарии", Feedback, "audio_comment"),
+    ("Голосовые комментарии (доп.)", FeedbackAudioComment, "audio"),
     ("Ответы по пунктам", QuestionResponse, "file_answer"),
 )
 

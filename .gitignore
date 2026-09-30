@@ -47,3 +47,6 @@ build/
 # Собранная статика Django (collectstatic) — артефакт сборки, не коммитим.
 staticfiles/
 ```node_modules/
+
+# Local dev DB created for live preview
+dev.sqlite3

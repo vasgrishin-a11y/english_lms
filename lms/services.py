@@ -183,6 +183,9 @@ def review_submission(
     item_points=None,
     audio_comment=None,
     remove_audio=False,
+    audio_comments=None,
+    remove_audio_comment_ids=None,
+    highlights=None,
 ):
     if not teacher.is_active or get_user_role(teacher) != Profile.Role.TEACHER:
         raise PermissionDenied
@@ -230,6 +233,9 @@ def review_submission(
     elif remove_audio:
         feedback.audio_comment = ""
     feedback.save()
+    _apply_audio_comments(feedback, audio_comments, remove_audio_comment_ids)
+    if highlights is not None:
+        _apply_highlights(feedback, submission.text_answer, highlights)
     submission.status = feedback.decision
     submission.review_revision += 1
     submission.save(update_fields=["status", "review_revision", "updated_at"])
@@ -251,6 +257,61 @@ def review_submission(
         )
     )
     return feedback
+
+
+def _apply_audio_comments(feedback, audio_comments, remove_audio_comment_ids):
+    """Добавить новые записи и удалить отмеченные — все они уходят ученику вместе.
+
+    Каждая запись валидируется отдельно (формат и лимит длительности), поэтому
+    один бракованный файл не роняет остальные — просто не добавляется.
+    """
+    from .models import FeedbackAudioComment
+
+    if remove_audio_comment_ids:
+        ids = [item for item in str(remove_audio_comment_ids).split(",") if item.strip().isdigit()]
+        if ids:
+            FeedbackAudioComment.objects.filter(feedback=feedback, pk__in=ids).delete()
+    if not audio_comments:
+        return
+    current_max = FeedbackAudioComment.objects.filter(feedback=feedback).aggregate(
+        m=models.Max("order")
+    )["m"]
+    next_order = 0 if current_max is None else current_max + 1
+    for offset, audio in enumerate(audio_comments):
+        if not audio:
+            continue
+        validate_recording_limit(audio, TEACHER_FEEDBACK_RECORDING_LIMIT_SECONDS)
+        FeedbackAudioComment.objects.create(
+            feedback=feedback, audio=audio, order=next_order + offset
+        )
+
+
+def _apply_highlights(feedback, text_answer, highlights):
+    """Заменить комментарии к фрагментам ответа присланным (уже проверенным) списком."""
+    from .highlights import parse_submitted_highlights
+    from .models import FeedbackHighlight
+
+    cleaned = (
+        highlights
+        if isinstance(highlights, list)
+        else parse_submitted_highlights(text_answer, highlights)
+    )
+    feedback.highlights.all().delete()
+    if not cleaned:
+        return
+    FeedbackHighlight.objects.bulk_create(
+        [
+            FeedbackHighlight(
+                feedback=feedback,
+                start=item["start"],
+                end=item["end"],
+                quote=item["quote"],
+                comment=item["comment"],
+                source=item.get("source", "teacher"),
+            )
+            for item in cleaned
+        ]
+    )
 
 
 def _apply_item_points(submission, item_points, grade):

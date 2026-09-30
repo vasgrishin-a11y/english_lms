@@ -47,6 +47,9 @@
                         {% if submission.feedback.audio_comment %}
                             <audio controls preload="metadata" src="{% url 'media_preview' submission.feedback.audio_comment.name %}"></audio>
                         {% endif %}
+                        {% for clip in submission.feedback.audio_comments.all %}
+                            <audio controls preload="metadata" src="{% url 'media_preview' clip.audio.name %}" style="margin-top:6px"></audio>
+                        {% endfor %}
                         <p class="mb-0 small">
                             {% if assignment.is_quiz %}
                                 Задание снова открыто: пройдите пункты заново ниже — прошлая попытка останется в истории.
@@ -150,6 +153,7 @@
                         <div class="form-field{% if form.text_answer.errors %} field-error{% endif %}">
                             <label for="{{ form.text_answer.id_for_label }}">{{ form.text_answer.label }}</label>
                             {{ form.text_answer }}
+                            <p class="tiny muted mb-0" data-word-counter data-for="{{ form.text_answer.id_for_label }}">0 слов · 0 символов</p>
                             {% if form.text_answer.help_text %}<div class="help-text" id="{{ form.text_answer.auto_id }}_helptext">{{ form.text_answer.help_text }}</div>{% endif %}
                             {{ form.text_answer.errors }}
                         </div>

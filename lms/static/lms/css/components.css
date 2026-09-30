@@ -4353,3 +4353,117 @@ a.audience-badge:hover {
         transition: none;
     }
 }
+
+/* ── Подсветка комментариев в ответе ученика (как рецензия в Word) ────── */
+.answer-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-2);
+}
+
+[data-answer-text] {
+    cursor: text;
+}
+
+[data-answer-text][data-editable="1"] {
+    user-select: text;
+}
+
+.answer-highlight {
+    background: var(--warning-bg);
+    color: inherit;
+    border-bottom: 2px solid var(--warning-border);
+    border-radius: 3px;
+    padding: 0 1px;
+    cursor: pointer;
+}
+
+.answer-highlight:hover,
+.answer-highlight:focus-visible {
+    background: var(--warning-border);
+    outline: none;
+}
+
+.answer-highlight--ai {
+    background: var(--accent-soft);
+    border-bottom: 2px solid var(--accent-500);
+}
+
+.answer-highlight--ai:hover,
+.answer-highlight--ai:focus-visible {
+    background: var(--accent-500);
+    color: var(--text-inverse);
+}
+
+.answer-highlight-tooltip {
+    position: absolute;
+    z-index: 60;
+    max-width: 320px;
+    padding: var(--sp-2) var(--sp-3);
+    background: var(--text);
+    color: var(--text-inverse);
+    font-size: var(--fs-13);
+    line-height: var(--lh-tight);
+    border-radius: var(--r-sm);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    pointer-events: none;
+}
+
+.answer-highlight-tooltip.hidden {
+    display: none;
+}
+
+.highlight-popover {
+    position: absolute;
+    z-index: 70;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    width: min(320px, 90vw);
+    padding: var(--sp-3);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+
+.highlight-popover textarea {
+    width: 100%;
+    resize: vertical;
+    font: inherit;
+}
+
+.highlight-popover-actions {
+    display: flex;
+    gap: var(--sp-2);
+    justify-content: flex-end;
+}
+
+/* ── Список нескольких голосовых комментариев ─────────────────────────── */
+.audio-comment-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.audio-comment-item {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-2) var(--sp-3);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+}
+
+.audio-comment-item audio {
+    flex: 1;
+    height: 36px;
+    min-width: 0;
+}

@@ -109,6 +109,33 @@ class SubmissionForm(forms.Form):
         return data
 
 
+class MultiFileInput(forms.ClearableFileInput):
+    """Виджет с несколькими одноимёнными ``<input type=file>`` (по одному на запись)."""
+
+    allow_multiple_selected = True
+
+    def value_from_datadict(self, data, files, name):
+        upload = files
+        if hasattr(upload, "getlist"):
+            return upload.getlist(name)
+        return upload.get(name)
+
+
+class MultiFileField(forms.FileField):
+    """Несколько файлов под одним именем поля — например, несколько голосовых комментариев."""
+
+    widget = MultiFileInput
+
+    def clean(self, data, initial=None):
+        items = data if isinstance(data, (list, tuple)) else ([data] if data else [])
+        cleaned = []
+        for item in items:
+            if not item:
+                continue
+            cleaned.append(super().clean(item, initial))
+        return cleaned
+
+
 class ReviewForm(forms.Form):
     expected_version = forms.IntegerField(min_value=1, widget=forms.HiddenInput)
     expected_review_revision = forms.IntegerField(min_value=0, widget=forms.HiddenInput)
@@ -143,6 +170,20 @@ class ReviewForm(forms.Form):
         label="Удалить опубликованный голосовой комментарий",
         widget=forms.CheckboxInput(),
     )
+    audio_comments = MultiFileField(
+        required=False,
+        label="Голосовые комментарии",
+        validators=[validate_upload],
+        widget=MultiFileInput(
+            attrs={
+                "accept": ".mp3,.wav,.m4a,.ogg,.aac,audio/*",
+                "data-max-mb": str(settings.LMS_MAX_FILE_BYTES // (1024 * 1024)),
+            }
+        ),
+        help_text="Можно записать и приложить несколько коротких комментариев подряд.",
+    )
+    remove_audio_comment_ids = forms.CharField(required=False, widget=forms.HiddenInput)
+    highlights_json = forms.CharField(required=False, widget=forms.HiddenInput)
     decision = forms.ChoiceField(
         choices=Feedback._meta.get_field("decision").choices, label="Решение"
     )
@@ -190,21 +231,18 @@ class ReviewForm(forms.Form):
             validate_recording_limit(audio, TEACHER_FEEDBACK_RECORDING_LIMIT_SECONDS)
         return audio
 
+    def clean_audio_comments(self):
+        files = self.cleaned_data.get("audio_comments") or []
+        for audio in files:
+            validate_recording_limit(audio, TEACHER_FEEDBACK_RECORDING_LIMIT_SECONDS)
+        return files
+
     def clean(self):
         data = super().clean()
         item_points = {pk: data.pop(name, None) for name, pk in self.item_fields}
         data["item_points"] = item_points
-        items_complete = bool(item_points) and all(v is not None for v in item_points.values())
-        if (
-            data.get("decision") == Submission.Status.CHECKED
-            and data.get("grade") is None
-            and not items_complete
-        ):
-            self.add_error(
-                "grade",
-                "Для завершения проверки укажите балл"
-                + (" или оцените все пункты со свободным ответом." if item_points else "."),
-            )
+        # Балл необязателен: преподаватель может сохранить и отправить проверку без него —
+        # интерфейс только предупреждает об этом (см. lms.js), но не блокирует отправку.
         return data
 
     def visible_fields(self):

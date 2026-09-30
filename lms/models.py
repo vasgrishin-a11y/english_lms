@@ -6,7 +6,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import FileExtensionValidator, MaxValueValidator, MinValueValidator
 from django.db import models
-from django.db.models import Exists, OuterRef, Q
+from django.db.models import Exists, F, OuterRef, Q
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils import timezone
@@ -788,20 +788,20 @@ class Feedback(models.Model):
             models.CheckConstraint(
                 condition=Q(grade__isnull=True) | Q(grade__lte=1000), name="feedback_grade_range"
             ),
-            models.CheckConstraint(
-                condition=Q(decision="needs_revision")
-                | (Q(decision="checked") & Q(grade__isnull=False)),
-                name="feedback_decision_grade",
-            ),
         ]
 
     def __str__(self):
         return f"Проверка: {self.submission}"
 
+    @property
+    def grade_missing(self):
+        """Балл не выставлен: показываем предупреждение, но проверку можно отправить и так."""
+        return self.grade is None
+
     def clean(self):
         super().clean()
-        if self.decision == "checked" and self.grade is None:
-            raise ValidationError({"grade": "Для завершения проверки укажите балл."})
+        # Балл необязателен: пропущенное значение — только предупреждение в интерфейсе,
+        # проверка всё равно сохраняется и уходит ученику.
         if (
             self.submission_id
             and self.grade is not None
@@ -815,6 +815,89 @@ class Feedback(models.Model):
         # Validation applies to ORM writes too; saving a comment never changes status.
         self.full_clean()
         super().save(*args, **kwargs)
+
+
+def feedback_audio_comment_upload_to(instance, filename):
+    """Множественные голосовые комментарии лежат в той же приватной зоне, что и сдача."""
+    submission = instance.feedback.submission
+    return (
+        f"submissions/{submission.assignment_id}/user_{submission.student_id}/feedback/"
+        f"{uuid.uuid4().hex}{_safe_extension(filename)}"
+    )
+
+
+class FeedbackAudioComment(models.Model):
+    """Один из нескольких голосовых комментариев преподавателя к одной проверке.
+
+    В отличие от ``Feedback.audio_comment`` (единственная запись, историческое поле),
+    сюда можно добавить сколько угодно коротких записей подряд: записали одну реплику,
+    потом другую — все они уйдут ученику вместе после сохранения проверки.
+    """
+
+    feedback = models.ForeignKey(
+        Feedback,
+        on_delete=models.CASCADE,
+        related_name="audio_comments",
+        verbose_name="Проверка",
+    )
+    audio = models.FileField(
+        upload_to=feedback_audio_comment_upload_to,
+        validators=[file_validator, validate_upload],
+        verbose_name="Запись",
+    )
+    order = models.PositiveIntegerField(default=0, verbose_name="Порядок")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Голосовой комментарий"
+        verbose_name_plural = "Голосовые комментарии"
+        ordering = ["order", "pk"]
+
+    def __str__(self):
+        return f"Голосовой комментарий #{self.pk} к проверке {self.feedback_id}"
+
+
+class FeedbackHighlight(models.Model):
+    """Выделенный фрагмент текстового ответа ученика с комментарием преподавателя.
+
+    Аналог комментариев в Word: преподаватель выделяет часть текста ответа и
+    привязывает к ней короткий комментарий. ``start``/``end`` — смещения символов
+    в ``Submission.text_answer`` на момент выделения; ``quote`` хранит сам
+    выделенный фрагмент отдельно, чтобы не терять комментарий, если оффсеты вдруг
+    разойдутся с текстом (историческая попытка не меняется, так что практике это
+    не грозит, но лишняя защита не помешает).
+    """
+
+    class Source(models.TextChoices):
+        TEACHER = "teacher", "Преподаватель"
+        AI = "ai", "ИИ-проверка"
+
+    feedback = models.ForeignKey(
+        Feedback,
+        on_delete=models.CASCADE,
+        related_name="highlights",
+        verbose_name="Проверка",
+    )
+    start = models.PositiveIntegerField(verbose_name="Начало (символ)")
+    end = models.PositiveIntegerField(verbose_name="Конец (символ)")
+    quote = models.TextField(max_length=4000, verbose_name="Выделенный текст")
+    comment = models.TextField(max_length=2000, verbose_name="Комментарий")
+    source = models.CharField(
+        max_length=10, choices=Source.choices, default=Source.TEACHER, verbose_name="Источник"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Комментарий к фрагменту ответа"
+        verbose_name_plural = "Комментарии к фрагментам ответа"
+        ordering = ["start", "pk"]
+        constraints = [
+            models.CheckConstraint(condition=Q(end__gt=F("start")), name="highlight_end_after_start"),
+        ]
+
+    def __str__(self):
+        return f"«{self.quote[:30]}» — {self.comment[:30]}"
 
 
 class SubmissionEvent(models.Model):

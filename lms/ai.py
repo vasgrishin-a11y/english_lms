@@ -1146,12 +1146,21 @@ def _json_mode(spec):
     return bool(configured)
 
 
-def _provider_material(spec, prompt_text, *, filename="", blob=b"", raw_text=False):
+def _audio_format(filename):
+    """Формат для ``input_audio``: большинство шлюзов принимают wav/mp3."""
+    ext = extension_of(filename).lstrip(".")
+    return ext if ext in {"wav", "mp3", "m4a", "ogg", "flac"} else "wav"
+
+
+def _provider_material(
+    spec, prompt_text, *, filename="", blob=b"", raw_text=False, media_kind="image"
+):
     """Отправить материал локальной модели (Ollama, LM Studio, свой шлюз).
 
     Единый транспорт: ``POST {endpoint}/chat/completions``. Фото уходит
-    data-url в content, как того ждут vision-модели; остальные файлы
-    (DOCX, XLSX, PDF, TXT) к этому моменту уже превращены в текст.
+    data-url в content, как того ждут vision-модели; аудио — как
+    ``input_audio`` (формат, который понимают шлюзы с аудио-моделями);
+    остальные файлы (DOCX, XLSX, PDF, TXT) к этому моменту уже превращены в текст.
     """
     endpoint = ai_endpoint()
     if not endpoint:
@@ -1168,7 +1177,16 @@ def _provider_material(spec, prompt_text, *, filename="", blob=b"", raw_text=Fal
             "загруженной модели, для Ollama — имя из `ollama list`)."
         )
     content = prompt_text
-    if blob:
+    if blob and media_kind == "audio":
+        data = base64.b64encode(blob).decode("ascii")
+        content = [
+            {"type": "text", "text": prompt_text},
+            {
+                "type": "input_audio",
+                "input_audio": {"data": data, "format": _audio_format(filename)},
+            },
+        ]
+    elif blob:
         data, mime = _image_part(blob, _image_mime(filename))
         content = [
             {"type": "text", "text": prompt_text},
@@ -1916,6 +1934,254 @@ def apply_revision(assignment, revision):
     return summary
 
 
+# ── Проверка ответа ученика с ИИ ───────────────────────────────────────────
+EXAM_HINTS = (
+    ("егэ", "ЕГЭ"),
+    ("ege", "ЕГЭ"),
+    ("огэ", "ОГЭ"),
+    ("гиа", "ОГЭ"),
+    ("oge", "ОГЭ"),
+)
+
+GRADING_CONTEXT = """Ты — опытный учитель английского языка и эксперт по проверке письменных и
+устных работ учеников. Тебе показывают реальный ответ конкретного ученика на конкретное задание —
+здесь, в отличие от помощника по созданию заданий, это именно проверка уже выполненной работы, а не
+конструирование нового материала. Оценивай справедливо и объясняй ошибки понятно и по-доброму."""
+
+TEXT_GRADING_SCHEMA = """Верни строго JSON без пояснений в формате:
+{{"grade": 0, "comment": "Общий комментарий ученику: что получилось и что нужно исправить",
+  "criteria_note": "Коротко: по каким критериям и почему выставлен именно такой балл",
+  "highlights": [{{"quote": "точная подстрока из ответа ученика", "comment": "короткий комментарий к месту"}}]}}
+
+Правила:
+- "grade" — целое число от 0 до {max_points} включительно.
+- Каждый "quote" в highlights должен быть точной, дословной и непрерывной подстрокой ответа ученика
+  (те же пробелы, регистр и пунктуация, что в тексте) — по нему подсветится место с комментарием.
+  Не выдумывай цитаты, которых нет в тексте дословно.
+- Отмечай highlights только там, где действительно есть ошибка или особенно удачное место —
+  не больше 12 штук, каждая — короткая законченная мысль (слово, часть предложения или предложение).
+- "comment" пиши по-русски, обращайся к ученику на «вы», без markdown и списков."""
+
+AUDIO_GRADING_SCHEMA = """Верни строго JSON без пояснений в формате:
+{{"grade": 0, "comment": "Общий комментарий ученику по произношению, беглости, словарю и грамматике",
+  "criteria_note": "Коротко: по каким критериям и почему выставлен именно такой балл",
+  "transcript": "текстовая расшифровка того, что сказал ученик"}}
+Правила: "grade" — целое число от 0 до {max_points} включительно. "comment" — по-русски, на «вы»,
+без markdown."""
+
+
+def _exam_hint(assignment):
+    """Название экзамена (ОГЭ/ЕГЭ), если оно угадывается из курса или задания."""
+    topic = getattr(assignment, "topic", None)
+    block = getattr(topic, "block", None) if topic else None
+    chapter = getattr(topic, "chapter", None) if topic else None
+    haystack = " ".join(
+        part
+        for part in (
+            getattr(block, "name", ""),
+            getattr(chapter, "title", ""),
+            getattr(topic, "title", ""),
+            assignment.title,
+            assignment.description,
+        )
+        if part
+    ).lower()
+    for marker, label in EXAM_HINTS:
+        if marker in haystack:
+            return label
+    return ""
+
+
+def _course_label(assignment):
+    topic = getattr(assignment, "topic", None)
+    block = getattr(topic, "block", None) if topic else None
+    chapter = getattr(topic, "chapter", None) if topic else None
+    bits = [
+        getattr(block, "name", ""),
+        getattr(chapter, "title", ""),
+        getattr(topic, "title", ""),
+    ]
+    return " · ".join(bit for bit in bits if bit) or "не указано"
+
+
+def _grading_criteria_note(assignment, max_points):
+    """Инструкция по критериям: официальные для ОГЭ/ЕГЭ, иначе — универсальные."""
+    exam = _exam_hint(assignment)
+    if exam:
+        return (
+            f"Курс относится к подготовке к {exam}. Найди и примени официальные критерии "
+            f"оценивания письменных и устных заданий {exam} по английскому языку (ФИПИ): "
+            "соответствие теме и объёму, решение коммуникативной задачи, организацию текста, "
+            "словарный запас, грамматику и орфографию/произношение. Переведи результат по этим "
+            f"критериям в шкалу от 0 до {max_points} баллов пропорционально и опиши это в "
+            "criteria_note."
+        )
+    return (
+        "Официальный экзамен по названию курса не определяется — оцени по универсальным "
+        "критериям учебного задания: соответствие условию, содержание, структура, словарный "
+        f"запас, грамматика и орфография/произношение. Итоговый балл — целое число от 0 до "
+        f"{max_points}."
+    )
+
+
+def build_text_grading_prompt(submission):
+    assignment = submission.assignment
+    max_points = submission.max_points_snapshot
+    parts = [
+        GRADING_CONTEXT,
+        _grading_criteria_note(assignment, max_points),
+        f"Курс/тема: {_course_label(assignment)}.",
+        f"Название задания: {assignment.title}",
+        "Условие задания:\n" + (assignment.description or "").strip()[:4000],
+        f"Максимум баллов за эту попытку: {max_points}.",
+        "Ответ ученика (оценивай только этот текст, дословно, без сокращений):\n"
+        + (submission.text_answer or "").strip()[:8000],
+        TEXT_GRADING_SCHEMA.format(max_points=max_points),
+    ]
+    return "\n\n".join(parts)
+
+
+def build_audio_grading_prompt(submission):
+    assignment = submission.assignment
+    max_points = submission.max_points_snapshot
+    parts = [
+        GRADING_CONTEXT,
+        _grading_criteria_note(assignment, max_points),
+        f"Курс/тема: {_course_label(assignment)}.",
+        f"Название задания: {assignment.title}",
+        "Условие задания:\n" + (assignment.description or "").strip()[:4000],
+        f"Максимум баллов за эту попытку: {max_points}.",
+        "Прослушай приложенную запись ответа ученика, расшифруй её и оцени говорение "
+        "(произношение, беглость, словарный запас, грамматику) по критериям выше.",
+        AUDIO_GRADING_SCHEMA.format(max_points=max_points),
+    ]
+    return "\n\n".join(parts)
+
+
+def _grade_from_payload(payload, max_points):
+    try:
+        grade = payload.get("grade")
+        grade = int(round(float(grade)))
+    except (TypeError, ValueError):
+        return None
+    return max(0, min(max_points, grade))
+
+
+def normalise_text_grading(payload, *, submission, spec):
+    if not isinstance(payload, dict):
+        raise AiError("Модель вернула не JSON — попробуйте ещё раз.")
+    max_points = submission.max_points_snapshot
+    grade = _grade_from_payload(payload, max_points)
+    comment = _clean_text(payload.get("comment"), 4000)
+    criteria_note = _clean_text(payload.get("criteria_note"), 1000)
+    from .highlights import resolve_ai_highlights
+
+    highlights = resolve_ai_highlights(submission.text_answer or "", payload.get("highlights"))
+    if grade is None and not comment and not highlights:
+        raise AiError("Модель не вернула оценку или комментарий — попробуйте ещё раз.")
+    return {
+        "grade": grade,
+        "max_points": max_points,
+        "comment": comment,
+        "criteria_note": criteria_note,
+        "highlights": highlights,
+        "exam": _exam_hint(submission.assignment),
+        "provider": spec["key"],
+        "provider_label": spec["label"],
+    }
+
+
+def grade_text_answer(submission):
+    """Попросить модель проверить свободный текстовый ответ ученика.
+
+    Возвращает готовые для интерфейса поля: балл, комментарий, пояснение
+    критериев и список подсказок-выделений (цитата + комментарий), уже
+    привязанных к точным смещениям в тексте ответа.
+    """
+    mode = ai_mode()
+    if mode == "off":
+        raise AiError("ИИ-помощник выключен администратором (LMS_AI_ENABLED=0).")
+    if mode != "online":
+        raise AiError(
+            "Проверка ИИ требует работающей модели: офлайн-разбор не умеет оценивать ответы. "
+            "Подключите локальную модель (LMS_AI_LOCAL=1) или задайте ключ LMS_AI_API_KEY."
+        )
+    text = (submission.text_answer or "").strip()
+    if not text:
+        raise AiError("В ответе ученика нет текста для проверки.")
+    spec = provider_spec()
+    payload = _provider_material(spec, build_text_grading_prompt(submission))
+    return normalise_text_grading(payload, submission=submission, spec=spec)
+
+
+def grade_audio_answer(submission):
+    """Попросить модель прослушать и оценить аудиоответ ученика (если умеет).
+
+    Не все модели понимают звук: если провайдер откажет, ошибка объясняет,
+    что нужна аудио-модель, и предлагает проверить запись вручную.
+    """
+    mode = ai_mode()
+    if mode == "off":
+        raise AiError("ИИ-помощник выключен администратором (LMS_AI_ENABLED=0).")
+    if mode != "online":
+        raise AiError(
+            "Проверка ИИ требует работающей модели: офлайн-разбор не умеет оценивать ответы. "
+            "Подключите локальную модель (LMS_AI_LOCAL=1) или задайте ключ LMS_AI_API_KEY."
+        )
+    upload = submission.file_answer
+    if not upload:
+        raise AiError("В этой попытке нет аудиофайла для проверки.")
+    filename = upload.name
+    if upload_kind(filename) != "audio":
+        raise AiError("Прикреплённый файл не похож на аудио — проверьте ответ вручную.")
+    try:
+        blob = upload.read()
+    finally:
+        try:
+            upload.close()
+        except (OSError, ValueError):  # pragma: no cover - защитное закрытие файла
+            pass
+    if len(blob) > max_upload_bytes():
+        raise AiError(
+            f"Аудиофайл больше {max_upload_bytes() // (1024 * 1024)} МБ — модель не сможет "
+            "его обработать. Проверьте запись вручную."
+        )
+    spec = provider_spec()
+    try:
+        payload = _provider_material(
+            spec,
+            build_audio_grading_prompt(submission),
+            filename=filename,
+            blob=blob,
+            media_kind="audio",
+        )
+    except AiError as exc:
+        raise AiError(
+            f"{spec['label']} не смог обработать аудио ({exc}). Нужна модель с поддержкой "
+            "звука (например, аудио-модель через свой OpenAI-совместимый шлюз) — пока "
+            "проверьте запись вручную."
+        ) from exc
+    if not isinstance(payload, dict):
+        raise AiError("Модель вернула не JSON — попробуйте ещё раз.")
+    max_points = submission.max_points_snapshot
+    grade = _grade_from_payload(payload, max_points)
+    comment = _clean_text(payload.get("comment"), 4000)
+    criteria_note = _clean_text(payload.get("criteria_note"), 1000)
+    transcript = _clean_text(payload.get("transcript"), 8000)
+    if grade is None and not comment:
+        raise AiError("Модель не вернула оценку или комментарий — попробуйте ещё раз.")
+    return {
+        "grade": grade,
+        "max_points": max_points,
+        "comment": comment,
+        "criteria_note": criteria_note,
+        "transcript": transcript,
+        "exam": _exam_hint(submission.assignment),
+        "provider": spec["key"],
+        "provider_label": spec["label"],
+    }
+
+
 __all__ = [
     "AiError",
     "AI_CEFR_LEVELS",
@@ -1937,14 +2203,19 @@ __all__ = [
     "build_material_revision_prompt",
     "build_prompt",
     "build_revision_prompt",
+    "build_text_grading_prompt",
+    "build_audio_grading_prompt",
     "extension_of",
     "extract_text",
+    "grade_audio_answer",
+    "grade_text_answer",
     "import_material",
     "limits",
     "material_summary",
     "max_upload_bytes",
     "normalise",
     "normalise_revision",
+    "normalise_text_grading",
     "offline_notes",
     "parse_text",
     "provider_hint",
