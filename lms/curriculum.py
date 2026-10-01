@@ -126,10 +126,13 @@ def course_tree(
     assignments_queryset = Assignment.objects.select_related("topic")
     if teacher_view:
         # Бейджи «кому доступно» на карте курса — без лишних запросов.
-        blocks_queryset = blocks_queryset.prefetch_related("groups", "students")
-        chapters_queryset = chapters_queryset.prefetch_related("groups", "students")
-        topics_queryset = topics_queryset.prefetch_related("groups", "students")
-        assignments_queryset = assignments_queryset.prefetch_related("groups", "assigned_students")
+        audience_relations = ("groups", "students", "excluded_groups", "excluded_students")
+        blocks_queryset = blocks_queryset.prefetch_related(*audience_relations)
+        chapters_queryset = chapters_queryset.prefetch_related(*audience_relations)
+        topics_queryset = topics_queryset.prefetch_related(*audience_relations)
+        assignments_queryset = assignments_queryset.prefetch_related(
+            "groups", "assigned_students", "excluded_groups", "excluded_students"
+        )
     blocks = list(blocks_queryset)
     chapters = list(chapters_queryset)
     topics = list(topics_queryset)
@@ -171,9 +174,34 @@ def _matches(query, *values):
     return any(needle in str(value or "").casefold() for value in values)
 
 
+def _publication_state(own_active, child_states):
+    """draft / partial / published для минимального индикатора карты курса."""
+    if not own_active:
+        return "draft"
+    states = list(child_states)
+    if not states or all(state == "published" for state in states):
+        return "published"
+    if all(state == "draft" for state in states):
+        return "draft"
+    return "partial"
+
+
+def _assignment_publication_state(assignment, moment=None):
+    moment = moment or timezone.now()
+    published = bool(
+        assignment.is_active
+        and assignment.status == Assignment.Publication.PUBLISHED
+        and (assignment.publish_at is None or assignment.publish_at <= moment)
+    )
+    return "published" if published else "draft"
+
+
 def _topic_entry(topic, assignments, *, stats, student_view, query, parent_audience=None):
     """Собрать узел темы: задания с состоянием/статистикой и счётчики темы."""
     entries = []
+    publication_state = _publication_state(
+        topic.is_active, (_assignment_publication_state(item) for item in assignments)
+    )
     topic_total = topic_done = topic_waiting = topic_revision = 0
     flashcard_count = 0
     topic_audience = (
@@ -182,7 +210,13 @@ def _topic_entry(topic, assignments, *, stats, student_view, query, parent_audie
     for assignment in assignments:
         if not _matches(query, assignment.title, assignment.description):
             continue
-        entry = {"assignment": assignment, "state": None, "stats": None, "audience": None}
+        entry = {
+            "assignment": assignment,
+            "state": None,
+            "stats": None,
+            "audience": None,
+            "publication_state": _assignment_publication_state(assignment),
+        }
         if topic_audience is not None:
             entry["audience"] = audience.accumulate(assignment, topic_audience)
         if assignment.is_flashcards:
@@ -219,6 +253,7 @@ def _topic_entry(topic, assignments, *, stats, student_view, query, parent_audie
         "waiting": topic_waiting,
         "revision": topic_revision,
         "progress": _percent(topic_done, topic_total),
+        "publication_state": publication_state,
     }
 
 
@@ -237,6 +272,9 @@ def _chapter_entry(chapter, topic_items, chapter_audience=None):
         "waiting": sum(item["waiting"] for item in topic_items),
         "revision": sum(item["revision"] for item in topic_items),
         "progress": _percent(done, total),
+        "publication_state": _publication_state(
+            chapter.is_active, (item["publication_state"] for item in topic_items)
+        ),
     }
 
 
@@ -260,6 +298,32 @@ def _assemble(
     for assignment in assignments:
         assignments_by_topic.setdefault(assignment.topic_id, []).append(assignment)
 
+    # Состояние публикации считается по полной ветке, а не по результатам поиска.
+    topic_publication = {
+        topic.pk: _publication_state(
+            topic.is_active,
+            (
+                _assignment_publication_state(item)
+                for item in assignments_by_topic.get(topic.pk, [])
+            ),
+        )
+        for topic in topics
+    }
+    chapter_publication = {
+        chapter.pk: _publication_state(
+            chapter.is_active,
+            (topic_publication[topic.pk] for topic in topics_by_chapter.get(chapter.pk, [])),
+        )
+        for chapter in chapters
+    }
+    block_publication = {
+        block.pk: _publication_state(
+            block.is_active,
+            (chapter_publication[chapter.pk] for chapter in chapters_by_block.get(block.pk, [])),
+        )
+        for block in blocks
+    }
+
     result = []
     for block in blocks:
         block_chapters = []
@@ -279,6 +343,7 @@ def _assemble(
                     query=query,
                     parent_audience=chapter_audience,
                 )
+                item["publication_state"] = topic_publication[topic.pk]
                 if (
                     query
                     and not item["assignments"]
@@ -288,7 +353,9 @@ def _assemble(
                 topic_items.append(item)
             if query and not topic_items and not _matches(query, chapter.title, block.name):
                 continue
-            block_chapters.append(_chapter_entry(chapter, topic_items, chapter_audience))
+            chapter_item = _chapter_entry(chapter, topic_items, chapter_audience)
+            chapter_item["publication_state"] = chapter_publication[chapter.pk]
+            block_chapters.append(chapter_item)
             block_topics.extend(topic_items)
         if query and not block_chapters:
             continue
@@ -307,6 +374,7 @@ def _assemble(
                 "assignments": sum(len(item["assignments"]) for item in block_topics),
                 "flashcards": sum(item["flashcards"] for item in block_topics),
                 "progress": _percent(block_done, block_total),
+                "publication_state": block_publication[block.pk],
             }
         )
     totals = {

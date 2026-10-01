@@ -91,6 +91,10 @@ class ConsoleAccessTests(LMSCase):
         self.assertIn(draft, response.context["drafts"])
         self.assertIn(attempt, response.context["waiting"])
         self.assertContains(response, "Draft task")
+        self.assertNotContains(response, "Средний балл")
+        self.assertContains(response, "Классы")
+        self.assertContains(response, "Проверка")
+        self.assertContains(response, "btn-success-soft")
 
 
 class ArchiveAndStudentViewTests(LMSCase):
@@ -396,6 +400,28 @@ class CurriculumTreeTests(LMSCase):
         self.assertNotContains(response, draft.title)
         self.assertNotContains(response, self.assignment.title)
         self.assertContains(response, self.topic.title)
+
+    def test_publication_indicator_distinguishes_full_partial_and_draft(self):
+        response = self.teacher_client.get("/teacher/curriculum/")
+        block_item = response.context["blocks_data"][0]
+        self.assertEqual(block_item["publication_state"], "published")
+        self.assertContains(response, "Опубликовано полностью")
+
+        self.assignment.status = Assignment.Publication.DRAFT
+        self.assignment.save(update_fields=["status", "updated_at"])
+        response = self.teacher_client.get("/teacher/curriculum/")
+        self.assertEqual(response.context["blocks_data"][0]["publication_state"], "draft")
+
+        Assignment.objects.create(
+            topic=self.topic,
+            title="Published sibling",
+            description="x",
+            status=Assignment.Publication.PUBLISHED,
+        )
+        response = self.teacher_client.get("/teacher/curriculum/")
+        block_item = response.context["blocks_data"][0]
+        self.assertEqual(block_item["publication_state"], "partial")
+        self.assertContains(response, "не всё опубликовано")
 
     def test_search_filters_tree(self):
         response = self.teacher_client.get("/teacher/curriculum/?q=Past tense")

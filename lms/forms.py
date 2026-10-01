@@ -304,8 +304,8 @@ class SluglessModelForm(forms.ModelForm):
 class AudienceFormMixin(forms.Form):
     """Поля «Кому доступно» — одинаковые у класса, главы, темы и задания.
 
-    Пустые поля значат «как у родителя»: назначения по иерархии складываются,
-    а если нигде ничего не выбрано — материал видят все ученики.
+    Пустые поля значат «как у родителя»; отдельные поля исключений позволяют
+    снять унаследованный доступ. Если назначений нет во всей цепочке, материал общий.
     """
 
     groups = forms.ModelMultipleChoiceField(
@@ -322,8 +322,21 @@ class AudienceFormMixin(forms.Form):
         help_text="Открыть отдельным ученикам помимо групп.",
         widget=forms.CheckboxSelectMultiple(attrs={"class": "audience-list"}),
     )
+    excluded_groups = forms.ModelMultipleChoiceField(
+        queryset=Group.objects.none(),
+        required=False,
+        label="Убрать унаследованные группы",
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "audience-list audience-exclusions"}),
+    )
+    excluded_students = forms.ModelMultipleChoiceField(
+        queryset=User.objects.none(),
+        required=False,
+        label="Убрать унаследованных учеников",
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "audience-list audience-exclusions"}),
+    )
 
     def __init__(self, *args, **kwargs):
+        inherited_audience = kwargs.pop("inherited_audience", None)
         super().__init__(*args, **kwargs)
         self.fields["groups"].queryset = Group.objects.filter(is_active=True).order_by("name")
         self.fields["students"].queryset = User.objects.filter(
@@ -332,6 +345,29 @@ class AudienceFormMixin(forms.Form):
         self.fields["students"].label_from_instance = lambda user: (
             user.get_full_name() or user.username
         )
+        inherited_group_ids = [group.pk for group in (inherited_audience or {}).get("groups", [])]
+        inherited_student_ids = [
+            student.pk for student in (inherited_audience or {}).get("students", [])
+        ]
+        if inherited_group_ids:
+            inherited_student_ids += list(
+                User.objects.filter(student_groups__pk__in=inherited_group_ids).values_list(
+                    "pk", flat=True
+                )
+            )
+        instance = getattr(self, "instance", None)
+        if instance and instance.pk:
+            inherited_group_ids += list(instance.excluded_groups.values_list("pk", flat=True))
+            inherited_student_ids += list(instance.excluded_students.values_list("pk", flat=True))
+        self.fields["excluded_groups"].queryset = Group.objects.filter(
+            pk__in=set(inherited_group_ids), is_active=True
+        ).order_by("name")
+        self.fields["excluded_students"].queryset = User.objects.filter(
+            pk__in=set(inherited_student_ids), profile__role=Profile.Role.STUDENT, is_active=True
+        ).order_by("last_name", "first_name", "username")
+        self.fields["excluded_students"].label_from_instance = self.fields[
+            "students"
+        ].label_from_instance
 
 
 class BlockForm(AudienceFormMixin, SluglessModelForm):
@@ -339,7 +375,17 @@ class BlockForm(AudienceFormMixin, SluglessModelForm):
 
     class Meta:
         model = Block
-        fields = ["name", "cefr_level", "description", "order", "is_active", "groups", "students"]
+        fields = [
+            "name",
+            "cefr_level",
+            "description",
+            "order",
+            "is_active",
+            "groups",
+            "students",
+            "excluded_groups",
+            "excluded_students",
+        ]
         widgets = {
             "name": forms.TextInput(attrs={"placeholder": "Например: A2 — Базовый курс"}),
             "description": forms.Textarea(attrs={"rows": 3}),
@@ -353,7 +399,17 @@ class ChapterForm(AudienceFormMixin, SluglessModelForm):
 
     class Meta:
         model = Chapter
-        fields = ["block", "title", "description", "order", "is_active", "groups", "students"]
+        fields = [
+            "block",
+            "title",
+            "description",
+            "order",
+            "is_active",
+            "groups",
+            "students",
+            "excluded_groups",
+            "excluded_students",
+        ]
         labels = {"block": "Класс"}
         widgets = {
             "title": forms.TextInput(attrs={"placeholder": "Например: Хобби"}),
@@ -395,6 +451,8 @@ class TopicForm(AudienceFormMixin, SluglessModelForm):
             "is_active",
             "groups",
             "students",
+            "excluded_groups",
+            "excluded_students",
         ]
         labels = {"block": "Класс", "chapter": "Глава"}
         widgets = {
@@ -565,6 +623,18 @@ class AssignmentForm(forms.ModelForm):
         help_text="Открыть задание отдельным ученикам помимо групп",
         widget=forms.CheckboxSelectMultiple(attrs={"class": "audience-list"}),
     )
+    excluded_groups = forms.ModelMultipleChoiceField(
+        queryset=Group.objects.none(),
+        required=False,
+        label="Убрать унаследованные группы",
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "audience-list audience-exclusions"}),
+    )
+    excluded_students = forms.ModelMultipleChoiceField(
+        queryset=User.objects.none(),
+        required=False,
+        label="Убрать унаследованных учеников",
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "audience-list audience-exclusions"}),
+    )
     new_attachments = MultipleFileField(
         required=False,
         label="Дополнительные файлы",
@@ -583,6 +653,8 @@ class AssignmentForm(forms.ModelForm):
             "topic",
             "groups",
             "assigned_students",
+            "excluded_groups",
+            "excluded_students",
             "title",
             "description",
             "assignment_type",
@@ -631,6 +703,7 @@ class AssignmentForm(forms.ModelForm):
         return value
 
     def __init__(self, *args, **kwargs):
+        inherited_audience = kwargs.pop("inherited_audience", None)
         super().__init__(*args, **kwargs)
         self.fields["max_tries"].widget.attrs.update({"min": 1, "max": 5})
         self.fields["max_tries"].required = False
@@ -673,6 +746,30 @@ class AssignmentForm(forms.ModelForm):
         self.fields["assigned_students"].label_from_instance = lambda user: (
             user.get_full_name() or user.username
         )
+        inherited_group_ids = [group.pk for group in (inherited_audience or {}).get("groups", [])]
+        inherited_student_ids = [
+            student.pk for student in (inherited_audience or {}).get("students", [])
+        ]
+        if inherited_group_ids:
+            inherited_student_ids += list(
+                User.objects.filter(student_groups__pk__in=inherited_group_ids).values_list(
+                    "pk", flat=True
+                )
+            )
+        if self.instance and self.instance.pk:
+            inherited_group_ids += list(self.instance.excluded_groups.values_list("pk", flat=True))
+            inherited_student_ids += list(
+                self.instance.excluded_students.values_list("pk", flat=True)
+            )
+        self.fields["excluded_groups"].queryset = Group.objects.filter(
+            pk__in=set(inherited_group_ids), is_active=True
+        ).order_by("name")
+        self.fields["excluded_students"].queryset = User.objects.filter(
+            pk__in=set(inherited_student_ids), profile__role=Profile.Role.STUDENT, is_active=True
+        ).order_by("last_name", "first_name", "username")
+        self.fields["excluded_students"].label_from_instance = self.fields[
+            "assigned_students"
+        ].label_from_instance
 
         # Материалы можно прикрепить к заданию любого типа
         max_mb = settings.LMS_MAX_FILE_BYTES // (1024 * 1024)

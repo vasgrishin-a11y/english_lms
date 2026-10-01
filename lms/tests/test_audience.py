@@ -1,8 +1,8 @@
 """Назначения по иерархии: класс → глава → тема → задание.
 
-Правило «объединение»: назначение на любом уровне открывает всё внутри
-назначенным; ученик видит задание, если назначен хотя бы на одном уровне
-цепочки; если нигде ничего не выбрано — материал общий.
+Назначения наследуются вниз, но каждый нижний уровень может исключить
+унаследованную группу или ученика и при необходимости назначить их снова.
+Если назначений нет во всей цепочке — материал общий.
 """
 
 from django.contrib.auth import get_user_model
@@ -53,6 +53,36 @@ class AudienceVisibilityTests(LMSCase):
         self.assertIn(self.assignment.pk, self.visible_for(self.student))
         self.assertIn(self.assignment.pk, self.visible_for(self.other))
         self.assertNotIn(self.assignment.pk, self.visible_for(self.outsider))
+
+    def test_lower_level_can_exclude_student_in_inherited_group(self):
+        self.block.groups.add(self.group_a)
+        self.topic.excluded_students.add(self.student)
+        self.assertNotIn(self.assignment.pk, self.visible_for(self.student))
+        self.assertEqual(set(audience.expected_students(self.assignment)), set())
+        result = audience.effective(self.assignment)
+        self.assertFalse(result["open"])
+        self.assertTrue(result["has_inherited"])
+
+    def test_lower_level_can_exclude_group_and_descendant_can_add_it_again(self):
+        self.block.groups.add(self.group_a)
+        self.topic.chapter.excluded_groups.add(self.group_a)
+        self.assertNotIn(self.assignment.pk, self.visible_for(self.student))
+        self.assignment.groups.add(self.group_a)
+        self.assertIn(self.assignment.pk, self.visible_for(self.student))
+
+    def test_same_level_group_can_exclude_one_member(self):
+        self.topic.groups.add(self.group_a)
+        self.topic.excluded_students.add(self.student)
+        self.assertNotIn(self.assignment.pk, self.visible_for(self.student))
+        self.assignment.assigned_students.add(self.student)
+        self.assertIn(self.assignment.pk, self.visible_for(self.student))
+
+    def test_lower_level_can_exclude_personal_assignment(self):
+        self.block.students.add(self.outsider)
+        self.topic.excluded_students.add(self.outsider)
+        self.assertNotIn(self.assignment.pk, self.visible_for(self.outsider))
+        self.assignment.assigned_students.add(self.outsider)
+        self.assertIn(self.assignment.pk, self.visible_for(self.outsider))
 
     def test_personal_student_at_chapter_level(self):
         self.block.groups.add(self.group_a)
@@ -144,6 +174,25 @@ class AudienceConsoleTests(LMSCase):
         fresh_block_page = self.teacher_client.get("/teacher/curriculum/blocks/new/")
         self.assertContains(fresh_block_page, "Кому доступно")
         self.assertNotContains(fresh_block_page, "Уже назначено выше по иерархии")
+
+    def test_topic_form_can_save_inherited_exclusions(self):
+        self.block.groups.add(self.group_a)
+        response = self.teacher_client.post(
+            f"/teacher/curriculum/topics/{self.topic.pk}/",
+            {
+                "block": self.block.pk,
+                "chapter": self.topic.chapter_id,
+                "title": self.topic.title,
+                "description": "",
+                "order": 1,
+                "is_active": "on",
+                "excluded_groups": [self.group_a.pk],
+                "excluded_students": [self.student.pk],
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(list(self.topic.excluded_groups.all()), [self.group_a])
+        self.assertEqual(list(self.topic.excluded_students.all()), [self.student])
 
     def test_topic_form_saves_audience(self):
         response = self.teacher_client.post(

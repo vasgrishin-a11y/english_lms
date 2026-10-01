@@ -21,7 +21,7 @@
             <form method="post" novalidate data-preset-form>
                 {% csrf_token %}
                 {% include "lms/form_fields.html" %}
-                {% include "lms/parts/audience_fields.html" with groups_field=form.groups students_field=form.students %}
+                {% include "lms/parts/audience_fields.html" with groups_field=form.groups students_field=form.students excluded_groups_field=form.excluded_groups excluded_students_field=form.excluded_students %}
                 <div class="form-actions">
                     <button class="btn" type="submit">{% icon "save" %}{% t "Сохранить тему" %}</button>
                     <a class="btn btn-secondary" href="{% url 'teacher_curriculum' %}">{% t "Отмена" %}</a>
