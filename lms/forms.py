@@ -1380,7 +1380,12 @@ class AIMaterialForm(forms.Form):
     """
 
     # Старые API-клиенты могут прислать target/text; в интерфейсе они не выводятся.
-    target = forms.ChoiceField(choices=ai.TARGETS, required=False, initial="mixed", widget=forms.HiddenInput())
+    target = forms.ChoiceField(
+        choices=ai.TARGETS,
+        required=False,
+        initial="mixed",
+        widget=forms.HiddenInput(),
+    )
     structure_confirmed = forms.BooleanField(required=False, widget=forms.HiddenInput())
     text = forms.CharField(required=False, widget=forms.HiddenInput())
     prompt = forms.CharField(
@@ -1587,7 +1592,10 @@ class AIMaterialForm(forms.Form):
         # Совместимость со старыми API-клиентами: новый интерфейс подтверждение
         # не требует, но старый тестовый/интеграционный payload явно ожидает его.
         if self.data.get("prompt") == "Собери урок" and "structure_confirmed" not in self.data:
-            self.add_error("structure_confirmed", "Подтвердите структуру перед созданием материала.")
+            self.add_error(
+                "structure_confirmed",
+                "Подтвердите структуру перед созданием материала.",
+            )
         return cleaned
 
     def structure(self):
