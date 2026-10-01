@@ -27,8 +27,6 @@ def teacher_suggest(scope, query):
         return _groups(query)
     if scope == "curriculum":
         return _curriculum(query, teacher=True)
-    if scope == "review":
-        return _students(query, limit=4) + _assignments(query, teacher=True, limit=4)
     if scope == "topics":
         return _topics(query, teacher=True)
     return []

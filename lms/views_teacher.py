@@ -18,7 +18,18 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Avg, Count, F, Max, ProtectedError, Q
+from django.db.models import (
+    Avg,
+    Case,
+    Count,
+    F,
+    IntegerField,
+    Max,
+    ProtectedError,
+    Q,
+    Value,
+    When,
+)
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -82,17 +93,38 @@ QUEUE_CHOICES = [
     ("pending", "Ждут проверки"),
     ("revision", "Ожидают доработки"),
     ("checked", "Проверенные"),
-    ("all", "Все последние попытки"),
 ]
 QUEUE_FILTERS = {
     "pending": [Submission.Status.SUBMITTED, Submission.Status.IN_REVIEW],
     "revision": [Submission.Status.NEEDS_REVISION],
     "checked": [Submission.Status.CHECKED],
 }
-ORDER_CHOICES = {
-    "fifo": ("submitted_at", "Сначала старые"),
-    "new": ("-submitted_at", "Сначала новые"),
+# Сортируемые колонки таблицы очереди: ключ → (заголовок, поля ORM).
+SORT_CHOICES = {
+    "student": ("Ученик", ("student__last_name", "student__first_name", "student__username")),
+    "topic": ("Класс / тема", ("assignment__topic__block__name", "assignment__topic__title")),
+    "assignment": ("Задание", ("assignment__title",)),
+    "status": ("Статус", ("status_rank",)),
+    "submitted": ("Отправлено", ("submitted_at",)),
 }
+DEFAULT_SORT = "submitted"
+# Старые ссылки вида ?order=fifo|new продолжают открывать очередь в том же порядке.
+LEGACY_ORDERS = {"fifo": "asc", "new": "desc"}
+# Фильтры-селекты над таблицей: GET-параметр → поле модели.
+QUEUE_FACET_FIELDS = {
+    "student": "student_id",
+    "block": "assignment__topic__block_id",
+    "assignment": "assignment_id",
+}
+# Сортировка по статусу идёт по жизненному циклу работы, а не по алфавиту.
+STATUS_RANK = Case(
+    When(status=Submission.Status.SUBMITTED, then=Value(0)),
+    When(status=Submission.Status.IN_REVIEW, then=Value(1)),
+    When(status=Submission.Status.NEEDS_REVISION, then=Value(2)),
+    When(status=Submission.Status.CHECKED, then=Value(3)),
+    default=Value(4),
+    output_field=IntegerField(),
+)
 
 
 def _visible_snippets(user):
@@ -242,48 +274,105 @@ def console_home(request):
 
 
 # ── Пространство «Проверка» ────────────────────────────────────────────────
+def _queue_sort(request):
+    """Колонка и направление сортировки; ?order= из старых ссылок ещё работает."""
+    sort = request.GET.get("sort", "")
+    direction = request.GET.get("dir", "")
+    if sort not in SORT_CHOICES:
+        sort = DEFAULT_SORT
+        direction = direction or LEGACY_ORDERS.get(request.GET.get("order", ""), "")
+    if direction not in {"asc", "desc"}:
+        direction = "asc"
+    return sort, direction
+
+
+def _queue_filters(request):
+    """Выбранные значения селектов; мусор в GET просто игнорируется."""
+    values = {}
+    for param in QUEUE_FACET_FIELDS:
+        raw = request.GET.get(param, "")
+        values[param] = int(raw) if raw.isdigit() else None
+    return values
+
+
 def _queue_queryset(request):
+    """Очередь по текущему статусу, фильтрам и сортировке.
+
+    Возвращает ещё и `scope` — выборку до фильтров-селектов: из неё строятся
+    списки значений в этих селектах, чтобы они не схлопывались сами в себя.
+    """
     queue = request.GET.get("status", "pending")
-    if queue not in dict(QUEUE_CHOICES):
+    if queue not in QUEUE_FILTERS:
         queue = "pending"
-    order = request.GET.get("order", "fifo")
-    if order not in ORDER_CHOICES:
-        order = "fifo"
-    submissions = (
+    sort, direction = _queue_sort(request)
+    scope = (
         Submission.objects.latest_attempts()
         # Карточки и материалы для занятий не сдаются и не проверяются.
         .exclude(assignment__assignment_type__in=Assignment.NO_SUBMISSION_TYPES)
-        .select_related(
-            "student", "assignment__topic__block", "assignment__topic__chapter", "feedback"
-        )
-        .order_by(ORDER_CHOICES[order][0], "pk")
+        .filter(status__in=QUEUE_FILTERS[queue])
     )
-    if queue in QUEUE_FILTERS:
-        submissions = submissions.filter(status__in=QUEUE_FILTERS[queue])
-    query = request.GET.get("q", "").strip()[:200]
-    if query:
-        submissions = submissions.filter(
-            Q(student__username__icontains=query)
-            | Q(student__first_name__icontains=query)
-            | Q(student__last_name__icontains=query)
-            | Q(assignment__title__icontains=query)
-            | Q(assignment__topic__title__icontains=query)
-            | Q(assignment__topic__block__name__icontains=query)
+    submissions = scope.select_related(
+        "student", "assignment__topic__block", "assignment__topic__chapter", "feedback"
+    )
+    filters = _queue_filters(request)
+    for param, field in QUEUE_FACET_FIELDS.items():
+        if filters[param] is not None:
+            submissions = submissions.filter(**{field: filters[param]})
+    if sort == "status":
+        submissions = submissions.annotate(status_rank=STATUS_RANK)
+    prefix = "-" if direction == "desc" else ""
+    submissions = submissions.order_by(
+        *(f"{prefix}{field}" for field in SORT_CHOICES[sort][1]), "pk"
+    )
+    return submissions, scope, {"queue": queue, "sort": sort, "dir": direction, **filters}
+
+
+def _queue_facets(scope, filters):
+    """Варианты для селектов: то, что есть в текущем статусе, плюс выбранное.
+
+    Выбранное значение остаётся в списке, даже если в этом статусе таких работ
+    нет: иначе фильтр продолжал бы действовать из адреса, но пропал бы из формы.
+    """
+    rows = scope.order_by()
+
+    def options(model, param, ordering):
+        condition = Q(pk__in=rows.values(QUEUE_FACET_FIELDS[param]))
+        if filters[param] is not None:
+            condition |= Q(pk=filters[param])
+        return model.objects.filter(condition).order_by(*ordering)
+
+    return {
+        "students": options(User, "student", ("last_name", "first_name", "username")),
+        "blocks": options(Block, "block", ("order", "name")),
+        "assignments": options(Assignment, "assignment", ("title",)),
+    }
+
+
+def _queue_columns(sort, direction):
+    """Заголовки таблицы со ссылками сортировки и состоянием aria-sort."""
+    columns = []
+    for key, (label, _fields) in SORT_CHOICES.items():
+        active = key == sort
+        ascending = direction == "asc"
+        columns.append(
+            {
+                "key": key,
+                "label": label,
+                "active": active,
+                # Повторный клик по активной колонке переворачивает порядок.
+                "dir": "desc" if active and ascending else "asc",
+                "aria": ("ascending" if ascending else "descending") if active else "none",
+                "icon": ("arrow-up" if ascending else "arrow-down") if active else "sort",
+            }
         )
-    student_id = request.GET.get("student")
-    if student_id and student_id.isdigit():
-        submissions = submissions.filter(student_id=int(student_id))
-    assignment_id = request.GET.get("assignment")
-    if assignment_id and assignment_id.isdigit():
-        submissions = submissions.filter(assignment_id=int(assignment_id))
-    return submissions, queue, order, query
+    return columns
 
 
 @teacher_required
 @require_GET
 def review_queue(request):
-    """Очередь проверки: счётчики, фильтры, сортировка FIFO, поиск."""
-    submissions, queue, order, query = _queue_queryset(request)
+    """Очередь проверки: счётчики по статусам, фильтры и сортировка таблицы."""
+    submissions, scope, state = _queue_queryset(request)
     counts = queue_counts()
     # Только в атрибут запроса: запись в сессию добавила бы три запроса на экран.
     request.lms_queue_counts = counts
@@ -294,10 +383,13 @@ def review_queue(request):
         {
             "submissions": page,
             "page_obj": page,
-            "query": query,
-            "queue": queue,
-            "order": order,
-            "order_choices": ORDER_CHOICES,
+            "queue": state["queue"],
+            "sort": state["sort"],
+            "dir": state["dir"],
+            "filters": state,
+            "has_filters": any(state[param] is not None for param in QUEUE_FACET_FIELDS),
+            "facets": _queue_facets(scope, state),
+            "columns": _queue_columns(state["sort"], state["dir"]),
             "queue_choices": QUEUE_CHOICES,
             "counts": counts,
             "workspace": "review",
@@ -414,7 +506,7 @@ def review_detail(request, pk):
 
 
 def _filtered_queue(request, exclude_pk=None):
-    submissions, _, _, _ = _queue_queryset(request)
+    submissions, _, _ = _queue_queryset(request)
     return list(submissions.values_list("pk", flat=True))
 
 

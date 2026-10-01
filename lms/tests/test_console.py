@@ -160,18 +160,69 @@ class QueueFilterTests(LMSCase):
         self.assertEqual(
             [item.pk for item in response.context["submissions"]], [self.old.pk, self.new.pk]
         )
-        self.assertEqual(response.context["order"], "fifo")
+        self.assertEqual(response.context["sort"], "submitted")
+        self.assertEqual(response.context["dir"], "asc")
 
     def test_newest_first_order(self):
-        response = self.teacher_client.get("/teacher/review/?order=new")
+        response = self.teacher_client.get("/teacher/review/?sort=submitted&dir=desc")
         self.assertEqual(
             [item.pk for item in response.context["submissions"]], [self.new.pk, self.old.pk]
         )
 
-    def test_unknown_order_and_status_fall_back(self):
-        response = self.teacher_client.get("/teacher/review/?order=chaos&status=chaos")
-        self.assertEqual(response.context["order"], "fifo")
+    def test_legacy_order_links_still_work(self):
+        """Старые ссылки и закладки ?order=new не должны менять смысл."""
+        response = self.teacher_client.get("/teacher/review/?order=new")
+        self.assertEqual(
+            [item.pk for item in response.context["submissions"]], [self.new.pk, self.old.pk]
+        )
+        self.assertEqual(response.context["dir"], "desc")
+
+    def test_unknown_order_sort_and_status_fall_back(self):
+        response = self.teacher_client.get(
+            "/teacher/review/?order=chaos&status=chaos&sort=chaos&dir=chaos"
+        )
+        self.assertEqual(response.context["sort"], "submitted")
+        self.assertEqual(response.context["dir"], "asc")
         self.assertEqual(response.context["queue"], "pending")
+
+    def test_sorting_by_every_column(self):
+        self.review(self.old)
+        titles = {
+            "student": ("student__username", lambda item: item.student.username),
+            "assignment": ("assignment__title", lambda item: item.assignment.title),
+            "topic": ("topic", lambda item: item.assignment.topic.title),
+            "status": ("status", lambda item: item.status),
+            "submitted": ("submitted", lambda item: item.submitted_at),
+        }
+        for column, (_field, key) in titles.items():
+            with self.subTest(column=column):
+                ascending = self.teacher_client.get(
+                    f"/teacher/review/?status=checked&sort={column}&dir=asc"
+                )
+                descending = self.teacher_client.get(
+                    f"/teacher/review/?status=checked&sort={column}&dir=desc"
+                )
+                first = [key(item) for item in ascending.context["submissions"]]
+                last = [key(item) for item in descending.context["submissions"]]
+                self.assertEqual(first, list(reversed(last)))
+
+    def test_removed_all_status_falls_back_to_pending(self):
+        """Статус «Все последние попытки» убран: старая ссылка открывает «ждут»."""
+        response = self.teacher_client.get("/teacher/review/?status=all")
+        self.assertEqual(response.context["queue"], "pending")
+        self.assertEqual(
+            [value for value, _label in response.context["queue_choices"]],
+            ["pending", "revision", "checked"],
+        )
+
+    def test_search_box_is_gone_from_the_queue(self):
+        html = self.teacher_client.get("/teacher/review/").content.decode()
+        self.assertNotIn('name="q"', html)
+        self.assertNotIn("Все последние попытки", html)
+        # Вместо поиска — сортируемые заголовки и селекты-фильтры.
+        self.assertIn('class="th-sort', html)
+        self.assertIn('name="student"', html)
+        self.assertIn('name="block"', html)
 
     def test_status_filters(self):
         self.review(self.old)
@@ -181,41 +232,47 @@ class QueueFilterTests(LMSCase):
             "pending": [],
             "checked": [self.old.pk],
             "revision": [self.new.pk],
-            "all": [self.old.pk, self.new.pk],
         }
         for status, expected in cases.items():
             with self.subTest(status=status):
                 response = self.teacher_client.get(f"/teacher/review/?status={status}")
                 self.assertEqual([item.pk for item in response.context["submissions"]], expected)
 
-    def test_search_by_student_assignment_topic_and_block(self):
-        for query, expected in [
-            ("student", 2),
-            ("nobody-here", 0),
-            ("Past tense", 1),
-            ("Second task", 1),
-            ("Grammar", 2),
-            ("English", 2),
-        ]:
-            with self.subTest(query=query):
-                response = self.teacher_client.get(f"/teacher/review/?status=all&q={query}")
-                self.assertEqual(len(response.context["submissions"]), expected)
-
-    def test_filters_by_student_and_assignment(self):
-        response = self.teacher_client.get(f"/teacher/review/?status=all&student={self.student.pk}")
+    def test_filters_by_student_block_and_assignment(self):
+        response = self.teacher_client.get(f"/teacher/review/?student={self.student.pk}")
         self.assertEqual(len(response.context["submissions"]), 2)
-        response = self.teacher_client.get(f"/teacher/review/?status=all&student={self.other.pk}")
+        self.assertTrue(response.context["has_filters"])
+        response = self.teacher_client.get(f"/teacher/review/?student={self.other.pk}")
         self.assertEqual(len(response.context["submissions"]), 0)
-        response = self.teacher_client.get(
-            f"/teacher/review/?status=all&assignment={self.assignment.pk}"
-        )
+        response = self.teacher_client.get(f"/teacher/review/?assignment={self.assignment.pk}")
         self.assertEqual(len(response.context["submissions"]), 1)
-        # мусорные значения игнорируются, а не роняют страницу
-        response = self.teacher_client.get("/teacher/review/?status=all&student=abc&assignment=x")
+        response = self.teacher_client.get(f"/teacher/review/?block={self.block.pk}")
         self.assertEqual(len(response.context["submissions"]), 2)
+        # мусорные значения игнорируются, а не роняют страницу
+        response = self.teacher_client.get("/teacher/review/?student=abc&assignment=x&block=-1")
+        self.assertEqual(len(response.context["submissions"]), 2)
+        self.assertFalse(response.context["has_filters"])
+
+    def test_filter_options_cover_only_current_status(self):
+        facets = self.teacher_client.get("/teacher/review/").context["facets"]
+        self.assertEqual([item.pk for item in facets["students"]], [self.student.pk])
+        self.assertEqual([item.pk for item in facets["blocks"]], [self.block.pk])
+        self.assertEqual(
+            sorted(item.pk for item in facets["assignments"]),
+            sorted([self.assignment.pk, self.second_task.pk]),
+        )
+        # В «проверенных» сдач пока нет — и выбирать там нечего.
+        empty = self.teacher_client.get("/teacher/review/?status=checked").context["facets"]
+        self.assertEqual(list(empty["students"]), [])
+        # Но уже выбранный ученик из списка не пропадает, иначе фильтр
+        # продолжил бы действовать из адреса незаметно для преподавателя.
+        kept = self.teacher_client.get(
+            f"/teacher/review/?status=checked&student={self.student.pk}"
+        ).context["facets"]
+        self.assertEqual([item.pk for item in kept["students"]], [self.student.pk])
 
     def test_counts_are_shared_with_navigation(self):
-        response = self.teacher_client.get("/teacher/review/?status=all")
+        response = self.teacher_client.get("/teacher/review/")
         counts = response.context["counts"]
         self.assertEqual(counts["waiting"], 2)
         self.assertEqual(counts["total"], 2)

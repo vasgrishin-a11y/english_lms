@@ -3345,6 +3345,19 @@
     });
   }
 
+  function tableFilters() {
+    // Фильтры таблицы применяются сразу при выборе значения; кнопка «Показать»
+    // остаётся только как путь без JS, поэтому здесь её прячем.
+    document.querySelectorAll("[data-table-filters]").forEach(function (form) {
+      var apply = form.querySelector("[data-table-filters-apply]");
+      if (apply) apply.hidden = true;
+      form.addEventListener("change", function (event) {
+        var field = event.target;
+        if (field && field.tagName === "SELECT") form.submit();
+      });
+    });
+  }
+
   ready(function () {
     autohideAlerts();
     confirmForms();
@@ -3374,6 +3387,7 @@
     uploadDropzones();
     pasteUploads();
     chapterSelectFilter();
+    tableFilters();
     secretFields();
     descriptionEditors();
     curriculumCollapse();
