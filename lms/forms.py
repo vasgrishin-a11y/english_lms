@@ -1394,9 +1394,7 @@ class AIMaterialForm(forms.Form):
         widget=forms.Textarea(
             attrs={
                 "rows": 3,
-                "placeholder": (
-                    "Опишите задачу, тему, уровень и желаемый результат. При необходимости вставьте сюда текст материала:\n\n# Класс A2 — Travel\n## Глава — At the Airport\n### Тема — Check-in\n#### Задание — Слова"
-                ),
+                "placeholder": "Опишите задачу, тему, уровень и желаемый результат",
             }
         ),
         help_text=(
@@ -1404,20 +1402,20 @@ class AIMaterialForm(forms.Form):
             "Профиль конкретного ученика заранее не передаётся — опишите общий уровень, тему, навык и цель."
         ),
     )
-    upload = forms.FileField(
-        label="Файл материала",
+    upload = MultipleFileField(
+        label="Файлы материала",
         required=False,
-        widget=forms.ClearableFileInput(
+        widget=MultipleFileInput(
             attrs={
                 "accept": ",".join(sorted(ai.UPLOAD_EXTENSIONS)),
                 "data-ai-upload": "1",
                 "data-dropzone": "1",
                 "data-max-mb": str(ai.max_upload_bytes() // (1024 * 1024)),
-                "data-dropzone-hint": "Перетащите фото или документ сюда",
+                "data-dropzone-hint": "Перетащите файлы сюда или вставьте их по одному Ctrl+V",
             }
         ),
         help_text=(
-            "Фото страницы, Word, Excel, PDF, видео или текстовый файл — до {mb} МБ.".format(
+            "Можно добавлять файлы по одному или сразу несколько. Каждый файл — до {mb} МБ.".format(
                 mb=ai.max_upload_bytes() // (1024 * 1024)
             )
         ),
@@ -1512,23 +1510,24 @@ class AIMaterialForm(forms.Form):
         )
 
     def clean_upload(self):
-        upload = self.cleaned_data.get("upload")
-        if not upload:
-            return None
-        extension = ai.extension_of(upload.name)
-        if extension not in ai.UPLOAD_EXTENSIONS:
-            raise forms.ValidationError(
-                "Такой формат не поддерживается: загрузите фото, Word, Excel, PDF, видео "
-                "или текстовый файл."
-            )
+        uploads = self.cleaned_data.get("upload") or []
+        if not isinstance(uploads, (list, tuple)):
+            uploads = [uploads]
         limit = ai.max_upload_bytes()
-        if upload.size > limit:
-            raise forms.ValidationError(
-                "Файл больше {mb} МБ — разделите материал на части.".format(
-                    mb=limit // (1024 * 1024)
+        for upload in uploads:
+            extension = ai.extension_of(upload.name)
+            if extension not in ai.UPLOAD_EXTENSIONS:
+                raise forms.ValidationError(
+                    f"Формат файла «{upload.name}» не поддерживается: загрузите фото, Word, "
+                    "Excel, PDF, видео или текстовый файл."
                 )
-            )
-        return upload
+            if upload.size > limit:
+                raise forms.ValidationError(
+                    "Файл «{name}» больше {mb} МБ — разделите материал на части.".format(
+                        name=upload.name, mb=limit // (1024 * 1024)
+                    )
+                )
+        return uploads
 
     def clean(self):
         cleaned = super().clean()

@@ -1930,6 +1930,12 @@
       var errorEl = zone.querySelector("[data-dropzone-error]");
       var pick = zone.querySelector("[data-dropzone-pick]");
       var clearBtn = zone.querySelector("[data-dropzone-clear]");
+      var filesBeforePicker = null;
+
+      function rememberFilesBeforePicker() {
+        if (!isMultiple) return;
+        filesBeforePicker = input.files ? Array.prototype.slice.call(input.files) : [];
+      }
 
       function showError(message) {
         if (!errorEl) return;
@@ -2047,6 +2053,9 @@
           input.click();
         });
       }
+      // Браузер заменяет FileList при каждом открытии диалога. Для multiple-полей
+      // запоминаем прежние файлы и после выбора объединяем их с новыми.
+      input.addEventListener("click", rememberFilesBeforePicker);
       zone.addEventListener("click", function (event) {
         if (event.target.closest("button, input, label")) return;
         input.click();
@@ -2106,6 +2115,22 @@
       // с той же проверкой размера и формата, что и выбор файла руками.
       input.lmsAcceptFiles = acceptFiles;
       input.addEventListener("change", function () {
+        if (isMultiple && filesBeforePicker !== null && input.files) {
+          try {
+            var selectedNow = Array.prototype.slice.call(input.files);
+            var merged = new DataTransfer();
+            var seen = {};
+            filesBeforePicker.concat(selectedNow).forEach(function (file) {
+              var key = [file.name, file.size, file.lastModified, file.type].join("|");
+              if (!seen[key]) {
+                merged.items.add(file);
+                seen[key] = true;
+              }
+            });
+            input.files = merged.files;
+          } catch (error) {}
+          filesBeforePicker = null;
+        }
         if (input.files) {
           for (var i = 0; i < input.files.length; i++) {
             if (!check(input.files[i])) {
