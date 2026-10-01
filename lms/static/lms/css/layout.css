@@ -1107,9 +1107,10 @@ html[data-nav="collapsed"] .app-nav-link:has(.app-nav-count)::after {
 }
 
 /* ── Сцена «Енот на опушке» в шапке ─────────────────────────
-   Цикл 52 c: бег к книгам (8 c) → чтение (5 c) → возврат (8 c) →
-   сон с ZZZ (31 c, из них ~30 c неподвижного сна). Пастель бренда:
-   шалфейная трава, песочная тропинка, тёплый домик. */
+   Цикл 56 c: сон → бег к книгам → озеро → чтение → возврат → сон с ZZZ.
+   Пастель бренда: шалфейная трава, песочная тропинка, тёплый домик.
+   raccoon_scene.js ставит корню data-season по текущему месяцу
+   (или ?season=…): градиент неба ниже подстраивается под время года. */
 .raccoon-scene {
     position: relative;
     flex: 1 1 auto;
@@ -1121,6 +1122,22 @@ html[data-nav="collapsed"] .app-nav-link:has(.app-nav-count)::after {
     border-radius: var(--r-lg);
     background: linear-gradient(180deg, #dcefe9 0%, #eef3e6 55%, #e9e2cf 100%);
     border: 1px solid var(--border-subtle);
+}
+
+.raccoon-scene[data-season="summer"] {
+    background: linear-gradient(180deg, #dcefe9 0%, #eef3e6 55%, #e9e2cf 100%);
+}
+
+.raccoon-scene[data-season="spring"] {
+    background: linear-gradient(180deg, #d9efe2 0%, #edf3dd 55%, #e9e2cd 100%);
+}
+
+.raccoon-scene[data-season="autumn"] {
+    background: linear-gradient(180deg, #eadfc7 0%, #f0e6c8 55%, #e6d7b4 100%);
+}
+
+.raccoon-scene[data-season="winter"] {
+    background: linear-gradient(180deg, #d7e3ee 0%, #e9eff6 55%, #dbe7f0 100%);
 }
 
 .raccoon-scene-canvas {

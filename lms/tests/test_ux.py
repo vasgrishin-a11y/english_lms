@@ -328,6 +328,23 @@ class RaccoonSceneTests(LMSCase):
         self.assertIsNone(finders.find("lms/img/fox-run.svg"))
         self.assertIsNone(finders.find("lms/img/raccoon-run.svg"))
 
+    def test_scene_supports_seasonal_variants(self):
+        """Сцена умеет все четыре сезона: конфиг в JS и градиенты неба в CSS."""
+        from pathlib import Path
+
+        from django.contrib.staticfiles import finders
+
+        js = Path(finders.find("lms/js/raccoon_scene.js")).read_text(encoding="utf-8")
+        css = Path(finders.find("lms/css/layout.css")).read_text(encoding="utf-8")
+        self.assertIn("detectSeason", js)
+        self.assertIn("getMonth", js)
+        for season in ("spring", "summer", "autumn", "winter"):
+            self.assertIn(season, js)
+            self.assertIn(f'data-season="{season}"', css)
+        # Зимой озеро замерзает: отдельная ветка «лёд/коньки» и снегопад.
+        self.assertIn("frozen", js)
+        self.assertIn("drawSnowfall", js)
+
 
 class StudentAssignmentPreviewTests(LMSCase):
     """Предпросмотр задания в карточке ученика: разметка для htmx и сам фрагмент."""
