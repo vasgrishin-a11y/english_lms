@@ -268,8 +268,8 @@ class AssistantFormTests(LMSCase):
         self.assertTrue(response.context["form"].errors["upload"])
 
     def test_multiple_files_are_kept_and_processed(self):
-        first = SimpleUploadedFile("first.txt", b"# Class A2\n## First topic\nFirst task")
-        second = SimpleUploadedFile("second.txt", b"## Second topic\nSecond task")
+        first = SimpleUploadedFile("first.txt", MARKDOWN.encode("utf-8"))
+        second = SimpleUploadedFile("second.txt", b"Additional vocabulary: arrival, departure")
         response = self.post_form(upload=[first, second])
         self.assertFalse(response.context["form"].errors)
         self.assertEqual(len(response.context["form"].cleaned_data["upload"]), 2)
