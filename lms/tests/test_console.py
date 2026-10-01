@@ -8,7 +8,8 @@
 import io
 import wave
 import zipfile
-from datetime import timedelta
+from datetime import date, timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -32,6 +33,7 @@ from lms.models import (
     Skill,
     Submission,
     Topic,
+    UserEventReceipt,
 )
 from lms.services import (
     finish_round,
@@ -95,6 +97,36 @@ class ConsoleAccessTests(LMSCase):
         self.assertContains(response, "Классы")
         self.assertContains(response, "Проверка")
         self.assertContains(response, "btn-success-soft")
+
+    @patch("lms.views_teacher.timezone.localdate", return_value=date(2026, 10, 5))
+    def test_teacher_day_card_is_shown_once_per_teacher(self, _localdate):
+        first = self.teacher_client.get("/teacher/")
+        self.assertEqual(first.status_code, 200)
+        self.assertTrue(first.context["is_teacher_day"])
+        self.assertTrue(first.context["show_teacher_day_card"])
+        self.assertContains(first, "data-teacher-day-card")
+        self.assertContains(first, "С Днём учителя!")
+        self.assertEqual(
+            UserEventReceipt.objects.filter(
+                user=self.teacher,
+                event_key="teacher-day-2026",
+            ).count(),
+            1,
+        )
+
+        second = self.teacher_client.get("/teacher/")
+        self.assertFalse(second.context["show_teacher_day_card"])
+        self.assertNotContains(second, "data-teacher-day-card")
+        self.assertContains(second, "teacher-day-badge")
+        self.assertEqual(UserEventReceipt.objects.filter(user=self.teacher).count(), 1)
+
+    @patch("lms.views_teacher.timezone.localdate", return_value=date(2026, 10, 4))
+    def test_teacher_day_card_is_hidden_outside_october_fifth(self, _localdate):
+        response = self.teacher_client.get("/teacher/")
+        self.assertFalse(response.context["is_teacher_day"])
+        self.assertFalse(response.context["show_teacher_day_card"])
+        self.assertNotContains(response, "teacher-day-badge")
+        self.assertFalse(UserEventReceipt.objects.filter(user=self.teacher).exists())
 
 
 class ArchiveAndStudentViewTests(LMSCase):
