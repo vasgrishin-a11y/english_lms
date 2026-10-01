@@ -7,13 +7,14 @@
 import logging
 
 from django.contrib import messages
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods, require_POST
 
 from . import ai
 from .decorators import teacher_required
 from .forms import AIMaterialForm
-from .models import Assignment, Topic
+from .models import Assignment, Submission, Topic
 
 logger = logging.getLogger("lms.ai")
 
@@ -265,3 +266,55 @@ def assignment_ai_apply(request, pk):
         parts.append(f"Карточек теперь: {summary['cards']}.")
     messages.success(request, " ".join(parts))
     return redirect("teacher_assignment_form", pk=pk)
+
+
+def _is_latest_attempt(submission):
+    return not Submission.objects.filter(
+        student_id=submission.student_id,
+        assignment_id=submission.assignment_id,
+        version__gt=submission.version,
+    ).exists()
+
+
+@teacher_required
+@require_POST
+def review_ai_grade_text(request, pk):
+    """ИИ проверяет свободный текстовый ответ ученика: балл, комментарий, подсказки в тексте.
+
+    Результат не сохраняется сам по себе — он приходит в интерфейс проверки, где
+    преподаватель может его поправить и сохранить обычной кнопкой «Сохранить проверку».
+    """
+    submission = get_object_or_404(
+        Submission.objects.select_related("assignment__topic__block", "assignment__topic__chapter"),
+        pk=pk,
+    )
+    if not _is_latest_attempt(submission):
+        return JsonResponse(
+            {"ok": False, "error": "Это не последняя попытка — откройте актуальную."}, status=409
+        )
+    try:
+        result = ai.grade_text_answer(submission)
+    except ai.AiError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+    logger.info("ai_grade_text submission=%s teacher=%s", submission.pk, request.user.pk)
+    return JsonResponse({"ok": True, **result})
+
+
+@teacher_required
+@require_POST
+def review_ai_grade_audio(request, pk):
+    """ИИ прослушивает и проверяет аудиоответ ученика, если модель это умеет."""
+    submission = get_object_or_404(
+        Submission.objects.select_related("assignment__topic__block", "assignment__topic__chapter"),
+        pk=pk,
+    )
+    if not _is_latest_attempt(submission):
+        return JsonResponse(
+            {"ok": False, "error": "Это не последняя попытка — откройте актуальную."}, status=409
+        )
+    try:
+        result = ai.grade_audio_answer(submission)
+    except ai.AiError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+    logger.info("ai_grade_audio submission=%s teacher=%s", submission.pk, request.user.pk)
+    return JsonResponse({"ok": True, **result})

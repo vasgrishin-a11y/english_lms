@@ -10,6 +10,7 @@ from lms.models import (
     Assignment,
     AssignmentAttachment,
     Feedback,
+    FeedbackAudioComment,
     QuestionResponse,
     Submission,
 )
@@ -42,6 +43,9 @@ class Command(BaseCommand):
         )
         referenced.update(
             Feedback.objects.exclude(audio_comment="").values_list("audio_comment", flat=True)
+        )
+        referenced.update(
+            FeedbackAudioComment.objects.exclude(audio="").values_list("audio", flat=True)
         )
         referenced.update(
             QuestionResponse.objects.exclude(file_answer="").values_list("file_answer", flat=True)

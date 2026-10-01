@@ -534,6 +534,588 @@
     Array.prototype.forEach.call(scope.querySelectorAll("[data-recorder]"), setupRecorder);
   }
 
+  /* ── Несколько голосовых комментариев подряд ──────────────────────────
+   * В отличие от setupRecorder (один файл на поле), каждая запись здесь
+   * становится отдельным <input type=file name=audio_comments> в форме —
+   * их можно накопить сколько угодно, и все они уйдут одним сохранением.
+   */
+  function setupMultiRecorder(panel) {
+    if (panel.dataset.recorderReady === "1") return;
+    panel.dataset.recorderReady = "1";
+    var toggle = panel.querySelector("[data-multi-recorder-toggle]");
+    var stop = panel.querySelector("[data-multi-recorder-stop]");
+    var status = panel.querySelector("[data-multi-recorder-status]");
+    var clock = panel.querySelector("[data-multi-recorder-clock]");
+    var meter = panel.querySelector("[data-multi-recorder-meter]");
+    var dot = panel.querySelector("[data-multi-recorder-dot]");
+    var errorBox = panel.querySelector("[data-multi-recorder-error]");
+    var list = panel.querySelector("[data-audio-comment-list]");
+    var limit = 180;
+    if (!toggle || !list) return;
+
+    var recorder = null;
+    var chunks = [];
+    var stream = null;
+    var timer = null;
+    var startedAt = 0;
+
+    function say(text) {
+      if (status) status.textContent = text;
+    }
+
+    function showError(message) {
+      if (errorBox) errorBox.textContent = message || "";
+    }
+
+    function tick() {
+      var elapsed = (Date.now() - startedAt) / 1000;
+      if (clock) clock.textContent = formatClock(elapsed) + " / " + formatClock(limit);
+      var left = limit - elapsed;
+      if (meter) meter.style.width = Math.min(100, (100 * elapsed) / limit) + "%";
+      panel.classList.toggle("is-ending", left <= 10);
+      if (left <= 0) {
+        say("Время вышло — запись остановлена автоматически.");
+        finish();
+      }
+    }
+
+    function release() {
+      if (timer) window.clearInterval(timer);
+      timer = null;
+      if (stream) {
+        stream.getTracks().forEach(function (track) {
+          track.stop();
+        });
+      }
+      stream = null;
+      panel.classList.remove("is-recording", "is-ending");
+      toggle.classList.remove("hidden");
+      if (stop) stop.classList.add("hidden");
+      if (dot) dot.classList.add("hidden");
+      if (clock) clock.textContent = "0:00 / " + formatClock(limit);
+      if (meter) meter.style.width = "0%";
+    }
+
+    function finish() {
+      if (recorder && recorder.state !== "inactive") {
+        recorder.stop();
+      } else {
+        release();
+      }
+    }
+
+    function addToList(file) {
+      var url = URL.createObjectURL(file);
+      var item = document.createElement("li");
+      item.className = "audio-comment-item";
+      var audio = document.createElement("audio");
+      audio.controls = true;
+      audio.preload = "metadata";
+      audio.src = url;
+      var remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "btn btn-ghost btn-sm";
+      remove.innerHTML = "Удалить";
+      var input = document.createElement("input");
+      input.type = "file";
+      input.name = "audio_comments";
+      input.hidden = true;
+      try {
+        var transfer = new DataTransfer();
+        transfer.items.add(file);
+        input.files = transfer.files;
+      } catch (error) {
+        // Очень старый браузер: без DataTransfer запись не прикрепится — просим файл.
+        showError("Браузер не поддерживает прикрепление записи. Загрузите аудиофайл вручную.");
+      }
+      remove.addEventListener("click", function () {
+        URL.revokeObjectURL(url);
+        item.remove();
+      });
+      item.appendChild(audio);
+      item.appendChild(remove);
+      item.appendChild(input);
+      list.appendChild(item);
+    }
+
+    toggle.addEventListener("click", function () {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+        showError(
+          window.isSecureContext === false
+            ? "Микрофон доступен только по защищённому соединению (HTTPS). Загрузите аудиофайл."
+            : "Браузер не поддерживает запись звука. Загрузите готовый аудиофайл."
+        );
+        return;
+      }
+      showError("");
+      say("Запрашиваем доступ к микрофону…");
+      navigator.mediaDevices
+        .getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } })
+        .then(function (mediaStream) {
+          stream = mediaStream;
+          chunks = [];
+          var mime = "";
+          ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"].some(function (type) {
+            if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(type)) {
+              mime = type;
+              return true;
+            }
+            return false;
+          });
+          recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+          recorder.ondataavailable = function (event) {
+            if (event.data && event.data.size) chunks.push(event.data);
+          };
+          recorder.onstop = function () {
+            var raw = new Blob(chunks, { type: recorder.mimeType || mime || "audio/webm" });
+            release();
+            say("Обрабатываем запись…");
+            encodeWav(raw, function (blob) {
+              var extension = blob.type === "audio/wav" ? ".wav" : ".webm";
+              var name = "kommentar-" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "") + extension;
+              var file = new File([blob], name, { type: blob.type || "audio/wav" });
+              addToList(file);
+              say("Комментарий добавлен в список. Можно записать ещё один или сохранить проверку.");
+            });
+          };
+          recorder.start(250);
+          startedAt = Date.now();
+          timer = window.setInterval(tick, 200);
+          panel.classList.add("is-recording");
+          toggle.classList.add("hidden");
+          if (stop) {
+            stop.classList.remove("hidden");
+            stop.focus();
+          }
+          if (dot) dot.classList.remove("hidden");
+          say("Идёт запись. Лимит — " + formatClock(limit) + ".");
+        })
+        .catch(function (error) {
+          release();
+          var denied = error && (error.name === "NotAllowedError" || error.name === "SecurityError");
+          showError(
+            denied
+              ? "Нет доступа к микрофону. Разрешите его в настройках браузера или загрузите файл."
+              : "Микрофон не найден или занят другим приложением."
+          );
+          say("Запись недоступна.");
+        });
+    });
+    if (stop) stop.addEventListener("click", finish);
+
+    var form = panel.closest("form");
+    if (form && !form.dataset.multiRecorderSubmit) {
+      form.dataset.multiRecorderSubmit = "1";
+      form.addEventListener("submit", function (event) {
+        if (panel.classList.contains("is-recording")) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          showError("Сначала остановите запись.");
+        }
+      });
+    }
+
+    Array.prototype.forEach.call(
+      panel.querySelectorAll("[data-remove-existing-audio]"),
+      function (button) {
+        button.addEventListener("click", function () {
+          var id = button.getAttribute("data-remove-existing-audio");
+          var removeField = form ? form.querySelector("#id_remove_audio_comment_ids") : null;
+          if (removeField) {
+            var ids = removeField.value ? removeField.value.split(",") : [];
+            if (ids.indexOf(id) === -1) ids.push(id);
+            removeField.value = ids.join(",");
+          }
+          var item = button.closest("[data-existing-audio-id]");
+          if (item) item.remove();
+        });
+      }
+    );
+  }
+
+  function multiAudioRecorder(root) {
+    var scope = root && root.querySelectorAll ? root : document;
+    Array.prototype.forEach.call(scope.querySelectorAll("[data-multi-recorder]"), setupMultiRecorder);
+  }
+
+  /* ── Счётчик слов для текстовых полей ────────────────────────────────── */
+  function pluralRu(count, forms) {
+    var n = Math.abs(count) % 100;
+    var n1 = n % 10;
+    if (n > 10 && n < 20) return forms[2];
+    if (n1 > 1 && n1 < 5) return forms[1];
+    if (n1 === 1) return forms[0];
+    return forms[2];
+  }
+
+  function wordCounters(root) {
+    var scope = root && root.querySelectorAll ? root : document;
+    Array.prototype.forEach.call(scope.querySelectorAll("[data-word-counter]"), function (label) {
+      var targetId = label.getAttribute("data-for");
+      var field = targetId && document.getElementById(targetId);
+      if (!field || label.dataset.counterReady === "1") return;
+      label.dataset.counterReady = "1";
+      function update() {
+        var text = field.value || "";
+        var words = (text.match(/\S+/g) || []).length;
+        label.textContent =
+          words + " " + pluralRu(words, ["слово", "слова", "слов"]) + " · " + text.length + " симв.";
+      }
+      field.addEventListener("input", update);
+      update();
+    });
+  }
+
+  /* ── Подсказки при наведении на выделенный (прокомментированный) текст ── */
+  function highlightTooltips() {
+    if (document.body.dataset.highlightTooltipsReady === "1") return;
+    document.body.dataset.highlightTooltipsReady = "1";
+    var tooltip = null;
+    function ensure() {
+      if (!tooltip) {
+        tooltip = document.createElement("div");
+        tooltip.className = "answer-highlight-tooltip hidden";
+        document.body.appendChild(tooltip);
+      }
+      return tooltip;
+    }
+    function show(target) {
+      var comment = target.getAttribute("data-comment");
+      if (!comment) return;
+      var box = ensure();
+      box.textContent = comment;
+      box.classList.remove("hidden");
+      var rect = target.getBoundingClientRect();
+      var top = window.scrollY + rect.bottom + 6;
+      var left = window.scrollX + rect.left;
+      box.style.top = top + "px";
+      box.style.left = left + "px";
+      window.requestAnimationFrame(function () {
+        var overflowRight = left + box.offsetWidth - (window.scrollX + document.documentElement.clientWidth);
+        if (overflowRight > 0) box.style.left = Math.max(4, left - overflowRight - 8) + "px";
+      });
+    }
+    function hide() {
+      if (tooltip) tooltip.classList.add("hidden");
+    }
+    document.addEventListener("mouseover", function (event) {
+      var mark = event.target.closest && event.target.closest(".answer-highlight");
+      if (mark) show(mark);
+    });
+    document.addEventListener("mouseout", function (event) {
+      var mark = event.target.closest && event.target.closest(".answer-highlight");
+      if (mark) hide();
+    });
+    document.addEventListener("focusin", function (event) {
+      var mark = event.target.closest && event.target.closest(".answer-highlight");
+      if (mark) show(mark);
+    });
+    document.addEventListener("focusout", function (event) {
+      var mark = event.target.closest && event.target.closest(".answer-highlight");
+      if (mark) hide();
+    });
+  }
+
+  /* ── Выделение фрагментов ответа с комментарием (как рецензия в Word) ──
+   * Работает только в проверке учителя, пока попытка последняя: можно
+   * выделить фрагмент мышью, оставить к нему комментарий, отредактировать
+   * или удалить его. Результат кладётся в скрытое поле highlights_json и
+   * дублируется строкой в общий комментарий преподавателя.
+   */
+  function escapeHtmlText(text) {
+    return String(text).replace(/[&<>"']/g, function (ch) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#x27;" }[ch];
+    });
+  }
+
+  function renderHighlightedHtml(text, highlights) {
+    var length = text.length;
+    var sorted = highlights
+      .slice()
+      .sort(function (a, b) {
+        return a.start - b.start || a.end - b.end;
+      });
+    var ranges = [];
+    var cursorCheck = -1;
+    sorted.forEach(function (item) {
+      var start = Math.max(0, Math.min(item.start, length));
+      var end = Math.max(0, Math.min(item.end, length));
+      if (end <= start || start < cursorCheck) return;
+      ranges.push([start, end, item]);
+      cursorCheck = end;
+    });
+    if (!ranges.length) return escapeHtmlText(text);
+    var parts = [];
+    var cursor = 0;
+    ranges.forEach(function (range) {
+      var start = range[0];
+      var end = range[1];
+      var item = range[2];
+      if (start > cursor) parts.push(escapeHtmlText(text.slice(cursor, start)));
+      var source = item.source === "ai" ? "ai" : "teacher";
+      parts.push(
+        '<mark class="answer-highlight answer-highlight--' +
+          source +
+          '" data-highlight-id="' +
+          escapeHtmlText(item.id || "") +
+          '" data-comment="' +
+          escapeHtmlText(item.comment || "") +
+          '" tabindex="0" role="note" aria-label="Комментарий преподавателя">' +
+          escapeHtmlText(text.slice(start, end)) +
+          "</mark>"
+      );
+      cursor = end;
+    });
+    if (cursor < length) parts.push(escapeHtmlText(text.slice(cursor)));
+    return parts.join("");
+  }
+
+  function reviewAnnotations() {
+    var container = document.querySelector("[data-answer-text]");
+    if (!container || container.dataset.annotationsReady === "1") return;
+    container.dataset.annotationsReady = "1";
+
+    var text = readJsonScript("answer-text-source") || "";
+    var initial = readJsonScript("answer-highlights-source") || [];
+    var editable = container.getAttribute("data-editable") === "1";
+    var nextId = 1;
+    var highlights = initial.map(function (item) {
+      return {
+        id: "h" + nextId++,
+        start: item.start,
+        end: item.end,
+        comment: item.comment,
+        source: item.source || "teacher",
+      };
+    });
+
+    var hiddenField = document.getElementById("id_highlights_json");
+    var commentField = document.getElementById("id_comment");
+    var gradeField = document.getElementById("id_grade");
+
+    function render() {
+      container.innerHTML = renderHighlightedHtml(text, highlights);
+    }
+
+    function persist() {
+      if (!hiddenField) return;
+      hiddenField.value = JSON.stringify(
+        highlights.map(function (h) {
+          return { start: h.start, end: h.end, comment: h.comment, source: h.source };
+        })
+      );
+    }
+
+    function appendToComment(quote, comment) {
+      if (!commentField) return;
+      var clipped = quote.length > 160 ? quote.slice(0, 160) + "…" : quote;
+      var line = "«" + clipped + "» — " + comment;
+      commentField.value = commentField.value ? commentField.value + "\n" + line : line;
+      commentField.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+
+    function overlaps(start, end) {
+      return highlights.some(function (h) {
+        return start < h.end && end > h.start;
+      });
+    }
+
+    function textOffset(node, offset) {
+      var range = document.createRange();
+      range.selectNodeContents(container);
+      range.setEnd(node, offset);
+      return range.toString().length;
+    }
+
+    function closePopover() {
+      var existing = document.querySelector(".highlight-popover");
+      if (existing) existing.remove();
+    }
+
+    function openPopover(rect, initialValue, onSave, onDelete) {
+      closePopover();
+      var box = document.createElement("div");
+      box.className = "highlight-popover";
+      box.style.top = window.scrollY + rect.bottom + 8 + "px";
+      box.style.left = window.scrollX + rect.left + "px";
+      var textarea = document.createElement("textarea");
+      textarea.rows = 2;
+      textarea.placeholder = "Комментарий к выделенному тексту…";
+      textarea.value = initialValue || "";
+      var actions = document.createElement("div");
+      actions.className = "highlight-popover-actions";
+      var save = document.createElement("button");
+      save.type = "button";
+      save.className = "btn btn-primary btn-sm";
+      save.textContent = "Сохранить";
+      var cancel = document.createElement("button");
+      cancel.type = "button";
+      cancel.className = "btn btn-ghost btn-sm";
+      cancel.textContent = "Отмена";
+      box.appendChild(textarea);
+      actions.appendChild(save);
+      if (onDelete) {
+        var del = document.createElement("button");
+        del.type = "button";
+        del.className = "btn btn-ghost btn-sm";
+        del.textContent = "Удалить";
+        del.addEventListener("click", function () {
+          onDelete();
+          closePopover();
+        });
+        actions.appendChild(del);
+      }
+      actions.appendChild(cancel);
+      box.appendChild(actions);
+      document.body.appendChild(box);
+      textarea.focus();
+      save.addEventListener("click", function () {
+        var value = textarea.value.trim();
+        if (!value) {
+          textarea.focus();
+          return;
+        }
+        onSave(value);
+        closePopover();
+      });
+      cancel.addEventListener("click", closePopover);
+      window.setTimeout(function () {
+        document.addEventListener("mousedown", onOutside);
+      }, 0);
+      function onOutside(event) {
+        if (box.contains(event.target)) return;
+        document.removeEventListener("mousedown", onOutside);
+        closePopover();
+      }
+    }
+
+    if (editable) {
+      container.addEventListener("mouseup", function () {
+        var selection = window.getSelection();
+        if (!selection || selection.isCollapsed || !selection.rangeCount) return;
+        var range = selection.getRangeAt(0);
+        if (!container.contains(range.startContainer) || !container.contains(range.endContainer)) return;
+        var start = textOffset(range.startContainer, range.startOffset);
+        var end = textOffset(range.endContainer, range.endOffset);
+        if (end < start) {
+          var swap = start;
+          start = end;
+          end = swap;
+        }
+        if (end <= start) return;
+        if (overlaps(start, end)) {
+          selection.removeAllRanges();
+          window.alert("Этот фрагмент уже пересекается с существующим комментарием. Сначала удалите старый.");
+          return;
+        }
+        var rect = range.getBoundingClientRect();
+        var quote = text.slice(start, end);
+        openPopover(rect, "", function (comment) {
+          highlights.push({ id: "h" + nextId++, start: start, end: end, comment: comment, source: "teacher" });
+          render();
+          persist();
+          appendToComment(quote, comment);
+          selection.removeAllRanges();
+        });
+      });
+
+      container.addEventListener("click", function (event) {
+        var mark = event.target.closest && event.target.closest(".answer-highlight");
+        if (!mark) return;
+        var id = mark.getAttribute("data-highlight-id");
+        var item = highlights.filter(function (h) {
+          return String(h.id) === String(id);
+        })[0];
+        if (!item) return;
+        var rect = mark.getBoundingClientRect();
+        openPopover(
+          rect,
+          item.comment,
+          function (comment) {
+            item.comment = comment;
+            render();
+            persist();
+          },
+          function () {
+            highlights = highlights.filter(function (h) {
+              return h !== item;
+            });
+            render();
+            persist();
+          }
+        );
+      });
+
+      render();
+    }
+    persist();
+
+    function fillFromAi(data, errorBox, highlightSource) {
+      if (gradeField && data.grade !== null && data.grade !== undefined && data.grade !== "") {
+        gradeField.value = data.grade;
+        gradeField.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      if (commentField && data.comment) {
+        var block = data.comment + (data.criteria_note ? "\n\n(" + data.criteria_note + ")" : "");
+        commentField.value = commentField.value ? commentField.value + "\n\n" + block : block;
+        commentField.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      if (highlightSource && Array.isArray(data.highlights)) {
+        data.highlights.forEach(function (item) {
+          if (typeof item.start !== "number" || typeof item.end !== "number") return;
+          if (overlaps(item.start, item.end)) return;
+          highlights.push({
+            id: "h" + nextId++,
+            start: item.start,
+            end: item.end,
+            comment: item.comment || "",
+            source: "ai",
+          });
+        });
+        render();
+        persist();
+      }
+    }
+
+    function wireAiButton(button, errorSelector, withHighlights) {
+      if (!button) return;
+      var errorBox = document.querySelector(errorSelector);
+      button.addEventListener("click", function () {
+        if (errorBox) errorBox.textContent = "";
+        var original = button.innerHTML;
+        button.disabled = true;
+        button.textContent = "Проверяем…";
+        fetch(button.getAttribute("data-url"), {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "X-CSRFToken": csrfToken() },
+        })
+          .then(function (response) {
+            return response.json().then(function (data) {
+              return { data: data, ok: response.ok };
+            });
+          })
+          .then(function (result) {
+            if (!result.ok || !result.data.ok) {
+              if (errorBox) errorBox.textContent = (result.data && result.data.error) || "Не удалось проверить ответ.";
+              return;
+            }
+            fillFromAi(result.data, errorBox, withHighlights);
+          })
+          .catch(function () {
+            if (errorBox) errorBox.textContent = "Не удалось связаться с сервером.";
+          })
+          .finally(function () {
+            button.disabled = false;
+            button.innerHTML = original;
+          });
+      });
+    }
+
+    wireAiButton(document.querySelector("[data-ai-grade-text]"), "[data-ai-grade-error]", true);
+    wireAiButton(document.querySelector("[data-ai-grade-audio]"), "[data-ai-grade-audio-error]", false);
+  }
+
   /* ── Пошаговая проверка пунктов ────────────────────────────
    * После «Принять» htmx заменяет пункт ответом сервера. Здесь — фокус на
    * результате (важно для клавиатуры и экранного диктора), запрет двойной
@@ -627,6 +1209,21 @@
     var snippetInput = form.querySelector("#id_snippet_used");
     var maxPoints = parseInt(page.getAttribute("data-max-points"), 10) || 0;
     var hotkeys = page.getAttribute("data-hotkeys") !== "0";
+
+    // Балл необязателен: если поле пустое, просто предупреждаем перед отправкой,
+    // но не блокируем сохранение — учитель сам решает, отправлять ли без оценки.
+    form.addEventListener("submit", function (event) {
+      if (grade && !String(grade.value || "").trim()) {
+        var proceed = window.confirm(
+          "Вы не выставили балл. Сохранить проверку и отправить её ученику без оценки?"
+        );
+        if (!proceed) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          grade.focus();
+        }
+      }
+    });
 
     Array.prototype.forEach.call(
       page.querySelectorAll("[data-grade-preset]"),
@@ -2470,6 +3067,10 @@
     draftAutosave();
     flashcards();
     audioRecorder();
+    multiAudioRecorder();
+    wordCounters();
+    highlightTooltips();
+    reviewAnnotations();
     quizItems();
     questionKindForms();
     document.body.addEventListener("htmx:afterSwap", function (event) {

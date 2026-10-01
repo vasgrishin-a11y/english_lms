@@ -89,9 +89,37 @@
             {% if quiz %}
                 <p class="small muted mb-0">Ответы по пунктам — ниже, в разделе «Проверка по пунктам».</p>
             {% elif submission.text_answer %}
-                <div class="answer-body" id="answer-text">{{ submission.text_answer }}</div>
+                <div class="answer-toolbar">
+                    <p class="tiny muted mb-0 tnum">
+                        {% icon "hash" "icon icon-sm" %}
+                        {{ submission.text_answer|word_count }} {{ submission.text_answer|word_count|pluralize_ru:"слово,слова,слов" }}
+                        · {{ submission.text_answer|char_count }} симв.
+                    </p>
+                    {% if is_latest %}
+                        <button type="button" class="btn btn-secondary btn-sm" data-ai-grade-text
+                                data-url="{% url 'teacher_review_ai_grade_text' submission.pk %}">
+                            {% icon "sparkles" %}Проверить с ИИ
+                        </button>
+                    {% endif %}
+                </div>
+                {% if is_latest %}
+                    <p class="tiny muted" data-highlight-hint>Выделите мышью часть ответа, чтобы оставить комментарий к фрагменту — как рецензия в Word.</p>
+                {% endif %}
+                <div class="answer-body" id="answer-text" data-answer-text{% if is_latest %} data-editable="1"{% endif %}>{{ submission|highlighted_answer }}</div>
+                {{ submission.text_answer|json_script:"answer-text-source" }}
+                {{ submission|highlights_payload|json_script:"answer-highlights-source" }}
+                <p class="tiny recorder-error mb-0" data-ai-grade-error role="alert"></p>
             {% else %}
                 <p class="muted">Текстовый ответ не отправлен.</p>
+            {% endif %}
+            {% if is_latest and submission.file_answer and submission.file_answer.name|media_kind == 'audio' %}
+                <div class="row row-tight" style="margin-top:12px">
+                    <button type="button" class="btn btn-secondary btn-sm" data-ai-grade-audio
+                            data-url="{% url 'teacher_review_ai_grade_audio' submission.pk %}">
+                        {% icon "sparkles" %}Проверить аудио с ИИ
+                    </button>
+                </div>
+                <p class="tiny recorder-error mb-0" data-ai-grade-audio-error role="alert"></p>
             {% endif %}
             {% if submission.file_answer %}
                 <div class="media-frame" style="margin-top:12px">
@@ -180,7 +208,11 @@
                                 <label for="{{ form.remove_audio.id_for_label }}">{{ form.remove_audio.label }}</label>
                             </div>
                         {% endif %}
+                        {% include "lms/parts/multi_recorder.html" with existing_audio_comments=feedback.audio_comments.all %}
                     </div>
+                    {% if not form.grade.value %}
+                        <p class="tiny muted mb-0" data-grade-missing-hint>{% icon "info" "icon icon-sm" %} Балл не выставлен — это необязательно, но не забудьте, перед тем как отправить проверку ученику.</p>
+                    {% endif %}
                     {% if snippets %}
                         <p class="rail-title" style="margin-top:8px">Банк комментариев</p>
                         <ul class="snippet-list">

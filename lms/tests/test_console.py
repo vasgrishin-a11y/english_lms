@@ -303,13 +303,14 @@ class ReviewDetailTests(LMSCase):
         self.assertContains(response, "Проверка не сохранена", status_code=409)
         self.assertFalse(hasattr(attempt, "feedback") and attempt.feedback is not None)
 
-    def test_checked_without_grade_is_rejected(self):
+    def test_checked_without_grade_is_saved_with_a_warning(self):
+        """Балл — необязательное поле: преподаватель может отправить проверку и без него."""
         attempt = self.submit()
         response = self.review_post(attempt, grade="", decision="checked")
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "укажите балл")
+        self.assertEqual(response.status_code, 302)
         attempt.refresh_from_db()
-        self.assertEqual(attempt.status, Submission.Status.SUBMITTED)
+        self.assertEqual(attempt.status, Submission.Status.CHECKED)
+        self.assertIsNone(attempt.feedback.grade)
 
     def test_grade_above_snapshot_maximum_is_rejected(self):
         attempt = self.submit()

@@ -15,6 +15,8 @@ from .models import (
     Choice,
     CommentSnippet,
     Feedback,
+    FeedbackAudioComment,
+    FeedbackHighlight,
     Flashcard,
     Profile,
     Question,
@@ -271,6 +273,20 @@ class FeedbackAdmin(ReadOnlyRecordsAdmin):
             '<a href="{}">Открыть проверку</a>',
             reverse("teacher_submission_review", args=[obj.submission_id]),
         )
+
+
+@admin.register(FeedbackAudioComment)
+class FeedbackAudioCommentAdmin(ReadOnlyRecordsAdmin):
+    list_display = ("feedback", "order", "created_at")
+    list_select_related = ("feedback__submission__student",)
+
+
+@admin.register(FeedbackHighlight)
+class FeedbackHighlightAdmin(ReadOnlyRecordsAdmin):
+    list_display = ("feedback", "source", "start", "end", "created_at")
+    list_filter = ("source",)
+    search_fields = ("quote", "comment", "feedback__submission__student__username")
+    list_select_related = ("feedback__submission__student",)
 
 
 @admin.register(SubmissionEvent)

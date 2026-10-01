@@ -97,11 +97,16 @@ class WorkflowTests(LMSCase):
             self.assertEqual(self.review_post(attempt, grade=grade).status_code, 302)
             self.assertEqual(Feedback.objects.get(submission=attempt).grade, grade)
 
-    def test_empty_checked_grade_is_not_silently_zero(self):
+    def test_empty_checked_grade_is_saved_as_a_warning_not_an_error(self):
+        """Балл необязателен: без него проверка всё равно сохраняется и уходит ученику."""
         attempt = self.submit()
         response = self.review_post(attempt, grade="")
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(Feedback.objects.exists())
+        self.assertEqual(response.status_code, 302)
+        feedback = Feedback.objects.get(submission=attempt)
+        self.assertIsNone(feedback.grade)
+        self.assertTrue(feedback.grade_missing)
+        attempt.refresh_from_db()
+        self.assertEqual(attempt.status, "checked")
 
     def test_revision_can_have_no_grade(self):
         attempt = self.submit()

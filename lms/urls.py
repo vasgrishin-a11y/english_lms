@@ -68,6 +68,16 @@ urlpatterns = [
     path("teacher/", views_teacher.console_home, name="teacher_home"),
     path("teacher/review/", views_teacher.review_queue, name="teacher_review_queue"),
     path("teacher/review/<int:pk>/", views_teacher.review_detail, name="teacher_submission_review"),
+    path(
+        "teacher/review/<int:pk>/ai-check/text/",
+        views_ai.review_ai_grade_text,
+        name="teacher_review_ai_grade_text",
+    ),
+    path(
+        "teacher/review/<int:pk>/ai-check/audio/",
+        views_ai.review_ai_grade_audio,
+        name="teacher_review_ai_grade_audio",
+    ),
     # Обратная совместимость: прежние адреса очереди и проверки
     path("teacher/submissions/", views_teacher.review_queue, name="teacher_submissions"),
     path(

@@ -1,4 +1,5 @@
 import random
+import re
 
 from django import template
 from django.core.exceptions import SuspiciousFileOperation
@@ -10,6 +11,8 @@ from lms import ui_text
 from lms.models import Submission
 
 register = template.Library()
+
+WORD_RE = re.compile(r"\S+")
 
 STATUS_LABELS = dict(Submission.Status.choices)
 STATUS_ICONS = {
@@ -482,6 +485,50 @@ def percent_of(value, maximum):
     if maximum <= 0:
         return 0
     return int(round(100 * value / maximum))
+
+
+@register.filter
+def word_count(text):
+    """Сколько слов в тексте — преподавателю не нужно считать вручную."""
+    return len(WORD_RE.findall(text or ""))
+
+
+@register.filter
+def char_count(text):
+    return len(text or "")
+
+
+@register.filter
+def highlighted_answer(submission):
+    """Текстовый ответ ученика с подсветкой выделений преподавателя/ИИ.
+
+    Работает и для попытки в истории (и учителя, и ученика): пока проверка не
+    сохранена, выделений в базе ещё нет, поэтому текст рисуется как обычно.
+    """
+    from lms.highlights import render_highlighted_html
+
+    text = getattr(submission, "text_answer", "") or ""
+    feedback = getattr(submission, "feedback", None)
+    highlights = feedback.highlights.all() if feedback is not None else []
+    return render_highlighted_html(text, highlights)
+
+
+@register.filter
+def highlights_payload(submission):
+    """Существующие выделения как список словарей — для передачи в JS через json_script."""
+    feedback = getattr(submission, "feedback", None)
+    if feedback is None:
+        return []
+    return [
+        {
+            "start": item.start,
+            "end": item.end,
+            "quote": item.quote,
+            "comment": item.comment,
+            "source": item.source,
+        }
+        for item in feedback.highlights.all()
+    ]
 
 
 @register.simple_tag(takes_context=True)

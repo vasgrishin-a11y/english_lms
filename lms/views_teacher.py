@@ -360,9 +360,9 @@ def review_detail(request, pk):
     status = 200
     if request.method == "POST" and form.is_valid():
         try:
-            review_submission(
-                teacher=request.user, submission_id=submission.pk, **form.cleaned_data
-            )
+            review_data = dict(form.cleaned_data)
+            review_data["highlights"] = review_data.pop("highlights_json", "")
+            review_submission(teacher=request.user, submission_id=submission.pk, **review_data)
         except ConflictError as exc:
             form.add_error(None, str(exc))
             status = 409
