@@ -4467,3 +4467,61 @@ a.audience-badge:hover {
     height: 36px;
     min-width: 0;
 }
+
+/* ── Обязательная структура ИИ-помощника ──────────────────────────────── */
+.ai-structure {
+    margin: 0 0 var(--sp-5);
+    padding: var(--sp-4);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+}
+
+.ai-structure legend {
+    padding: 0 var(--sp-2);
+    font-weight: 700;
+}
+
+.ai-structure-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--sp-3);
+    margin-top: var(--sp-3);
+}
+
+.ai-structure-step {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    min-width: 0;
+}
+
+.ai-structure-step label {
+    font-size: var(--fs-13);
+    font-weight: 600;
+}
+
+.ai-structure-step select,
+.ai-structure-step input {
+    width: 100%;
+}
+
+.step-num {
+    display: inline-grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    margin-right: var(--sp-1);
+    color: var(--text-inverse);
+    background: var(--accent-500);
+    border-radius: 50%;
+}
+
+.ai-structure-confirm {
+    margin-top: var(--sp-4);
+}
+
+@media (max-width: 900px) {
+    .ai-structure-grid {
+        grid-template-columns: 1fr;
+    }
+}
