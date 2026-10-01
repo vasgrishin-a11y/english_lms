@@ -71,7 +71,7 @@ class SubmissionForm(forms.Form):
             self.fields["file_answer"].widget.attrs.update(
                 {
                     "data-dropzone": "1",
-                "multiple": True,
+                    "multiple": True,
                     "data-max-mb": str(settings.LMS_MAX_FILE_BYTES // (1024 * 1024)),
                     "data-dropzone-hint": (
                         "Перетащите аудио сюда" if audio else "Перетащите файл сюда"
