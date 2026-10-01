@@ -189,26 +189,7 @@
                             </div>
                             <span class="badge badge-turquoise">видит ученик</span>
                         </div>
-                        {% if feedback and feedback.audio_comment %}
-                            <div class="feedback-current">
-                                <span class="tiny strong">Опубликованный голосовой комментарий</span>
-                                <audio controls preload="metadata" src="{% url 'media_preview' feedback.audio_comment.name %}"></audio>
-                            </div>
-                        {% endif %}
-                        {% include "lms/parts/recorder.html" with input_id=form.audio_comment.id_for_label input_name="audio_comment" limit=180 limit_label="3 минуты" recorder_title="Записать голосовой комментарий" recorder_action="Сохранить проверку" external_input=True %}
-                        <div class="form-field{% if form.audio_comment.errors %} field-error{% endif %}">
-                            <label for="{{ form.audio_comment.id_for_label }}">Или загрузите готовую запись</label>
-                            {{ form.audio_comment }}
-                            {% if form.audio_comment.help_text %}<div class="help-text" id="{{ form.audio_comment.auto_id }}_helptext">{{ form.audio_comment.help_text }}</div>{% endif %}
-                            {{ form.audio_comment.errors }}
-                        </div>
-                        {% if feedback and feedback.audio_comment %}
-                            <div class="checkline feedback-remove-audio">
-                                {{ form.remove_audio }}
-                                <label for="{{ form.remove_audio.id_for_label }}">{{ form.remove_audio.label }}</label>
-                            </div>
-                        {% endif %}
-                        {% include "lms/parts/multi_recorder.html" with existing_audio_comments=feedback.audio_comments.all %}
+                        {% include "lms/parts/voice_comments.html" %}
                     </div>
                     {% if not form.grade.value %}
                         <p class="tiny muted mb-0" data-grade-missing-hint>{% icon "info" "icon icon-sm" %} Балл не выставлен — это необязательно, но не забудьте, перед тем как отправить проверку ученику.</p>
@@ -243,6 +224,14 @@
                             <audio controls preload="metadata" src="{% url 'media_preview' feedback.audio_comment.name %}"></audio>
                         </div>
                     {% endif %}
+                    {% with legacy_offset=feedback.audio_comment|yesno:"1,0" %}
+                        {% for clip in feedback.audio_comments.all %}
+                            <div class="feedback-current" style="margin-top:12px">
+                                <span class="tiny strong">Голосовой комментарий {{ forloop.counter|add:legacy_offset }}</span>
+                                <audio controls preload="metadata" src="{% url 'media_preview' clip.audio.name %}"></audio>
+                            </div>
+                        {% endfor %}
+                    {% endwith %}
                 {% endif %}
                 <a class="btn btn-block" href="{% url 'teacher_submission_review' latest.pk %}">{% t "Открыть последнюю попытку" %}</a>
             {% endif %}

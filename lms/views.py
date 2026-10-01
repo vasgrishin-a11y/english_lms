@@ -102,12 +102,15 @@ def dashboard(request):
 def _resolve_private_file(request, name):
     """Найти файл по имени из БД и проверить доступ. Возвращает FileField или None."""
     teacher = get_user_role(request.user) == Profile.Role.TEACHER
-    from .models import AssignmentAttachment
+    from .models import AssignmentAttachment, FeedbackAudioComment
 
     materials = Assignment.objects.filter(material_file=name)
     attachments = AssignmentAttachment.objects.filter(file=name)
     attempts = Submission.objects.filter(file_answer=name)
     feedback = Feedback.objects.filter(audio_comment=name)
+    # Голосовые комментарии проверки лежат отдельной моделью: без них ученик
+    # получал 404 на каждую запись, кроме самой первой (историческое поле).
+    voice_comments = FeedbackAudioComment.objects.filter(audio=name)
     items = QuestionResponse.objects.filter(file_answer=name)
     if not teacher:
         visible = Assignment.objects.visible(user=request.user)
@@ -121,12 +124,17 @@ def _resolve_private_file(request, name):
             submission__student=request.user,
             submission__assignment__in=visible,
         )
+        voice_comments = voice_comments.filter(
+            feedback__submission__student=request.user,
+            feedback__submission__assignment__in=visible,
+        )
         items = items.filter(student=request.user, assignment__in=visible)
     for queryset, field in (
         (materials, "material_file"),
         (attachments, "file"),
         (attempts, "file_answer"),
         (feedback, "audio_comment"),
+        (voice_comments, "audio"),
     ):
         found = queryset.first()
         if found:

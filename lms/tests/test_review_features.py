@@ -8,10 +8,12 @@ import wave
 from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.http import QueryDict
 from django.test import SimpleTestCase, override_settings
 from django.urls import reverse
 
 from lms import ai
+from lms.forms import ReviewForm
 from lms.highlights import parse_submitted_highlights, render_highlighted_html
 from lms.models import Assignment, Feedback, FeedbackAudioComment, FeedbackHighlight
 from lms.templatetags.lms_tags import highlighted_answer, word_count
@@ -228,6 +230,179 @@ class MultiAudioCommentTests(LMSCase):
         FeedbackAudioComment.objects.create(feedback=feedback, audio=_wav_file("a2.wav"), order=1)
         response = self.student_client.get(self.url)
         self.assertEqual(response.content.decode().count('class="feedback-audio"'), 2)
+
+    def test_saved_audio_comment_is_playable_by_its_owner_only(self):
+        """Записи лежат отдельной моделью — она обязана быть в выдаче приватных файлов."""
+        attempt = self.submit()
+        feedback = self.review(attempt, grade=80)
+        clip = FeedbackAudioComment.objects.create(
+            feedback=feedback, audio=_wav_file("a1.wav"), order=0
+        )
+        name = clip.audio.name
+        self.assertEqual(self.student_client.get(f"/preview/{name}").status_code, 200)
+        self.assertEqual(self.teacher_client.get(f"/preview/{name}").status_code, 200)
+        self.assertEqual(self.client_for(self.other).get(f"/preview/{name}").status_code, 404)
+        self.assertEqual(self.student_client.get(f"/files/{name}").status_code, 200)
+        self.assertEqual(self.client_for(self.other).get(f"/files/{name}").status_code, 404)
+
+    def test_student_sees_audio_comments_in_grades_and_home(self):
+        attempt = self.submit()
+        feedback = self.review(attempt, grade=80)
+        FeedbackAudioComment.objects.create(feedback=feedback, audio=_wav_file("a1.wav"), order=0)
+        FeedbackAudioComment.objects.create(feedback=feedback, audio=_wav_file("a2.wav"), order=1)
+        for url in ("/grades/", "/"):
+            with self.subTest(url=url):
+                page = self.student_client.get(url, follow=True).content.decode()
+                self.assertEqual(page.count('class="feedback-audio"'), 2)
+
+    def test_review_page_has_one_voice_comment_block(self):
+        attempt = self.submit()
+        page = self.teacher_client.get(
+            reverse("teacher_submission_review", args=[attempt.pk])
+        ).content.decode()
+        self.assertEqual(page.count("data-voice-comments"), 1)
+        self.assertNotIn("Дополнительные голосовые комментарии", page)
+        self.assertNotIn("data-multi-recorder", page)
+        self.assertNotIn("Или загрузите готовую запись", page)
+        self.assertIn("Записать комментарий", page)
+        self.assertIn("Удалить выбранные", page)
+
+    def test_saved_and_published_records_share_one_list(self):
+        attempt = self.submit()
+        feedback = self.review(attempt, grade=80, audio_comment=_wav_file("legacy.wav"))
+        FeedbackAudioComment.objects.create(feedback=feedback, audio=_wav_file("a1.wav"), order=0)
+        attempt.refresh_from_db()
+        page = self.teacher_client.get(
+            reverse("teacher_submission_review", args=[attempt.pk])
+        ).content.decode()
+        self.assertEqual(page.count("data-voice-item"), 2)
+        self.assertIn("Опубликованный голосовой комментарий", page)
+        # Снятие исторической записи живёт в том же окне — отдельного блока нет.
+        self.assertIn('name="remove_audio"', page)
+
+    def test_checkboxes_remove_several_audio_comments_at_once(self):
+        """Удаление нескольких записей: несколько значений одного поля (путь без JS)."""
+        attempt = self.submit()
+        feedback = self.review(attempt, grade=80)
+        first = FeedbackAudioComment.objects.create(
+            feedback=feedback, audio=_wav_file("a1.wav"), order=0
+        )
+        second = FeedbackAudioComment.objects.create(
+            feedback=feedback, audio=_wav_file("a2.wav"), order=1
+        )
+        third = FeedbackAudioComment.objects.create(
+            feedback=feedback, audio=_wav_file("a3.wav"), order=2
+        )
+        attempt.refresh_from_db()
+        response = self.teacher_client.post(
+            reverse("teacher_submission_review", args=[attempt.pk]),
+            {
+                "expected_version": attempt.version,
+                "expected_review_revision": attempt.review_revision,
+                "grade": 80,
+                "comment": "Общий комментарий",
+                "decision": "checked",
+                "remove_audio_comment_ids": [str(first.pk), str(third.pk)],
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(list(feedback.audio_comments.values_list("pk", flat=True)), [second.pk])
+
+    def test_removal_and_new_records_are_applied_in_one_save(self):
+        attempt = self.submit()
+        feedback = self.review(attempt, grade=80)
+        old = FeedbackAudioComment.objects.create(
+            feedback=feedback, audio=_wav_file("old.wav"), order=0
+        )
+        attempt.refresh_from_db()
+        response = self.teacher_client.post(
+            reverse("teacher_submission_review", args=[attempt.pk]),
+            {
+                "expected_version": attempt.version,
+                "expected_review_revision": attempt.review_revision,
+                "grade": 80,
+                "comment": "Перезаписал",
+                "decision": "checked",
+                "remove_audio_comment_ids": str(old.pk),
+                "audio_comments": [_wav_file("new1.wav"), _wav_file("new2.wav")],
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        names = list(feedback.audio_comments.order_by("order").values_list("pk", flat=True))
+        self.assertEqual(len(names), 2)
+        self.assertNotIn(old.pk, names)
+
+    def test_published_single_record_can_be_removed_from_the_same_window(self):
+        attempt = self.submit()
+        feedback = self.review(attempt, grade=80, audio_comment=_wav_file("legacy.wav"))
+        attempt.refresh_from_db()
+        response = self.teacher_client.post(
+            reverse("teacher_submission_review", args=[attempt.pk]),
+            {
+                "expected_version": attempt.version,
+                "expected_review_revision": attempt.review_revision,
+                "grade": 80,
+                "comment": "Убрал запись",
+                "decision": "checked",
+                "remove_audio": "on",
+                "remove_audio_comment_ids": "",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        feedback.refresh_from_db()
+        self.assertEqual(feedback.audio_comment.name, "")
+
+    def test_broken_attachment_keeps_the_window_open_with_a_visible_error(self):
+        attempt = self.submit()
+        response = self.teacher_client.post(
+            reverse("teacher_submission_review", args=[attempt.pk]),
+            {
+                "expected_version": attempt.version,
+                "expected_review_revision": attempt.review_revision,
+                "grade": 80,
+                "comment": "Файл не того формата",
+                "decision": "checked",
+                "remove_audio_comment_ids": "",
+                "audio_comments": [
+                    SimpleUploadedFile("virus.exe", b"MZ binary", "application/exe")
+                ],
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        page = response.content.decode()
+        self.assertIn("Этот формат файла не разрешён.", page)
+        self.assertFalse(Feedback.objects.filter(submission=attempt).exists())
+
+
+class ReviewFormRemovalFieldTests(LMSCase):
+    def test_removed_ids_are_normalised(self):
+        attempt = self.submit()
+        form = ReviewForm(
+            data={
+                "expected_version": attempt.version,
+                "expected_review_revision": attempt.review_revision,
+                "decision": "checked",
+                "remove_audio_comment_ids": "7,,abc,7, 9 ",
+            },
+            submission=attempt,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["remove_audio_comment_ids"], "7,9")
+
+    def test_several_checkboxes_are_joined_into_one_value(self):
+        attempt = self.submit()
+        data = QueryDict(mutable=True)
+        data.update(
+            {
+                "expected_version": attempt.version,
+                "expected_review_revision": attempt.review_revision,
+                "decision": "checked",
+            }
+        )
+        data.setlist("remove_audio_comment_ids", ["3", "4"])
+        form = ReviewForm(data=data, submission=attempt)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["remove_audio_comment_ids"], "3,4")
 
 
 @override_settings(

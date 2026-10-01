@@ -534,24 +534,55 @@
     Array.prototype.forEach.call(scope.querySelectorAll("[data-recorder]"), setupRecorder);
   }
 
-  /* ── Несколько голосовых комментариев подряд ──────────────────────────
-   * В отличие от setupRecorder (один файл на поле), каждая запись здесь
-   * становится отдельным <input type=file name=audio_comments> в форме —
-   * их можно накопить сколько угодно, и все они уйдут одним сохранением.
+  /* ── Голосовые комментарии преподавателя: одно окно, список записей ───
+   * В отличие от setupRecorder (один файл на одно поле) записи здесь копятся
+   * списком: каждая становится отдельным <input type=file name=audio_comments>,
+   * и все уходят ученику одним сохранением проверки. Любую строку (или сразу
+   * несколько — через чекбоксы) можно убрать: новая запись исчезает сразу,
+   * уже сохранённая помечается на удаление и применяется при сохранении,
+   * а до этого удаление можно отменить кнопкой «Вернуть».
    */
-  function setupMultiRecorder(panel) {
-    if (panel.dataset.recorderReady === "1") return;
-    panel.dataset.recorderReady = "1";
-    var toggle = panel.querySelector("[data-multi-recorder-toggle]");
-    var stop = panel.querySelector("[data-multi-recorder-stop]");
-    var status = panel.querySelector("[data-multi-recorder-status]");
-    var clock = panel.querySelector("[data-multi-recorder-clock]");
-    var meter = panel.querySelector("[data-multi-recorder-meter]");
-    var dot = panel.querySelector("[data-multi-recorder-dot]");
-    var errorBox = panel.querySelector("[data-multi-recorder-error]");
-    var list = panel.querySelector("[data-audio-comment-list]");
+  function spriteIcon(id) {
+    // Иконка из общего SVG-спрайта страницы — без innerHTML.
+    var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("class", "icon");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    var use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+    use.setAttribute("href", "#" + id);
+    svg.appendChild(use);
+    return svg;
+  }
+
+  function setupVoiceComments(panel) {
+    if (panel.dataset.voiceReady === "1") return;
+    panel.dataset.voiceReady = "1";
+    var list = panel.querySelector("[data-voice-list]");
+    var toggle = panel.querySelector("[data-voice-toggle]");
+    if (!list || !toggle) return;
+    var stop = panel.querySelector("[data-voice-stop]");
+    var status = panel.querySelector("[data-voice-status]");
+    var clock = panel.querySelector("[data-voice-clock]");
+    var meter = panel.querySelector("[data-voice-meter]");
+    var dot = panel.querySelector("[data-voice-dot]");
+    var errorBox = panel.querySelector("[data-voice-error]");
+    var emptyNote = panel.querySelector("[data-voice-empty]");
+    var bar = panel.querySelector("[data-voice-bar]");
+    var selectAll = panel.querySelector("[data-voice-select-all]");
+    var counter = panel.querySelector("[data-voice-count]");
+    var removeSelected = panel.querySelector("[data-voice-remove-selected]");
+    var upload = panel.querySelector('[data-voice-upload] input[type="file"]');
+    var form = panel.closest("form");
+    var removedField = form ? form.querySelector('[name="remove_audio_comment_ids"]') : null;
+    var legacyField = panel.querySelector("[data-voice-legacy-field] input");
+    var sizeNote = panel.querySelector("[data-voice-size]");
     var limit = 180;
-    if (!toggle || !list) return;
+    // Сервер принимает за одну отправку не больше LMS_MAX_FILE_BYTES суммарно
+    // (значение приходит в data-max-mb). Если молча превысить — вернётся голый
+    // 413, и преподаватель потеряет и записи, и текст комментария.
+    var maxBytes =
+      (parseFloat(upload && upload.getAttribute("data-max-mb")) || 20) * 1024 * 1024;
+    var overBudget = false;
 
     var recorder = null;
     var chunks = [];
@@ -565,6 +596,193 @@
 
     function showError(message) {
       if (errorBox) errorBox.textContent = message || "";
+    }
+
+    function items() {
+      return Array.prototype.slice.call(list.querySelectorAll("[data-voice-item]"));
+    }
+
+    /* Единственная точка правды: состояние строк → нумерация, счётчики и
+     * скрытые поля удаления. Поля всегда пересобираются с нуля, поэтому
+     * «удалить → вернуть» не оставляет следов. */
+    function refresh() {
+      var rows = items();
+      var alive = 0;
+      var selected = 0;
+      var bytes = 0;
+      var removedIds = [];
+      var legacyRemoved = false;
+      rows.forEach(function (row) {
+        var removing = row.classList.contains("is-removing");
+        var body = row.querySelector("[data-voice-body]");
+        var undo = row.querySelector("[data-voice-undo]");
+        var pick = row.querySelector("[data-voice-pick]");
+        var file = row.querySelector("[data-voice-file]");
+        if (body) body.hidden = removing;
+        if (undo) undo.hidden = !removing;
+        if (file) file.disabled = removing;
+        if (file && !removing && file.files) {
+          for (var i = 0; i < file.files.length; i += 1) bytes += file.files[i].size || 0;
+        }
+        if (pick) {
+          if (removing) pick.checked = false;
+          pick.disabled = removing;
+          if (pick.checked) selected += 1;
+        }
+        if (removing) {
+          if (row.hasAttribute("data-voice-saved")) {
+            removedIds.push(row.getAttribute("data-voice-saved"));
+          }
+          if (row.hasAttribute("data-voice-legacy")) legacyRemoved = true;
+          return;
+        }
+        alive += 1;
+        var number = row.querySelector("[data-voice-no]");
+        if (number) number.textContent = String(alive);
+        if (pick) pick.setAttribute("aria-label", "Выбрать запись " + alive);
+      });
+      if (emptyNote) emptyNote.hidden = rows.length > 0;
+      if (bar) bar.hidden = alive === 0;
+      if (counter) {
+        counter.textContent = "Приложено записей: " + alive;
+      }
+      if (removeSelected) removeSelected.disabled = selected === 0;
+      if (selectAll) {
+        selectAll.disabled = alive === 0;
+        selectAll.checked = alive > 0 && selected === alive;
+        selectAll.indeterminate = selected > 0 && selected < alive;
+      }
+      if (removedField) removedField.value = removedIds.join(",");
+      if (legacyField) legacyField.checked = legacyRemoved;
+      overBudget = bytes > maxBytes;
+      if (sizeNote) {
+        sizeNote.hidden = !bytes;
+        sizeNote.className = "tiny mb-0 " + (overBudget ? "recorder-error" : "muted");
+        sizeNote.textContent = !bytes
+          ? ""
+          : overBudget
+            ? "Новые записи весят " +
+              humanSize(bytes) +
+              " — за одно сохранение можно отправить не больше " +
+              humanSize(maxBytes) +
+              ". Удалите часть записей, сохраните проверку и приложите остальные следующим сохранением."
+            : "Новые записи: " + humanSize(bytes) + " из " + humanSize(maxBytes) + " на одно сохранение.";
+      }
+    }
+
+    function markRemoved(row) {
+      var player = row.querySelector("audio");
+      // Скрытый плеер иначе продолжает играть удалённую запись.
+      if (player && player.pause) player.pause();
+      if (row.hasAttribute("data-voice-saved") || row.hasAttribute("data-voice-legacy")) {
+        row.classList.add("is-removing");
+        return "saved";
+      }
+      // Ещё не сохранённая запись: ничего не теряем на сервере — убираем сразу.
+      var url = row.getAttribute("data-voice-url");
+      if (url) URL.revokeObjectURL(url);
+      row.remove();
+      return "pending";
+    }
+
+    function removeRow(row) {
+      var kind = markRemoved(row);
+      refresh();
+      say(
+        kind === "saved"
+          ? "Запись помечена на удаление — она исчезнет у ученика после сохранения проверки. Можно вернуть её кнопкой «Вернуть»."
+          : "Запись убрана из списка. Можно записать новую."
+      );
+    }
+
+    function bindRow(row) {
+      if (row.dataset.voiceRowReady === "1") return;
+      row.dataset.voiceRowReady = "1";
+      var remove = row.querySelector("[data-voice-remove]");
+      var restore = row.querySelector("[data-voice-restore]");
+      var pick = row.querySelector("[data-voice-pick]");
+      if (remove) {
+        remove.addEventListener("click", function () {
+          removeRow(row);
+        });
+      }
+      if (restore) {
+        restore.addEventListener("click", function () {
+          row.classList.remove("is-removing");
+          refresh();
+          say("Запись возвращена в список.");
+          var again = row.querySelector("[data-voice-remove]");
+          if (again) again.focus();
+        });
+      }
+      if (pick) pick.addEventListener("change", refresh);
+    }
+
+    function addRow(file, options) {
+      var transfer;
+      try {
+        transfer = new DataTransfer();
+        transfer.items.add(file);
+      } catch (error) {
+        // Очень старый браузер без DataTransfer: отдельный файл не приложить.
+        return false;
+      }
+      var url = URL.createObjectURL(file);
+      var row = document.createElement("li");
+      row.className = "audio-comment-item";
+      row.setAttribute("data-voice-item", "");
+      row.setAttribute("data-voice-url", url);
+
+      var body = document.createElement("span");
+      body.className = "audio-comment-body";
+      body.setAttribute("data-voice-body", "");
+
+      var pick = document.createElement("input");
+      pick.type = "checkbox";
+      pick.className = "audio-comment-pick";
+      pick.setAttribute("data-voice-pick", "");
+      pick.setAttribute("aria-label", "Выбрать запись");
+
+      var number = document.createElement("span");
+      number.className = "audio-comment-no tnum";
+      number.setAttribute("data-voice-no", "");
+      number.setAttribute("aria-hidden", "true");
+
+      var player = document.createElement("span");
+      player.className = "audio-comment-player";
+      var audio = document.createElement("audio");
+      audio.controls = true;
+      audio.preload = "metadata";
+      audio.src = url;
+      var note = document.createElement("span");
+      note.className = "tiny muted";
+      note.textContent = (options && options.note) || "Новая запись — уйдёт ученику после сохранения";
+      player.appendChild(audio);
+      player.appendChild(note);
+
+      var remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "btn btn-ghost btn-sm";
+      remove.setAttribute("data-voice-remove", "");
+      remove.appendChild(spriteIcon("i-trash"));
+      remove.appendChild(document.createTextNode("Удалить"));
+
+      var input = document.createElement("input");
+      input.type = "file";
+      input.name = "audio_comments";
+      input.hidden = true;
+      input.setAttribute("data-voice-file", "");
+      input.files = transfer.files;
+
+      body.appendChild(pick);
+      body.appendChild(number);
+      body.appendChild(player);
+      body.appendChild(remove);
+      row.appendChild(body);
+      row.appendChild(input);
+      list.appendChild(row);
+      bindRow(row);
+      return true;
     }
 
     function tick() {
@@ -604,46 +822,12 @@
       }
     }
 
-    function addToList(file) {
-      var url = URL.createObjectURL(file);
-      var item = document.createElement("li");
-      item.className = "audio-comment-item";
-      var audio = document.createElement("audio");
-      audio.controls = true;
-      audio.preload = "metadata";
-      audio.src = url;
-      var remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "btn btn-ghost btn-sm";
-      remove.innerHTML = "Удалить";
-      var input = document.createElement("input");
-      input.type = "file";
-      input.name = "audio_comments";
-      input.hidden = true;
-      try {
-        var transfer = new DataTransfer();
-        transfer.items.add(file);
-        input.files = transfer.files;
-      } catch (error) {
-        // Очень старый браузер: без DataTransfer запись не прикрепится — просим файл.
-        showError("Браузер не поддерживает прикрепление записи. Загрузите аудиофайл вручную.");
-      }
-      remove.addEventListener("click", function () {
-        URL.revokeObjectURL(url);
-        item.remove();
-      });
-      item.appendChild(audio);
-      item.appendChild(remove);
-      item.appendChild(input);
-      list.appendChild(item);
-    }
-
     toggle.addEventListener("click", function () {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
         showError(
           window.isSecureContext === false
-            ? "Микрофон доступен только по защищённому соединению (HTTPS). Загрузите аудиофайл."
-            : "Браузер не поддерживает запись звука. Загрузите готовый аудиофайл."
+            ? "Микрофон доступен только по защищённому соединению (HTTPS). Прикрепите аудиофайл."
+            : "Браузер не поддерживает запись звука. Прикрепите готовый аудиофайл."
         );
         return;
       }
@@ -670,12 +854,21 @@
             var raw = new Blob(chunks, { type: recorder.mimeType || mime || "audio/webm" });
             release();
             say("Обрабатываем запись…");
-            encodeWav(raw, function (blob) {
+            encodeWav(raw, function (blob, seconds) {
               var extension = blob.type === "audio/wav" ? ".wav" : ".webm";
-              var name = "kommentar-" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "") + extension;
+              var name =
+                "kommentar-" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "") + extension;
               var file = new File([blob], name, { type: blob.type || "audio/wav" });
-              addToList(file);
-              say("Комментарий добавлен в список. Можно записать ещё один или сохранить проверку.");
+              var length = seconds ? " (" + formatClock(seconds) + ")" : "";
+              if (!addRow(file, { note: "Новая запись" + length + " — уйдёт ученику после сохранения" })) {
+                showError(
+                  "Браузер не поддерживает прикрепление записи. Прикрепите готовый аудиофайл внизу окна."
+                );
+                return;
+              }
+              refresh();
+              showError("");
+              say("Запись добавлена в список. Можно записать ещё одну или сохранить проверку.");
             });
           };
           recorder.start(250);
@@ -695,7 +888,7 @@
           var denied = error && (error.name === "NotAllowedError" || error.name === "SecurityError");
           showError(
             denied
-              ? "Нет доступа к микрофону. Разрешите его в настройках браузера или загрузите файл."
+              ? "Нет доступа к микрофону. Разрешите его в настройках браузера или прикрепите файл."
               : "Микрофон не найден или занят другим приложением."
           );
           say("Запись недоступна.");
@@ -703,39 +896,106 @@
     });
     if (stop) stop.addEventListener("click", finish);
 
-    var form = panel.closest("form");
-    if (form && !form.dataset.multiRecorderSubmit) {
-      form.dataset.multiRecorderSubmit = "1";
+    if (upload) {
+      upload.addEventListener("change", function () {
+        var files = upload.files ? Array.prototype.slice.call(upload.files) : [];
+        if (!files.length) return;
+        var added = 0;
+        files.forEach(function (file) {
+          if (addRow(file, { note: "Файл «" + file.name + "» — уйдёт ученику после сохранения" })) {
+            added += 1;
+          }
+        });
+        if (added === files.length) {
+          // Файлы переехали в список отдельными полями: чистим выбор, чтобы
+          // они не ушли дважды и чтобы можно было добавить следующие.
+          try {
+            upload.value = "";
+          } catch (error) {
+            upload.value = null;
+          }
+          try {
+            // Не во всех браузерах value = "" сбрасывает FileList — страхуемся.
+            upload.files = new DataTransfer().files;
+          } catch (error) {}
+          refresh();
+          say("Файлов добавлено: " + added + ". Можно записать ещё или сохранить проверку.");
+        } else {
+          // Браузер не дал разложить файлы по строкам — они уйдут как есть.
+          say("Файлы приложены к проверке и уйдут ученику после сохранения.");
+        }
+      });
+    }
+
+    if (selectAll) {
+      selectAll.addEventListener("change", function () {
+        var state = selectAll.checked;
+        items().forEach(function (row) {
+          if (row.classList.contains("is-removing")) return;
+          var pick = row.querySelector("[data-voice-pick]");
+          if (pick) pick.checked = state;
+        });
+        refresh();
+      });
+    }
+
+    if (removeSelected) {
+      removeSelected.addEventListener("click", function () {
+        var picked = items().filter(function (row) {
+          var pick = row.querySelector("[data-voice-pick]");
+          return pick && pick.checked && !row.classList.contains("is-removing");
+        });
+        if (!picked.length) return;
+        picked.forEach(markRemoved);
+        if (selectAll) {
+          selectAll.checked = false;
+          selectAll.indeterminate = false;
+        }
+        refresh();
+        say("Записей убрано: " + picked.length + ". Сохранённые исчезнут у ученика после сохранения проверки.");
+      });
+    }
+
+    if (form && !form.dataset.voiceSubmit) {
+      form.dataset.voiceSubmit = "1";
       form.addEventListener("submit", function (event) {
         if (panel.classList.contains("is-recording")) {
           event.preventDefault();
           event.stopImmediatePropagation();
           showError("Сначала остановите запись.");
+          return;
+        }
+        if (overBudget) {
+          // Иначе сервер ответит 413 и потеряется всё решение целиком.
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          showError(
+            "Записи вместе тяжелее " +
+              humanSize(maxBytes) +
+              ". Удалите часть записей — их можно приложить следующим сохранением."
+          );
+          if (sizeNote && sizeNote.scrollIntoView) sizeNote.scrollIntoView({ block: "nearest" });
         }
       });
     }
 
-    Array.prototype.forEach.call(
-      panel.querySelectorAll("[data-remove-existing-audio]"),
-      function (button) {
-        button.addEventListener("click", function () {
-          var id = button.getAttribute("data-remove-existing-audio");
-          var removeField = form ? form.querySelector("#id_remove_audio_comment_ids") : null;
-          if (removeField) {
-            var ids = removeField.value ? removeField.value.split(",") : [];
-            if (ids.indexOf(id) === -1) ids.push(id);
-            removeField.value = ids.join(",");
-          }
-          var item = button.closest("[data-existing-audio-id]");
-          if (item) item.remove();
-        });
+    // Форма вернулась с ошибкой — восстанавливаем отметки удаления, чтобы
+    // скрытое поле и список не разъезжались (иначе можно удалить вслепую).
+    var restoreIds = removedField && removedField.value ? removedField.value.split(",") : [];
+    items().forEach(function (row) {
+      bindRow(row);
+      var id = row.getAttribute("data-voice-saved");
+      if (id && restoreIds.indexOf(id) !== -1) row.classList.add("is-removing");
+      if (row.hasAttribute("data-voice-legacy") && legacyField && legacyField.checked) {
+        row.classList.add("is-removing");
       }
-    );
+    });
+    refresh();
   }
 
-  function multiAudioRecorder(root) {
+  function voiceComments(root) {
     var scope = root && root.querySelectorAll ? root : document;
-    Array.prototype.forEach.call(scope.querySelectorAll("[data-multi-recorder]"), setupMultiRecorder);
+    Array.prototype.forEach.call(scope.querySelectorAll("[data-voice-comments]"), setupVoiceComments);
   }
 
   /* ── Счётчик слов для текстовых полей ────────────────────────────────── */
@@ -3085,6 +3345,19 @@
     });
   }
 
+  function tableFilters() {
+    // Фильтры таблицы применяются сразу при выборе значения; кнопка «Показать»
+    // остаётся только как путь без JS, поэтому здесь её прячем.
+    document.querySelectorAll("[data-table-filters]").forEach(function (form) {
+      var apply = form.querySelector("[data-table-filters-apply]");
+      if (apply) apply.hidden = true;
+      form.addEventListener("change", function (event) {
+        var field = event.target;
+        if (field && field.tagName === "SELECT") form.submit();
+      });
+    });
+  }
+
   ready(function () {
     autohideAlerts();
     confirmForms();
@@ -3092,7 +3365,7 @@
     draftAutosave();
     flashcards();
     audioRecorder();
-    multiAudioRecorder();
+    voiceComments();
     wordCounters();
     highlightTooltips();
     reviewAnnotations();
@@ -3114,6 +3387,7 @@
     uploadDropzones();
     pasteUploads();
     chapterSelectFilter();
+    tableFilters();
     secretFields();
     descriptionEditors();
     curriculumCollapse();

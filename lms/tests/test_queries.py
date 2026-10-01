@@ -71,11 +71,15 @@ class QueryAndMarkupTests(LMSCase):
             ]
         )
         with CaptureQueriesContext(connection) as queries:
-            response = self.teacher_client.get("/teacher/submissions/?q=Search&status=all")
-        self.assertLessEqual(len(queries), 6)
+            response = self.teacher_client.get(
+                f"/teacher/submissions/?status=pending&sort=assignment&block={self.block.pk}"
+            )
+        # Три запроса сверх страницы — варианты для селектов «Ученик», «Класс»,
+        # «Задание»; бюджет по-прежнему не зависит от размера очереди.
+        self.assertLessEqual(len(queries), 9)
         self.assertEqual(len(response.context["submissions"]), 5)
         self.assertContains(response, "page=2")
-        self.assertContains(response, "status=all")
+        self.assertContains(response, "sort=assignment")
 
     @override_settings(LMS_PAGE_SIZE=2)
     def test_attempt_history_is_paginated(self):
