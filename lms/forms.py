@@ -137,6 +137,21 @@ class MultiFileField(forms.FileField):
         return cleaned
 
 
+class RemovedIdsInput(forms.HiddenInput):
+    """Скрытое поле, которое собирает id из всех одноимённых полей формы.
+
+    Список записей на удаление приходит либо одной строкой из JS («1,2,5»),
+    либо набором чекбоксов с тем же именем — так удаление работает и без
+    скриптов. Значения склеиваются через запятую: ниже их разбирает
+    ``clean_remove_audio_comment_ids``.
+    """
+
+    def value_from_datadict(self, data, files, name):
+        if hasattr(data, "getlist"):
+            return ",".join(value for value in data.getlist(name) if value)
+        return data.get(name)
+
+
 class ReviewForm(forms.Form):
     expected_version = forms.IntegerField(min_value=1, widget=forms.HiddenInput)
     expected_review_revision = forms.IntegerField(min_value=0, widget=forms.HiddenInput)
@@ -173,17 +188,20 @@ class ReviewForm(forms.Form):
     )
     audio_comments = MultiFileField(
         required=False,
-        label="Голосовые комментарии",
+        label="Или прикрепите готовые аудиофайлы",
         validators=[validate_upload],
         widget=MultiFileInput(
             attrs={
                 "accept": ".mp3,.wav,.m4a,.ogg,.aac,audio/*",
                 "data-max-mb": str(settings.LMS_MAX_FILE_BYTES // (1024 * 1024)),
+                "data-dropzone": "1",
+                "data-dropzone-hint": "Перетащите записи сюда или вставьте из буфера Ctrl+V",
+                "multiple": True,
             }
         ),
-        help_text="Можно записать и приложить несколько коротких комментариев подряд.",
+        help_text="MP3, WAV, M4A, OGG или AAC — можно выбрать сразу несколько.",
     )
-    remove_audio_comment_ids = forms.CharField(required=False, widget=forms.HiddenInput)
+    remove_audio_comment_ids = forms.CharField(required=False, widget=RemovedIdsInput)
     highlights_json = forms.CharField(required=False, widget=forms.HiddenInput)
     decision = forms.ChoiceField(
         choices=Feedback._meta.get_field("decision").choices, label="Решение"
@@ -237,6 +255,16 @@ class ReviewForm(forms.Form):
         for audio in files:
             validate_recording_limit(audio, TEACHER_FEEDBACK_RECORDING_LIMIT_SECONDS)
         return files
+
+    def clean_remove_audio_comment_ids(self):
+        """Нормализовать список id: только цифры, без повторов и пустых значений."""
+        raw = self.cleaned_data.get("remove_audio_comment_ids") or ""
+        seen = []
+        for chunk in str(raw).split(","):
+            chunk = chunk.strip()
+            if chunk.isdigit() and chunk not in seen:
+                seen.append(chunk)
+        return ",".join(seen)
 
     def clean(self):
         data = super().clean()

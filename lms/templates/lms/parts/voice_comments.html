@@ -1,0 +1,104 @@
+{% load lms_tags %}
+{# Единое окно голосовых комментариев преподавателя.
+   Записи копятся списком: одна кнопка «Записать», каждая остановка добавляет
+   запись в список. Любую (или сразу несколько) можно отметить и удалить —
+   удаление уже сохранённых применяется при сохранении проверки, до этого его
+   можно отменить кнопкой «Вернуть». #}
+{% with legacy_offset=feedback.audio_comment|yesno:"1,0" clips=feedback.audio_comments.all %}
+<div class="recorder voice-comments" data-voice-comments>
+    <div class="recorder-head">
+        <p class="strong mb-0">{% icon "mic" %} Голосовые комментарии</p>
+        <span class="pill-note">{% icon "timer" "icon icon-sm" %} До 3 минут на запись</span>
+    </div>
+    <p class="tiny muted mb-0">Запишите одну реплику, потом ещё — все они приложатся к проверке и уйдут ученику вместе после сохранения.</p>
+
+    <div class="voice-comments-bar" data-voice-bar hidden>
+        <span class="checkline tiny mb-0">
+            <input type="checkbox" id="voice-select-all" data-voice-select-all>
+            <label for="voice-select-all">Выбрать все</label>
+        </span>
+        <span class="tiny muted tnum" data-voice-count></span>
+        <button type="button" class="btn btn-ghost btn-sm" data-voice-remove-selected disabled>{% icon "trash" %}Удалить выбранные</button>
+    </div>
+
+    <ul class="audio-comment-list" data-voice-list>
+        {% if feedback.audio_comment %}
+            <li class="audio-comment-item" data-voice-item data-voice-legacy="1">
+                <span class="audio-comment-body" data-voice-body>
+                    <input type="checkbox" class="audio-comment-pick" id="voice-pick-legacy" data-voice-pick aria-label="Выбрать запись 1">
+                    <span class="audio-comment-no tnum" data-voice-no aria-hidden="true">1</span>
+                    <span class="audio-comment-player">
+                        <audio controls preload="metadata" src="{% url 'media_preview' feedback.audio_comment.name %}"></audio>
+                        <span class="tiny muted">Опубликованный голосовой комментарий — ученик его уже слышит</span>
+                    </span>
+                    <button type="button" class="btn btn-ghost btn-sm" data-voice-remove>{% icon "trash" %}Удалить</button>
+                </span>
+                <span class="audio-comment-undo" data-voice-undo hidden>
+                    <span class="tiny">{% icon "trash" "icon icon-sm" %} Запись удалится после сохранения проверки.</span>
+                    <button type="button" class="btn btn-ghost btn-sm" data-voice-restore>{% icon "refresh" %}Вернуть</button>
+                </span>
+            </li>
+        {% endif %}
+        {% for clip in clips %}
+            <li class="audio-comment-item" data-voice-item data-voice-saved="{{ clip.pk }}">
+                <span class="audio-comment-body" data-voice-body>
+                    <input type="checkbox" class="audio-comment-pick" id="voice-pick-{{ clip.pk }}" data-voice-pick aria-label="Выбрать запись {{ forloop.counter|add:legacy_offset }}">
+                    <span class="audio-comment-no tnum" data-voice-no aria-hidden="true">{{ forloop.counter|add:legacy_offset }}</span>
+                    <span class="audio-comment-player">
+                        <audio controls preload="metadata" src="{% url 'media_preview' clip.audio.name %}"></audio>
+                        <span class="tiny muted">Сохранена — ученик её уже слышит</span>
+                    </span>
+                    <button type="button" class="btn btn-ghost btn-sm" data-voice-remove>{% icon "trash" %}Удалить</button>
+                </span>
+                <span class="audio-comment-undo" data-voice-undo hidden>
+                    <span class="tiny">{% icon "trash" "icon icon-sm" %} Запись удалится после сохранения проверки.</span>
+                    <button type="button" class="btn btn-ghost btn-sm" data-voice-restore>{% icon "refresh" %}Вернуть</button>
+                </span>
+            </li>
+        {% endfor %}
+    </ul>
+    <p class="tiny muted mb-0" data-voice-empty{% if feedback.audio_comment or clips %} hidden{% endif %}>Пока ни одной записи. Нажмите «Записать комментарий» — запись появится здесь.</p>
+
+    <div class="recorder-stage">
+        <button type="button" class="btn btn-secondary" data-voice-toggle>{% icon "mic" %}<span>Записать комментарий</span></button>
+        <button type="button" class="btn btn-danger hidden" data-voice-stop>{% icon "stop" %}<span>Остановить</span></button>
+        <span class="recorder-clock tnum" data-voice-clock aria-hidden="true">0:00 / 3:00</span>
+        <span class="recorder-dot hidden" data-voice-dot aria-hidden="true"></span>
+    </div>
+    <div class="progress recorder-meter" aria-hidden="true"><span data-voice-meter style="width:0%"></span></div>
+    <p class="tiny muted mb-0" data-voice-status aria-live="polite">Нажмите «Записать комментарий» — после остановки запись добавится в список, и можно сразу записывать следующую.</p>
+    <p class="tiny recorder-error mb-0" data-voice-error role="alert"></p>
+    <p class="tiny muted mb-0" data-voice-size hidden></p>
+
+    <details class="recorder-upload" data-voice-upload{% if form.audio_comments.errors or form.audio_comment.errors %} open{% endif %}>
+        <summary class="tiny">Нет микрофона? Прикрепите готовые аудиофайлы</summary>
+        <div class="form-field{% if form.audio_comments.errors %} field-error{% endif %}">
+            <label class="sr-only" for="{{ form.audio_comments.id_for_label }}">{{ form.audio_comments.label }}</label>
+            {{ form.audio_comments }}
+            <div class="help-text" id="{{ form.audio_comments.auto_id }}_helptext">{{ form.audio_comments.help_text }}</div>
+            {{ form.audio_comments.errors }}
+            {{ form.audio_comment.errors }}
+        </div>
+    </details>
+
+    {% if feedback.audio_comment %}
+        {# Снятие опубликованной записи: чекбокс ставит скрипт, когда строка помечена на удаление. #}
+        <span hidden data-voice-legacy-field>{{ form.remove_audio }}<label for="{{ form.remove_audio.id_for_label }}">{{ form.remove_audio.label }}</label></span>
+    {% endif %}
+    <noscript>
+        <p class="tiny muted mb-0">Без JavaScript запись с микрофона недоступна: прикрепите готовый файл выше{% if feedback.audio_comment or clips %} и отметьте записи, которые нужно удалить{% endif %}.</p>
+        {% if feedback.audio_comment %}
+            <span class="checkline tiny">
+                <input type="checkbox" name="remove_audio" id="voice-remove-legacy-nojs">
+                <label for="voice-remove-legacy-nojs">Удалить запись 1</label>
+            </span>
+        {% endif %}
+        {% for clip in clips %}
+            <span class="checkline tiny">
+                <input type="checkbox" name="remove_audio_comment_ids" value="{{ clip.pk }}" id="voice-remove-{{ clip.pk }}-nojs">
+                <label for="voice-remove-{{ clip.pk }}-nojs">Удалить запись {{ forloop.counter|add:legacy_offset }}</label>
+            </span>
+        {% endfor %}
+    </noscript>
+</div>
+{% endwith %}

@@ -3755,10 +3755,6 @@ tr.row-bad td:first-child {
     height: 36px;
 }
 
-.feedback-remove-audio {
-    margin-top: calc(var(--sp-1) * -1);
-}
-
 /* ── Запись с микрофона ──────────────────────────────────── */
 .recorder {
     display: flex;
@@ -4442,7 +4438,24 @@ a.audience-badge:hover {
     justify-content: flex-end;
 }
 
-/* ── Список нескольких голосовых комментариев ─────────────────────────── */
+/* ── Одно окно голосовых комментариев преподавателя ───────────────────── */
+.voice-comments {
+    margin-bottom: 0;
+}
+
+.voice-comments-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-3);
+    padding-bottom: var(--sp-2);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.voice-comments-bar .btn {
+    margin-left: auto;
+}
+
 .audio-comment-list {
     display: flex;
     flex-direction: column;
@@ -4452,18 +4465,54 @@ a.audience-badge:hover {
     list-style: none;
 }
 
+.audio-comment-list:empty {
+    display: none;
+}
+
 .audio-comment-item {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-3);
     padding: var(--sp-2) var(--sp-3);
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--r-sm);
 }
 
-.audio-comment-item audio {
+.audio-comment-item.is-removing {
+    background: var(--surface-sunken);
+    border-style: dashed;
+}
+
+.audio-comment-body,
+.audio-comment-undo {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-3);
+}
+
+.audio-comment-undo {
+    justify-content: space-between;
+}
+
+.audio-comment-pick {
+    flex: 0 0 auto;
+}
+
+.audio-comment-no {
+    min-width: 1.5em;
+    font-weight: 700;
+    text-align: center;
+}
+
+.audio-comment-player {
+    display: flex;
     flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-width: min(100%, 220px);
+}
+
+.audio-comment-item audio {
+    width: 100%;
     height: 36px;
     min-width: 0;
 }
