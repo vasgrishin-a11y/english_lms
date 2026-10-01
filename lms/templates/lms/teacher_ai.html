@@ -41,12 +41,10 @@
                     {% csrf_token %}
                     <fieldset class="ai-structure" data-ai-structure>
                         <legend>Структура материала <span aria-hidden="true">*</span></legend>
-                        <p class="small muted">Сначала укажите, куда попадёт материал. На любом уровне можно выбрать существующий элемент, ввести новое название или поручить название ИИ.</p>
                         <div class="ai-structure-grid">
                             <section class="panel ai-structure-step" aria-labelledby="structure-block-title">
                                 <p class="rail-title" id="structure-block-title"><span class="step-num">1</span> Класс</p>
-                                <label for="id_structure_block">Найти существующий класс</label>
-                                <input type="search" class="form-control" placeholder="Фильтр классов" data-structure-filter="block" autocomplete="off">
+                                <label for="id_structure_block">Класс</label>
                                 {{ form.structure_block }}
                                 {{ form.structure_block.errors }}
                                 <label for="id_new_block_name">Создать новый</label>
@@ -55,8 +53,7 @@
                             </section>
                             <section class="panel ai-structure-step" aria-labelledby="structure-chapter-title">
                                 <p class="rail-title" id="structure-chapter-title"><span class="step-num">2</span> Глава</p>
-                                <label for="id_structure_chapter">Найти существующую главу</label>
-                                <input type="search" class="form-control" placeholder="Фильтр глав" data-structure-filter="chapter" autocomplete="off">
+                                <label for="id_structure_chapter">Глава</label>
                                 {{ form.structure_chapter }}
                                 {{ form.structure_chapter.errors }}
                                 <label for="id_new_chapter_name">Создать новую</label>
@@ -65,8 +62,7 @@
                             </section>
                             <section class="panel ai-structure-step" aria-labelledby="structure-topic-title">
                                 <p class="rail-title" id="structure-topic-title"><span class="step-num">3</span> Тема</p>
-                                <label for="id_structure_topic">Найти существующую тему</label>
-                                <input type="search" class="form-control" placeholder="Фильтр тем" data-structure-filter="topic" autocomplete="off">
+                                <label for="id_structure_topic">Тема</label>
                                 {{ form.structure_topic }}
                                 {{ form.structure_topic.errors }}
                                 <label for="id_new_topic_name">Создать новую</label>
@@ -190,12 +186,8 @@
                     <li>Импорт создаёт только черновики — ученики ничего не видят до публикации и назначения.</li>
                     <li>Черновики дальше правятся вручную: как обычные задания курса. Главы можно переименовать на карте курса.</li>
                 </ol>
-                <p class="tiny muted mb-0">Приватность: файл уходит только локальной модели на своём сервере и в системе не сохраняется. В журнал попадают лишь счётчики.</p>
             </section>
 
-            {# Совместимость с существующими UI-проверками: подробная подсказка удалена,
-               структура теперь задаётся полями выше. #}
-            <span class="sr-only">Формат подсказки</span>
             <section class="card card-pad-sm">
                 <p class="rail-title">Лимиты</p>
                 <ul class="small muted" style="padding-left:18px">
@@ -219,12 +211,10 @@
     if (!root || !dataNode) return;
     var tree = JSON.parse(dataNode.textContent);
     var selects = {};
-    var filters = {};
     var newInputs = {};
     var originals = {};
     ["block", "chapter", "topic"].forEach(function (level) {
         selects[level] = root.querySelector('[data-structure-select="' + level + '"]');
-        filters[level] = root.querySelector('[data-structure-filter="' + level + '"]');
         newInputs[level] = root.querySelector('[data-structure-new="' + level + '"]');
         originals[level] = Array.from(selects[level].options).map(function (option) {
             return {value: option.value, text: option.textContent};
@@ -250,11 +240,9 @@
     function rebuild(level) {
         var select = selects[level];
         var selected = select.value;
-        var query = (filters[level].value || "").trim().toLocaleLowerCase("ru");
         select.replaceChildren();
         originals[level].forEach(function (item) {
             if (!allowed(level, item.value)) return;
-            if (item.value && query && item.text.toLocaleLowerCase("ru").indexOf(query) === -1) return;
             select.add(new Option(item.text, item.value, false, item.value === selected));
         });
         if (!Array.from(select.options).some(function (option) { return option.value === selected; })) {
@@ -284,7 +272,6 @@
             if (selects[level].value) newInput.value = "";
             sync(level);
         });
-        filters[level].addEventListener("input", function () { rebuild(level); });
         var newInput = newInputs[level];
         newInput.addEventListener("input", function () {
             if (newInput.value.trim()) {

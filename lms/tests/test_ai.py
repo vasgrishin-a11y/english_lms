@@ -131,7 +131,13 @@ class AssistantAccessTests(LMSCase):
         response = self.teacher_client.get(reverse("teacher_ai"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Офлайн-разбор")
-        self.assertContains(response, "Формат подсказки")
+        self.assertNotContains(response, "Формат подсказки")
+        self.assertNotContains(response, "Фильтр классов")
+        self.assertNotContains(response, "Найти существующий класс")
+        self.assertNotContains(response, "Приватность: файл уходит")
+        self.assertNotContains(response, "# Класс A2")
+        upload_widget = response.context["form"].fields["upload"].widget
+        self.assertTrue(upload_widget.allow_multiple_selected)
 
     def test_target_menu_offers_course_structure_and_assignment(self):
         response = self.teacher_client.get(reverse("teacher_ai"))
@@ -260,6 +266,14 @@ class AssistantFormTests(LMSCase):
         upload = SimpleUploadedFile("big.txt", b"x" * 2048)
         response = self.post_form(upload=upload)
         self.assertTrue(response.context["form"].errors["upload"])
+
+    def test_multiple_files_are_kept_and_processed(self):
+        first = SimpleUploadedFile("first.txt", b"# Class A2\n## First topic\nFirst task")
+        second = SimpleUploadedFile("second.txt", b"## Second topic\nSecond task")
+        response = self.post_form(upload=[first, second])
+        self.assertFalse(response.context["form"].errors)
+        self.assertEqual(len(response.context["form"].cleaned_data["upload"]), 2)
+        self.assertContains(response, "Что получилось")
 
     def test_preview_is_detailed_before_import(self):
         response = self.post_form(text=MARKDOWN)
