@@ -14,7 +14,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 from . import ai
 from .decorators import teacher_required
 from .forms import AIMaterialForm
-from .models import Assignment, Submission, Topic
+from .models import Assignment, Chapter, Submission, Topic
 
 logger = logging.getLogger("lms.ai")
 
@@ -37,8 +37,18 @@ def ai_assistant(request):
     requested_target = request.GET.get("target", "mixed")
     initial = {
         "target": requested_target if requested_target in available_targets else "mixed",
-        "target_topic": request.GET.get("topic") or None,
+        "structure_topic": request.GET.get("topic") or None,
     }
+    initial_topic = None
+    if initial["structure_topic"]:
+        initial_topic = (
+            Topic.objects.select_related("block", "chapter")
+            .filter(pk=initial["structure_topic"])
+            .first()
+        )
+        if initial_topic:
+            initial["structure_block"] = initial_topic.block_id
+            initial["structure_chapter"] = initial_topic.chapter_id
     revising = request.method == "POST" and "revise_material" in request.POST
     form = AIMaterialForm(
         None if revising else request.POST or None,
@@ -69,7 +79,9 @@ def ai_assistant(request):
                 messages.error(request, "Опишите, что изменить в текущей версии материала.")
             else:
                 try:
-                    revised, revision_meta = ai.revise_material(material, instruction)
+                    revised, revision_meta = ai.revise_material(
+                        material, instruction, structure=meta.get("structure")
+                    )
                 except ai.AiError as exc:
                     messages.error(request, str(exc))
                 else:
@@ -99,15 +111,13 @@ def ai_assistant(request):
                     prompt=form.cleaned_data["prompt"],
                     target=form.cleaned_data["target"],
                     upload=form.cleaned_data["upload"],
+                    structure=form.structure(),
                 )
             except ai.AiError as exc:
                 _clear_session(request)
                 messages.error(request, str(exc))
                 material, meta = None, {}
             else:
-                target_topic = form.cleaned_data["target_topic"]
-                meta["target_topic"] = target_topic.pk if target_topic else None
-                meta["target_topic_label"] = str(target_topic) if target_topic else ""
                 request.session[SESSION_MATERIAL] = material
                 request.session[SESSION_META] = meta
                 for note in meta.get("notes") or []:
@@ -139,6 +149,20 @@ def ai_assistant(request):
             "revision_instruction": revision_instruction,
             "limits": ai.limits(),
             "max_upload_mb": ai.max_upload_bytes() // (1024 * 1024),
+            "structure_tree": {
+                "chapters": {
+                    str(pk): block_id
+                    for pk, block_id in Chapter.objects.filter(
+                        is_active=True, block__is_active=True
+                    ).values_list("pk", "block_id")
+                },
+                "topics": {
+                    str(pk): {"block": block_id, "chapter": chapter_id}
+                    for pk, block_id, chapter_id in Topic.objects.filter(
+                        is_active=True, chapter__is_active=True, block__is_active=True
+                    ).values_list("pk", "block_id", "chapter_id")
+                },
+            },
             "workspace": "ai",
         },
     )
@@ -154,11 +178,8 @@ def ai_import(request):
         messages.error(request, "Материал не найден: загрузите файл заново.")
         return redirect("teacher_ai")
 
-    topic = None
-    if meta.get("target_topic"):
-        topic = Topic.objects.filter(pk=meta["target_topic"]).first()
     try:
-        created = ai.import_material(material, target_topic=topic)
+        created = ai.import_material(material, structure=meta.get("structure"))
     except ai.AiError as exc:
         messages.error(request, str(exc))
         return redirect("teacher_ai")

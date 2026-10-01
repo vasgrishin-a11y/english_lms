@@ -18,7 +18,7 @@ from django.test import SimpleTestCase, override_settings
 from django.urls import reverse
 
 from lms import ai
-from lms.models import Assignment, Block, Choice, Flashcard, Question, Topic
+from lms.models import Assignment, Block, Chapter, Choice, Flashcard, Question, Topic
 
 from .base import LMSCase
 
@@ -236,7 +236,7 @@ class OfflineParsingTests(LMSCase):
 
 class AssistantFormTests(LMSCase):
     def post_form(self, **data):
-        payload = {"target": "mixed", "prompt": "", "text": "", "target_topic": ""}
+        payload = {"target": "mixed", "prompt": "", "text": "", "structure_confirmed": "on"}
         payload.update(data)
         return self.teacher_client.post(reverse("teacher_ai"), payload)
 
@@ -270,10 +270,45 @@ class AssistantFormTests(LMSCase):
         self.assertContains(response, "to book")
         self.assertEqual(Assignment.objects.filter(title="Check-in").count(), 0)
 
-    def test_assignment_without_topic_falls_back_to_full_structure(self):
+    def test_assignment_can_use_automatic_structure(self):
         response = self.post_form(target="assignment", text=MARKDOWN)
-        self.assertEqual(response.context["form"].cleaned_data["target"], "mixed")
-        self.assertIsNone(response.context["meta"]["target_topic"])
+        self.assertEqual(response.context["form"].cleaned_data["target"], "assignment")
+        self.assertEqual(response.context["meta"]["structure"]["topic"]["mode"], "auto")
+
+    def test_structure_must_be_confirmed(self):
+        response = self.teacher_client.post(
+            reverse("teacher_ai"), {"target": "mixed", "prompt": "Собери урок"}
+        )
+        self.assertFormError(
+            response.context["form"],
+            "structure_confirmed",
+            "Подтвердите структуру перед созданием материала.",
+        )
+        self.assertIsNone(response.context["material"])
+
+    def test_existing_topic_canonically_sets_its_parents(self):
+        topic = Topic.objects.create(block=self.block, title="Airport", slug="airport")
+        response = self.post_form(text=MARKDOWN, structure_topic=topic.pk)
+        structure = response.context["meta"]["structure"]
+        self.assertEqual(structure["block"]["id"], self.block.pk)
+        self.assertEqual(structure["chapter"]["id"], topic.chapter_id)
+        self.assertEqual(structure["topic"]["id"], topic.pk)
+        self.assertContains(response, f"{self.block.name} → {topic.chapter.title} → Airport")
+
+    def test_incompatible_chapter_and_block_are_rejected_server_side(self):
+        other = Block.objects.create(name="Other", slug="other")
+        chapter = Chapter.objects.create(block=other, title="Grammar", slug="grammar")
+        response = self.post_form(
+            text=MARKDOWN,
+            structure_block=self.block.pk,
+            structure_chapter=chapter.pk,
+        )
+        self.assertFormError(
+            response.context["form"],
+            "structure_chapter",
+            "Глава не относится к выбранному классу.",
+        )
+        self.assertIsNone(response.context["material"])
 
     def test_preview_and_reset(self):
         response = self.post_form(text=MARKDOWN)
@@ -285,7 +320,7 @@ class AssistantFormTests(LMSCase):
 
 class OfflineImportTests(LMSCase):
     def build(self, **data):
-        payload = {"target": "mixed", "prompt": "", "text": MARKDOWN, "target_topic": ""}
+        payload = {"target": "mixed", "prompt": "", "text": MARKDOWN, "structure_confirmed": "on"}
         payload.update(data)
         return self.teacher_client.post(reverse("teacher_ai"), payload)
 
@@ -325,12 +360,43 @@ class OfflineImportTests(LMSCase):
 
     def test_import_assignment_into_existing_topic_keeps_structure(self):
         topic = Topic.objects.create(block=self.block, title="Airport", slug="airport")
-        self.build(target="assignment", target_topic=topic.pk)
+        self.build(target="assignment", structure_topic=topic.pk)
         self.import_material()
         self.assertEqual(Block.objects.count(), 1)
         self.assertEqual(Topic.objects.filter(block=self.block).count(), 2)
         titles = set(Assignment.objects.filter(topic=topic).values_list("title", flat=True))
         self.assertEqual(titles, {"Check-in", "Слова темы"})
+
+    def test_named_structure_is_enforced_and_created_in_existing_class(self):
+        self.build(
+            structure_block=self.block.pk,
+            new_chapter_name="Travel grammar",
+            new_topic_name="Present Perfect",
+        )
+        preview = self.teacher_client.session["ai_material"]
+        self.assertEqual(preview["blocks"][0]["name"], self.block.name)
+        self.assertEqual(preview["blocks"][0]["chapters"][0]["title"], "Travel grammar")
+        self.assertEqual(
+            preview["blocks"][0]["chapters"][0]["topics"][0]["title"],
+            "Present Perfect",
+        )
+
+        self.import_material()
+        topic = Topic.objects.get(title="Present Perfect")
+        self.assertEqual(topic.block, self.block)
+        self.assertEqual(topic.chapter.title, "Travel grammar")
+        self.assertTrue(topic.assignments.filter(title="Check-in").exists())
+        self.assertFalse(Block.objects.filter(name="Travel B1").exists())
+
+    def test_import_stops_if_selected_topic_was_deleted(self):
+        topic = Topic.objects.create(block=self.block, title="Temporary", slug="temporary")
+        self.build(structure_topic=topic.pk)
+        topic.delete()
+        response = self.import_material()
+        self.assertRedirects(response, reverse("teacher_ai"))
+        messages = [message.message for message in response.wsgi_request._messages]
+        self.assertTrue(any("была удалена" in message for message in messages))
+        self.assertFalse(Assignment.objects.filter(title="Check-in").exists())
 
     def test_second_import_does_not_duplicate_cards(self):
         self.build()
@@ -409,7 +475,8 @@ class OnlineModeTests(LMSCase):
     def test_online_answer_is_imported_as_drafts(self):
         with patch("lms.ai._provider_material", return_value=self.AI_PAYLOAD):
             response = self.teacher_client.post(
-                reverse("teacher_ai"), {"target": "mixed", "prompt": "Сделай блок B1"}
+                reverse("teacher_ai"),
+                {"target": "mixed", "prompt": "Сделай блок B1", "structure_confirmed": "on"},
             )
         self.assertContains(response, "разобрал ИИ")
         self.teacher_client.post(reverse("teacher_ai_import"))
@@ -431,7 +498,8 @@ class OnlineModeTests(LMSCase):
         )
         with patch("lms.ai._provider_material", side_effect=[self.AI_PAYLOAD, revised_payload]):
             first = self.teacher_client.post(
-                reverse("teacher_ai"), {"target": "mixed", "prompt": "Сделай блок B1"}
+                reverse("teacher_ai"),
+                {"target": "mixed", "prompt": "Сделай блок B1", "structure_confirmed": "on"},
             )
             self.assertContains(first, "Airport quiz")
             self.assertNotContains(first, "Airport quiz revised")
@@ -458,7 +526,8 @@ class OnlineModeTests(LMSCase):
     def test_provider_failure_falls_back_to_offline(self):
         with patch("lms.ai._provider_material", side_effect=ai.AiError("Модель недоступна")):
             response = self.teacher_client.post(
-                reverse("teacher_ai"), {"target": "mixed", "text": MARKDOWN}
+                reverse("teacher_ai"),
+                {"target": "mixed", "text": MARKDOWN, "structure_confirmed": "on"},
             )
         self.assertContains(response, "разобран офлайн")
         self.assertContains(response, "Что получилось")
@@ -477,7 +546,8 @@ class OnlineModeTests(LMSCase):
 
         with patch("lms.ai._provider_material", side_effect=fake):
             self.teacher_client.post(
-                reverse("teacher_ai"), {"target": "mixed", "text": "gate | выход"}
+                reverse("teacher_ai"),
+                {"target": "mixed", "text": "gate | выход", "structure_confirmed": "on"},
             )
         self.assertEqual(captured["spec"]["key"], "ollama")
         self.assertEqual(captured["kwargs"], {"filename": "", "blob": b""})
@@ -518,6 +588,21 @@ class AssistantModelTests(LMSCase):
         self.assertIn("Импорт создаёт только черновики", prompt)
         self.assertIn("Материал обязан быть доступен ученику", prompt)
         self.assertIn("не считается автоматически вложенным", prompt)
+
+    def test_prompt_receives_structure_before_material_generation(self):
+        structure = {
+            "block": {"mode": "existing", "id": 1, "name": "7 класс"},
+            "chapter": {"mode": "new", "id": None, "name": "Grammar"},
+            "topic": {"mode": "new", "id": None, "name": "Present Perfect"},
+        }
+        prompt = ai.build_prompt("lesson", structure=structure)
+        structure_at = prompt.index("ОБЯЗАТЕЛЬНАЯ СТРУКТУРА")
+        material_at = prompt.index("Текст материала")
+        self.assertLess(structure_at, material_at)
+        self.assertIn("Класс: строго «7 класс»", prompt)
+        self.assertIn("Глава: строго «Grammar»", prompt)
+        self.assertIn("Тема: строго «Present Perfect»", prompt)
+        self.assertIn("Сначала учти эту структуру", prompt)
 
     def test_prompt_does_not_allow_hidden_source_material(self):
         prompt = ai.build_prompt("", target="assignment")

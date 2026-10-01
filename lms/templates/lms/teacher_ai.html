@@ -39,6 +39,47 @@
                 <div class="card-head"><h2 class="card-title">{% icon "upload" %}Материал</h2></div>
                 <form method="post" enctype="multipart/form-data" novalidate data-ai-form>
                     {% csrf_token %}
+                    <fieldset class="ai-structure" data-ai-structure>
+                        <legend>Структура материала <span aria-hidden="true">*</span></legend>
+                        <p class="small muted">Сначала укажите, куда попадёт материал. На любом уровне можно выбрать существующий элемент, ввести новое название или поручить название ИИ.</p>
+                        <div class="ai-structure-grid">
+                            <section class="panel ai-structure-step" aria-labelledby="structure-block-title">
+                                <p class="rail-title" id="structure-block-title"><span class="step-num">1</span> Класс</p>
+                                <label for="id_structure_block">Найти существующий класс</label>
+                                <input type="search" class="form-control" placeholder="Фильтр классов" data-structure-filter="block" autocomplete="off">
+                                {{ form.structure_block }}
+                                {{ form.structure_block.errors }}
+                                <label for="id_new_block_name">Создать новый</label>
+                                {{ form.new_block_name }}
+                                {{ form.new_block_name.errors }}
+                            </section>
+                            <section class="panel ai-structure-step" aria-labelledby="structure-chapter-title">
+                                <p class="rail-title" id="structure-chapter-title"><span class="step-num">2</span> Глава</p>
+                                <label for="id_structure_chapter">Найти существующую главу</label>
+                                <input type="search" class="form-control" placeholder="Фильтр глав" data-structure-filter="chapter" autocomplete="off">
+                                {{ form.structure_chapter }}
+                                {{ form.structure_chapter.errors }}
+                                <label for="id_new_chapter_name">Создать новую</label>
+                                {{ form.new_chapter_name }}
+                                {{ form.new_chapter_name.errors }}
+                            </section>
+                            <section class="panel ai-structure-step" aria-labelledby="structure-topic-title">
+                                <p class="rail-title" id="structure-topic-title"><span class="step-num">3</span> Тема</p>
+                                <label for="id_structure_topic">Найти существующую тему</label>
+                                <input type="search" class="form-control" placeholder="Фильтр тем" data-structure-filter="topic" autocomplete="off">
+                                {{ form.structure_topic }}
+                                {{ form.structure_topic.errors }}
+                                <label for="id_new_topic_name">Создать новую</label>
+                                {{ form.new_topic_name }}
+                                {{ form.new_topic_name.errors }}
+                            </section>
+                        </div>
+                        <div class="checkline ai-structure-confirm">
+                            {{ form.structure_confirmed }}
+                            <label for="id_structure_confirmed">Я проверил(а) структуру. Значения «Автоматически» ИИ заполнит сам.</label>
+                        </div>
+                        {{ form.structure_confirmed.errors }}
+                    </fieldset>
                     {% include "lms/form_fields.html" %}
                     <div class="form-actions">
                         <button class="btn" type="submit">{% icon "sparkles" %}{% t "Собрать материал" %}</button>
@@ -66,8 +107,8 @@
                         <div class="stat"><div class="stat-value tnum">{{ summary.cards }}</div><div class="stat-label">карточек</div></div>
                     </div>
 
-                    {% if meta.target_topic_label %}
-                        <p class="small">Новые задания и карточки попадут в тему <strong>{{ meta.target_topic_label }}</strong>.</p>
+                    {% if meta.structure_label %}
+                        <p class="small"><strong>Закреплённая структура:</strong> {{ meta.structure_label }}. ИИ получил её до создания материала; при импорте сервер проверит её повторно.</p>
                     {% endif %}
 
                     <div class="library-toc">
@@ -161,7 +202,7 @@
                 <p class="rail-title">Что собрать</p>
                 <ul class="small muted" style="padding-left:18px">
                     <li><strong>Класс → главы → темы → задания</strong> — ИИ создаст полную структуру курса.</li>
-                    <li><strong>Задание</strong> — выберите существующую тему, куда его добавить. Если тему не выбрать, ИИ создаст полную структуру курса.</li>
+                    <li><strong>Задание</strong> — выберите существующую структуру, задайте новые названия или оставьте нужные уровни автоматическими.</li>
                 </ul>
                 <p class="tiny muted mb-0">Если в материале есть разделы или главы, они сохраняются в структуре.</p>
             </section>
@@ -214,21 +255,95 @@
 {% endblock %}
 
 {% block extra_js %}
+{{ structure_tree|json_script:"ai-structure-tree" }}
 <script>
 (function () {
-    var target = document.getElementById("id_target");
-    var targetTopic = document.getElementById("id_target_topic");
-    if (!target || !targetTopic) return;
+    var root = document.querySelector("[data-ai-structure]");
+    var dataNode = document.getElementById("ai-structure-tree");
+    if (!root || !dataNode) return;
+    var tree = JSON.parse(dataNode.textContent);
+    var selects = {};
+    var filters = {};
+    var newInputs = {};
+    var originals = {};
+    ["block", "chapter", "topic"].forEach(function (level) {
+        selects[level] = root.querySelector('[data-structure-select="' + level + '"]');
+        filters[level] = root.querySelector('[data-structure-filter="' + level + '"]');
+        newInputs[level] = root.querySelector('[data-structure-new="' + level + '"]');
+        originals[level] = Array.from(selects[level].options).map(function (option) {
+            return {value: option.value, text: option.textContent};
+        });
+    });
 
-    var topicField = targetTopic.closest(".form-field");
-    function toggleTargetTopic() {
-        var isAssignment = target.value === "assignment";
-        targetTopic.disabled = !isAssignment;
-        if (topicField) topicField.hidden = !isAssignment;
+    function allowed(level, value) {
+        if (!value) return true;
+        if (level === "chapter" && newInputs.block.value.trim()) return false;
+        if (level === "topic" && (newInputs.block.value.trim() || newInputs.chapter.value.trim())) return false;
+        if (level === "chapter" && selects.block.value) {
+            return String(tree.chapters[value]) === selects.block.value;
+        }
+        if (level === "topic") {
+            var item = tree.topics[value];
+            if (!item) return false;
+            if (selects.block.value && String(item.block) !== selects.block.value) return false;
+            if (selects.chapter.value && String(item.chapter) !== selects.chapter.value) return false;
+        }
+        return true;
     }
 
-    target.addEventListener("change", toggleTargetTopic);
-    toggleTargetTopic();
+    function rebuild(level) {
+        var select = selects[level];
+        var selected = select.value;
+        var query = (filters[level].value || "").trim().toLocaleLowerCase("ru");
+        select.replaceChildren();
+        originals[level].forEach(function (item) {
+            if (!allowed(level, item.value)) return;
+            if (item.value && query && item.text.toLocaleLowerCase("ru").indexOf(query) === -1) return;
+            select.add(new Option(item.text, item.value, false, item.value === selected));
+        });
+        if (!Array.from(select.options).some(function (option) { return option.value === selected; })) {
+            select.value = "";
+        }
+    }
+
+    function sync(source) {
+        var topicInfo = tree.topics[selects.topic.value];
+        if (source === "topic" && topicInfo) {
+            selects.block.value = String(topicInfo.block);
+            selects.chapter.value = String(topicInfo.chapter);
+        } else if (source === "chapter" && selects.chapter.value) {
+            selects.block.value = String(tree.chapters[selects.chapter.value]);
+            if (selects.topic.value && !allowed("topic", selects.topic.value)) selects.topic.value = "";
+        } else if (source === "block") {
+            if (selects.chapter.value && !allowed("chapter", selects.chapter.value)) selects.chapter.value = "";
+            if (selects.topic.value && !allowed("topic", selects.topic.value)) selects.topic.value = "";
+        }
+        rebuild("chapter");
+        rebuild("topic");
+    }
+
+    ["block", "chapter", "topic"].forEach(function (level) {
+        selects[level].addEventListener("change", function () {
+            var newInput = newInputs[level];
+            if (selects[level].value) newInput.value = "";
+            sync(level);
+        });
+        filters[level].addEventListener("input", function () { rebuild(level); });
+        var newInput = newInputs[level];
+        newInput.addEventListener("input", function () {
+            if (newInput.value.trim()) {
+                selects[level].value = "";
+                if (level === "block") {
+                    selects.chapter.value = "";
+                    selects.topic.value = "";
+                } else if (level === "chapter") {
+                    selects.topic.value = "";
+                }
+            }
+            sync(level);
+        });
+    });
+    sync("initial");
 }());
 </script>
 {% endblock %}

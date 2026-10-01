@@ -4467,3 +4467,125 @@ a.audience-badge:hover {
     height: 36px;
     min-width: 0;
 }
+
+/* ── Обязательная структура ИИ-помощника ──────────────────────────────── */
+.ai-structure {
+    margin: 0 0 var(--sp-5);
+    padding: var(--sp-4);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+}
+
+.ai-structure legend {
+    padding: 0 var(--sp-2);
+    font-weight: 700;
+}
+
+.ai-structure-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--sp-3);
+    margin-top: var(--sp-3);
+}
+
+.ai-structure-step {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    min-width: 0;
+}
+
+.ai-structure-step label {
+    font-size: var(--fs-13);
+    font-weight: 600;
+}
+
+.ai-structure-step select,
+.ai-structure-step input {
+    width: 100%;
+}
+
+.step-num {
+    display: inline-grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    margin-right: var(--sp-1);
+    color: var(--text-inverse);
+    background: var(--accent-500);
+    border-radius: 50%;
+}
+
+.ai-structure-confirm {
+    margin-top: var(--sp-4);
+}
+
+@media (max-width: 900px) {
+    .ai-structure-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Аудитория: локальные исключения из назначений родителей. */
+.audience-exclusion-box {
+    margin-top: var(--sp-3);
+    padding: var(--sp-3);
+    border: 1px solid var(--warning-border);
+    border-radius: var(--r-md);
+    background: var(--warning-bg);
+}
+
+ul.audience-exclusions label:has(input:checked) {
+    color: var(--danger-ink);
+    background: var(--danger-bg);
+    border-color: var(--danger-border);
+}
+
+/* Минимальный статус публикации класса, главы и темы. */
+.publication-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    vertical-align: middle;
+    color: var(--text-subtle);
+    font-size: var(--fs-12);
+    font-weight: 500;
+}
+
+.publication-indicator.is-published,
+.publication-indicator.is-partial {
+    color: var(--success-ink);
+}
+
+.publication-indicator.is-published {
+    opacity: .72;
+}
+
+.publication-indicator__warning {
+    display: inline-grid;
+    place-items: center;
+    width: 13px;
+    height: 13px;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    font-size: 9px;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.publication-indicator__text {
+    font-size: 10px;
+    white-space: nowrap;
+}
+
+.btn-success-soft {
+    color: var(--success-ink);
+    background: var(--success-bg);
+    border-color: var(--success-border);
+}
+
+.btn-success-soft:hover {
+    color: var(--success-ink);
+    border-color: var(--success-ink);
+    background: var(--success-bg);
+}

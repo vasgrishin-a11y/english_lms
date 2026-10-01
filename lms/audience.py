@@ -1,13 +1,13 @@
 """Аудитория материалов курса: кому назначены класс, глава, тема, задание.
 
-Правило одно на всех уровнях и складывается по иерархии («объединение»):
+Правило последовательно применяется по иерархии:
 
-* назначение на любом уровне открывает всё, что внутри, назначенным группам
-  и ученикам;
-* ученик видит задание, если назначен хотя бы на одном уровне его цепочки
-  (класс → глава → тема → задание);
-* если ни на одном уровне цепочки ничего не выбрано — материал общий, его
-  видят все ученики (так вели себя задания без группы и раньше).
+* назначения родителя наследуются содержимым;
+* текущий уровень может исключить унаследованную группу или ученика, а следующий
+  уровень — назначить их снова;
+* персональное исключение отменяет в том числе доступ через унаследованную группу;
+* если назначений нет во всей цепочке, материал общий; если последнее назначение
+  исключено, ветка остаётся ограниченной и не становится случайно общей.
 
 Модуль не трогает публикацию/архив: это отдельные фильтры в
 ``Assignment.objects.visible()``; здесь — только «кому».
@@ -26,12 +26,20 @@ User = get_user_model()
 ASSIGNMENT_PREFETCH = (
     "groups",
     "assigned_students",
+    "excluded_groups",
+    "excluded_students",
     "topic__groups",
     "topic__students",
+    "topic__excluded_groups",
+    "topic__excluded_students",
     "topic__chapter__groups",
     "topic__chapter__students",
+    "topic__chapter__excluded_groups",
+    "topic__chapter__excluded_students",
     "topic__block__groups",
     "topic__block__students",
+    "topic__block__excluded_groups",
+    "topic__block__excluded_students",
 )
 
 #: Уровни цепочки: модель, путь от Assignment и имя поля учеников.
@@ -50,30 +58,55 @@ LEVEL_TITLES = {
 }
 
 
-def _restricted(model, students_field):
-    """Объекты уровня, у которых есть хоть одно назначение."""
-    return model.objects.filter(
-        Q(groups__isnull=False) | Q(**{f"{students_field}__isnull": False})
-    ).values("pk")
+def _ids(model, **filters):
+    return model.objects.filter(**filters).values("pk")
 
 
-def _granted(model, students_field, user, user_groups):
-    """Объекты уровня, где ученик назначен (через группу или лично)."""
-    return model.objects.filter(Q(groups__in=user_groups) | Q(**{students_field: user})).values(
-        "pk"
-    )
+def _level_key(path):
+    return f"{path}__in" if path else "pk__in"
 
 
 def visibility_q(user):
-    """Q для ``Assignment``: общий материал ИЛИ ученик назначен хоть на одном уровне."""
-    user_groups = user.student_groups.all() if hasattr(user, "student_groups") else []
+    """Доступ с переопределениями: нижнее исключение отменяет верхнее назначение.
+
+    Для каждого источника доступа проверяем, что ниже по цепочке нет более позднего
+    исключения. Новое назначение после исключения снова открывает доступ. Отдельное
+    исключение ученика отменяет и персональное, и групповое наследование.
+    """
+    user_group_ids = list(
+        user.student_groups.values_list("pk", flat=True) if hasattr(user, "student_groups") else []
+    )
     open_q = Q()
-    granted_q = Q()
+    allowed_q = Q(pk__in=[])
+
+    # «Общий» материал — только когда назначений нет вообще. Одни исключения не
+    # превращают опустевшую ветку обратно в материал для всех.
     for model, path, students_field in LEVELS:
-        key = f"{path}__in" if path else "pk__in"
-        open_q &= ~Q(**{key: _restricted(model, students_field)})
-        granted_q |= Q(**{key: _granted(model, students_field, user, user_groups)})
-    return open_q | granted_q
+        key = _level_key(path)
+        restricted = model.objects.filter(
+            Q(groups__isnull=False) | Q(**{f"{students_field}__isnull": False})
+        ).values("pk")
+        open_q &= ~Q(**{key: restricted})
+
+    for index, (model, path, students_field) in enumerate(LEVELS):
+        key = _level_key(path)
+        later = LEVELS[index:]
+
+        student_term = Q(**{key: _ids(model, **{students_field: user})})
+        for later_model, later_path, _later_students in later:
+            later_key = _level_key(later_path)
+            student_term &= ~Q(**{later_key: _ids(later_model, excluded_students=user)})
+        allowed_q |= student_term
+
+        for group_id in user_group_ids:
+            group_term = Q(**{key: _ids(model, groups=group_id)})
+            for later_model, later_path, _later_students in later:
+                later_key = _level_key(later_path)
+                group_term &= ~Q(**{later_key: _ids(later_model, excluded_groups=group_id)})
+                group_term &= ~Q(**{later_key: _ids(later_model, excluded_students=user)})
+            allowed_q |= group_term
+
+    return open_q | allowed_q
 
 
 def chain(obj):
@@ -88,39 +121,57 @@ def chain(obj):
     return [obj]
 
 
-def own_grants(obj):
-    """Собственные назначения объекта: группы и ученики (списки, без запросов при prefetch)."""
+def own_rules(obj):
+    """Назначения и исключения самого объекта (без родителей)."""
     students_manager = obj.assigned_students if isinstance(obj, Assignment) else obj.students
     return {
         "groups": list(obj.groups.all()),
         "students": list(students_manager.all()),
+        "excluded_groups": list(obj.excluded_groups.all()),
+        "excluded_students": list(obj.excluded_students.all()),
     }
 
 
-def accumulate(obj, parent=None):
-    """Аудитория объекта поверх аудитории родителя (``parent`` — результат этой же функции).
+def own_grants(obj):
+    """Обратная совместимость: только положительные назначения объекта."""
+    rules = own_rules(obj)
+    return {"groups": rules["groups"], "students": rules["students"]}
 
-    Возвращает словарь: ``open`` — общий материал (нигде ничего не назначено),
-    ``groups``/``students`` — объединение назначений по цепочке (без дублей),
-    ``own`` — собственные назначения объекта, ``inherited`` — унаследованные,
-    ``label`` — короткая подпись для бейджа, ``details`` — полный список
-    имён для всплывающей подсказки.
-    """
+
+def accumulate(obj, parent=None):
+    """Применить локальные назначения и затем исключения к аудитории родителя."""
     groups = {group.pk: group for group in (parent["groups"] if parent else [])}
     students = {student.pk: student for student in (parent["students"] if parent else [])}
     inherited = {"groups": list(groups.values()), "students": list(students.values())}
-    own = own_grants(obj)
-    for group in own["groups"]:
-        groups.setdefault(group.pk, group)
-    for student in own["students"]:
-        students.setdefault(student.pk, student)
+    rules = own_rules(obj)
+    for group in rules["groups"]:
+        groups[group.pk] = group
+    for student in rules["students"]:
+        students[student.pk] = student
+    # Исключения текущего уровня применяются после назначений этого же уровня:
+    # так можно назначить группу «кроме Victoria». Назначение потомка снова откроет доступ.
+    for group in rules["excluded_groups"]:
+        groups.pop(group.pk, None)
+    for student in rules["excluded_students"]:
+        students.pop(student.pk, None)
+
+    restricted = bool(parent and parent.get("restricted")) or bool(
+        rules["groups"] or rules["students"]
+    )
+    has_rules = any(rules.values())
     result = {
-        "open": not groups and not students,
+        "open": not restricted,
+        "restricted": restricted,
         "groups": list(groups.values()),
         "students": list(students.values()),
-        "own": own,
+        "own": {"groups": rules["groups"], "students": rules["students"]},
+        "excluded": {
+            "groups": rules["excluded_groups"],
+            "students": rules["excluded_students"],
+        },
         "inherited": inherited,
-        "has_own": bool(own["groups"] or own["students"]),
+        "has_own": has_rules,
+        "has_exclusions": bool(rules["excluded_groups"] or rules["excluded_students"]),
         "has_inherited": bool(inherited["groups"] or inherited["students"]),
     }
     result["label"] = label(result)
@@ -136,15 +187,35 @@ def effective(obj):
     return result
 
 
+def _effective_ids(assignment, membership):
+    """Итоговые ID учеников; ``None`` означает общий материал."""
+    allowed = set()
+    restricted = False
+    for level in chain(assignment):
+        rules = own_rules(level)
+        if rules["groups"] or rules["students"]:
+            restricted = True
+        for group in rules["groups"]:
+            allowed |= membership.get(group.pk, set())
+        allowed |= {student.pk for student in rules["students"]}
+        for group in rules["excluded_groups"]:
+            allowed -= membership.get(group.pk, set())
+        allowed -= {student.pk for student in rules["excluded_students"]}
+    return allowed if restricted else None
+
+
+def _group_membership():
+    membership = {}
+    for group_id, user_id in Group.students.through.objects.values_list("group_id", "user_id"):
+        membership.setdefault(group_id, set()).add(user_id)
+    return membership
+
+
 def expected_students(assignment):
     """Активные ученики, от которых ждём ответ: все — для общего задания, иначе аудитория."""
     students = User.objects.filter(profile__role=Profile.Role.STUDENT, is_active=True)
-    audience = effective(assignment)
-    if audience["open"]:
-        return students
-    group_ids = [group.pk for group in audience["groups"]]
-    student_ids = [student.pk for student in audience["students"]]
-    return students.filter(Q(student_groups__in=group_ids) | Q(pk__in=student_ids)).distinct()
+    ids = _effective_ids(assignment, _group_membership())
+    return students if ids is None else students.filter(pk__in=ids)
 
 
 def expected_ids_map(assignments):
@@ -153,19 +224,10 @@ def expected_ids_map(assignments):
     Состав групп читается одним запросом; задания должны быть загружены с
     ``ASSIGNMENT_PREFETCH``, иначе на каждое уйдёт до восьми запросов.
     """
-    membership = {}
-    for group_id, user_id in Group.students.through.objects.values_list("group_id", "user_id"):
-        membership.setdefault(group_id, set()).add(user_id)
+    membership = _group_membership()
     result = {}
     for assignment in assignments:
-        item = effective(assignment)
-        if item["open"]:
-            result[assignment.pk] = None
-            continue
-        ids = {student.pk for student in item["students"]}
-        for group in item["groups"]:
-            ids |= membership.get(group.pk, set())
-        result[assignment.pk] = ids
+        result[assignment.pk] = _effective_ids(assignment, membership)
     return result
 
 
@@ -180,14 +242,16 @@ def user_display_name(user):
 
 
 def details(aud):
-    """Полный список аудитории через запятую: группы, затем ученики.
-
-    Для всплывающих подсказок на бейджах — в отличие от короткого ``label``,
-    здесь каждое имя видно целиком.
-    """
+    """Полный список аудитории и локальных исключений для подсказки."""
     names = [group.name for group in aud["groups"]]
     names += [user_display_name(student) for student in aud["students"]]
-    return ", ".join(name for name in names if name)
+    text = ", ".join(name for name in names if name) or ("никому" if not aud["open"] else "")
+    excluded = aud.get("excluded") or {}
+    excluded_names = [group.name for group in excluded.get("groups", [])]
+    excluded_names += [user_display_name(student) for student in excluded.get("students", [])]
+    if excluded_names:
+        text += "; исключены: " + ", ".join(excluded_names)
+    return text
 
 
 def label(audience, *, max_groups=2):
@@ -196,6 +260,8 @@ def label(audience, *, max_groups=2):
         return "Все ученики"
     parts = []
     groups = audience["groups"]
+    if not groups and not audience["students"]:
+        return "Никому"
     if groups:
         names = [group.name for group in groups[:max_groups]]
         rest = len(groups) - len(names)

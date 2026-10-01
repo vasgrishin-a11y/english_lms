@@ -6,10 +6,10 @@
     {% if inherited_audience and not inherited_audience.open %}
         <p class="callout callout-info audience-note">
             {% icon "info" "icon icon-sm" %}
-            <span>Уже назначено выше по иерархии: <strong>{% for group in inherited_audience.groups %}{% if not forloop.first %}, {% endif %}{{ group.name }}{% endfor %}{% for student in inherited_audience.students %}{% if not forloop.first or inherited_audience.groups %}, {% endif %}{{ student|display_name }}{% endfor %}</strong> — они видят всё внутри. Здесь можно добавить ещё группы или учеников: назначения складываются.</span>
+            <span>Уже назначено выше по иерархии: <strong>{% for group in inherited_audience.groups %}{% if not forloop.first %}, {% endif %}{{ group.name }}{% endfor %}{% for student in inherited_audience.students %}{% if not forloop.first or inherited_audience.groups %}, {% endif %}{{ student|display_name }}{% endfor %}</strong>. Ниже можно исключить получателей или добавить их снова: решение нижнего уровня имеет приоритет.</span>
         </p>
     {% else %}
-        <p class="help-text audience-note">Пусто — как у родителя. Если ни на одном уровне ничего не выбрано, материал видят все ученики. Как только выбраны группы или ученики, доступ получают только они (плюс назначенные выше или ниже по иерархии).</p>
+        <p class="help-text audience-note">Пусто — как у родителя. Если назначений нет во всей цепочке, материал видят все ученики. Добавления и исключения действуют на всё содержимое ниже.</p>
     {% endif %}
     <div class="form-grid">
         <div class="form-field form-field-wide{% if groups_field.errors %} field-error{% endif %}">
@@ -36,4 +36,29 @@
             {{ students_field.errors }}
         </div>
     </div>
+    {% if excluded_groups_field.field.queryset or excluded_students_field.field.queryset %}
+        <div class="audience-exclusion-box">
+            <p class="small strong mb-0">Исключить на этом уровне</p>
+            <p class="tiny muted">Отмеченные группы и ученики потеряют унаследованный доступ здесь и ниже. Их можно назначить снова на следующем уровне.</p>
+            <div class="form-grid">
+                {% if excluded_groups_field.field.queryset %}
+                    <div class="form-field form-field-wide{% if excluded_groups_field.errors %} field-error{% endif %}">
+                        <label>{{ excluded_groups_field.label }}</label>
+                        {{ excluded_groups_field }}
+                        {{ excluded_groups_field.errors }}
+                    </div>
+                {% endif %}
+                {% if excluded_students_field.field.queryset %}
+                    <div class="form-field form-field-wide{% if excluded_students_field.errors %} field-error{% endif %}">
+                        <label>{{ excluded_students_field.label }}</label>
+                        <details class="audience-details"{% if excluded_students_field.value %} open{% endif %}>
+                            <summary class="tiny">Выбрать учеников для исключения{% if excluded_students_field.value %} · выбрано {{ excluded_students_field.value|length }}{% endif %}</summary>
+                            {{ excluded_students_field }}
+                        </details>
+                        {{ excluded_students_field.errors }}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
 </fieldset>

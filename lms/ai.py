@@ -35,6 +35,7 @@ Office разбираются стандартным ``zipfile``. Это важ�
 from __future__ import annotations
 
 import base64
+import copy
 import json
 import logging
 import re
@@ -973,8 +974,108 @@ TARGET_PROMPTS = {
 }
 
 
-def build_prompt(text, *, prompt="", target="mixed", filename="", kind="text"):
-    parts = [AI_AUTHORING_CONTEXT, TARGET_PROMPTS.get(target, TARGET_PROMPTS["mixed"])]
+def structure_instruction(structure):
+    """Обязательное ограничение структуры для промпта модели."""
+    structure = structure or {}
+    labels = {"block": "Класс", "chapter": "Глава", "topic": "Тема"}
+    lines = []
+    for key in ("block", "chapter", "topic"):
+        level = structure.get(key) or {"mode": "auto"}
+        if level.get("mode") == "auto":
+            value = "автоматически: придумай подходящее название"
+        else:
+            value = f"строго «{level.get('name', '').strip()}»"
+            if level.get("mode") == "existing":
+                value += " (существующий элемент LMS)"
+            else:
+                value += " (будет создан новый элемент)"
+        lines.append(f"- {labels[key]}: {value}.")
+    return (
+        "ОБЯЗАТЕЛЬНАЯ СТРУКТУРА, выбранная преподавателем до генерации:\n"
+        + "\n".join(lines)
+        + "\nСначала учти эту структуру и только затем создавай содержание. "
+        "Не переименовывай явно выбранные элементы и не создавай параллельную ветку. "
+        "Для автоматических уровней выбери названия по материалу."
+    )
+
+
+def apply_structure(material, structure):
+    """Закрепить ответ модели за выбранной цепочкой, не полагаясь на послушность ИИ."""
+    structure = structure or {}
+    result = copy.deepcopy(material)
+    blocks = result.get("blocks") or []
+    if not blocks:
+        return result
+
+    block_level = structure.get("block") or {"mode": "auto"}
+    chapter_level = structure.get("chapter") or {"mode": "auto"}
+    topic_level = structure.get("topic") or {"mode": "auto"}
+    block_fixed = block_level.get("mode") != "auto"
+    chapter_fixed = chapter_level.get("mode") != "auto"
+    topic_fixed = topic_level.get("mode") != "auto"
+
+    # Один явно заданный нижний уровень означает одну ветку. Все созданные ИИ
+    # задания объединяем в неё, чтобы ответ модели не мог обойти выбор учителя.
+    if block_fixed or chapter_fixed or topic_fixed:
+        first = blocks[0]
+        merged = copy.deepcopy(first)
+        merged["chapters"] = [copy.deepcopy(ch) for b in blocks for ch in b.get("chapters", [])]
+        merged["topics"] = [copy.deepcopy(t) for b in blocks for t in b.get("topics", [])]
+        if block_fixed:
+            merged["name"] = block_level["name"]
+        blocks = [merged]
+        result["blocks"] = blocks
+
+    block = blocks[0]
+    if chapter_fixed or topic_fixed:
+        chapters = block.get("chapters", [])
+        loose_topics = block.get("topics", [])
+        all_topics = [copy.deepcopy(t) for ch in chapters for t in ch.get("topics", [])]
+        all_topics.extend(copy.deepcopy(loose_topics))
+        first_chapter = chapters[0] if chapters else {}
+        chapter = {
+            "title": chapter_level.get("name")
+            if chapter_fixed
+            else first_chapter.get("title", "Общее"),
+            "description": first_chapter.get("description", ""),
+            "topics": all_topics,
+        }
+        block["chapters"] = [chapter]
+        block["topics"] = []
+
+    if topic_fixed:
+        chapter = block["chapters"][0]
+        topics = chapter.get("topics", [])
+        first_topic = topics[0] if topics else {}
+        chapter["topics"] = [
+            {
+                "title": topic_level["name"],
+                "description": first_topic.get("description", ""),
+                "assignments": [
+                    copy.deepcopy(item) for topic in topics for item in topic.get("assignments", [])
+                ],
+                "cards": [
+                    copy.deepcopy(item) for topic in topics for item in topic.get("cards", [])
+                ],
+            }
+        ]
+    return result
+
+
+def structure_label(structure):
+    names = []
+    for key in ("block", "chapter", "topic"):
+        level = (structure or {}).get(key) or {}
+        names.append(level.get("name") or "создаст ИИ")
+    return " → ".join(names)
+
+
+def build_prompt(text, *, prompt="", target="mixed", filename="", kind="text", structure=None):
+    parts = [
+        AI_AUTHORING_CONTEXT,
+        structure_instruction(structure),
+        TARGET_PROMPTS.get(target, TARGET_PROMPTS["mixed"]),
+    ]
     if prompt.strip():
         parts.append(f"Пожелания преподавателя: {prompt.strip()}")
     if filename:
@@ -1003,12 +1104,13 @@ def build_prompt(text, *, prompt="", target="mixed", filename="", kind="text"):
     return "\n\n".join(parts)
 
 
-def build_material_revision_prompt(material, instruction):
+def build_material_revision_prompt(material, instruction, structure=None):
     """Промпт правки текущего предпросмотра до импорта в курс."""
     current = json.dumps(material, ensure_ascii=False, indent=1)
     return "\n\n".join(
         [
             AI_AUTHORING_CONTEXT,
+            structure_instruction(structure),
             "Ты редактируешь текущий предпросмотр материала ИИ до его импорта в LMS. "
             "Верни полную новую версию материала в той же структуре: не описывай отличия "
             "и не удаляй элементы, которые не затронуты пожеланием преподавателя.",
@@ -1446,6 +1548,7 @@ def build_material(
     target="mixed",
     upload=None,
     filename="",
+    structure=None,
 ):
     """Собрать материал: онлайн через ИИ, при неудаче — офлайн-эвристики.
 
@@ -1475,7 +1578,14 @@ def build_material(
     if not text and not blob and not prompt.strip():
         raise AiError("Приложите файл, вставьте текст или опишите, что нужно собрать.")
 
-    meta = {"mode": mode, "kind": kind, "filename": filename, "notes": notes}
+    meta = {
+        "mode": mode,
+        "kind": kind,
+        "filename": filename,
+        "notes": notes,
+        "structure": structure or {},
+        "structure_label": structure_label(structure),
+    }
     if mode == "online":
         spec = provider_spec()
         meta["provider"] = spec["key"]
@@ -1487,11 +1597,19 @@ def build_material(
             try:
                 payload = _provider_material(
                     spec,
-                    build_prompt(text, prompt=prompt, target=target, filename=filename, kind=kind),
+                    build_prompt(
+                        text,
+                        prompt=prompt,
+                        target=target,
+                        filename=filename,
+                        kind=kind,
+                        structure=structure,
+                    ),
                     filename=filename if attachable else "",
                     blob=blob if attachable else b"",
                 )
                 material = normalise(payload, source=filename or "Материал ИИ-помощника")
+                material = apply_structure(material, structure)
                 meta["result"] = "online"
                 return material, meta
             except AiError as exc:
@@ -1518,11 +1636,12 @@ def build_material(
         parse_text(text, source=(filename.rsplit(".", 1)[0] if filename else "") or "Материал"),
         source=filename or "Материал ИИ-помощника",
     )
+    material = apply_structure(material, structure)
     meta.setdefault("result", "offline")
     return material, meta
 
 
-def revise_material(material, instruction):
+def revise_material(material, instruction, *, structure=None):
     """Обновить предпросмотр материала, не создавая записи в базе данных."""
     mode = ai_mode()
     if mode == "off":
@@ -1539,8 +1658,11 @@ def revise_material(material, instruction):
         raise AiError("Текущая версия материала не найдена — соберите материал заново.")
 
     spec = provider_spec()
-    payload = _provider_material(spec, build_material_revision_prompt(material, instruction))
+    payload = _provider_material(
+        spec, build_material_revision_prompt(material, instruction, structure=structure)
+    )
     revised = normalise(payload, source=material.get("title", "Материал ИИ-помощника"))
+    revised = apply_structure(revised, structure)
     meta = {
         "mode": mode,
         "provider": spec["key"],
@@ -1565,15 +1687,52 @@ def _unique_slug(model, base, **filters):
 
 
 @transaction.atomic
-def import_material(material, *, target_topic=None):
+def import_material(material, *, target_topic=None, structure=None):
     """Создать материалы черновиками. Ничего не публикуется и не меняется.
 
-    ``target_topic`` — существующая тема: тогда новые задания и карточки
-    добавляются в неё, а структура блоков/тем/глав из материала игнорируется.
-    Иначе создаётся иерархия Класс → Глава → Тема → Задание.
+    ``structure`` закрепляет выбранные до генерации класс, главу и тему.
+    Существующие элементы разрешаются по идентификатору и повторно проверяются;
+    новые создаются с указанным названием, автоматические берутся из материала.
+    ``target_topic`` сохранён для внутренних вызовов обратной совместимости.
     Темы без главы попадают в главу «Общее» блока (логика Topic.save).
     """
     from .models import Chapter
+
+    structure = structure or {}
+    selected_block = None
+    selected_chapter = None
+    block_level = structure.get("block") or {"mode": "auto"}
+    chapter_level = structure.get("chapter") or {"mode": "auto"}
+    topic_level = structure.get("topic") or {"mode": "auto"}
+
+    if block_level.get("mode") == "existing":
+        selected_block = Block.objects.filter(pk=block_level.get("id")).first()
+        if selected_block is None:
+            raise AiError(
+                "Выбранный класс был удалён. Соберите материал заново с новой структурой."
+            )
+    if chapter_level.get("mode") == "existing":
+        selected_chapter = (
+            Chapter.objects.select_related("block").filter(pk=chapter_level.get("id")).first()
+        )
+        if selected_chapter is None:
+            raise AiError("Выбранная глава была удалена. Соберите материал заново.")
+        if selected_block is not None and selected_chapter.block_id != selected_block.pk:
+            raise AiError("Выбранная глава больше не относится к выбранному классу.")
+        selected_block = selected_chapter.block
+    if topic_level.get("mode") == "existing":
+        selected_topic = (
+            Topic.objects.select_related("block", "chapter")
+            .filter(pk=topic_level.get("id"))
+            .first()
+        )
+        if selected_topic is None:
+            raise AiError("Выбранная тема была удалена. Соберите материал заново.")
+        if selected_chapter is not None and selected_topic.chapter_id != selected_chapter.pk:
+            raise AiError("Выбранная тема больше не относится к выбранной главе.")
+        if selected_block is not None and selected_topic.block_id != selected_block.pk:
+            raise AiError("Выбранная тема больше не относится к выбранному классу.")
+        target_topic = selected_topic
 
     ensure_skill_catalog()
     created = {
@@ -1596,37 +1755,58 @@ def import_material(material, *, target_topic=None):
                 created["cards"] += _import_cards(topic, topic_data, created)
             continue
 
-        block = Block.objects.filter(name=block_data["name"]).first()
-        if block is None:
-            block = Block.objects.create(
-                slug=_unique_slug(Block, block_data["name"]),
-                name=block_data["name"],
-                description=block_data["description"],
-                cefr_level=block_data["cefr_level"],
-                order=Block.objects.count(),
+        if selected_block is not None:
+            block = selected_block
+        else:
+            block_name = (
+                block_level.get("name", "").strip()
+                if block_level.get("mode") == "new"
+                else block_data["name"]
             )
-            created["blocks"] += 1
+            block = Block.objects.filter(name__iexact=block_name).first()
+            if block is None:
+                block = Block.objects.create(
+                    slug=_unique_slug(Block, block_name),
+                    name=block_name,
+                    description=block_data["description"],
+                    cefr_level=block_data["cefr_level"],
+                    order=Block.objects.count(),
+                )
+                created["blocks"] += 1
 
         # Главы (новый формат)
         for chapter_data in block_data.get("chapters", []) or []:
-            chapter = block.chapters.filter(title=chapter_data["title"]).first()
-            if chapter is None:
-                chapter = Chapter.objects.create(
-                    block=block,
-                    slug=_unique_slug(Chapter, chapter_data["title"], block=block),
-                    title=chapter_data["title"][:200],
-                    description=chapter_data.get("description", "")[:4000],
-                    order=block.chapters.count(),
+            if selected_chapter is not None:
+                chapter = selected_chapter
+            else:
+                chapter_title = (
+                    chapter_level.get("name", "").strip()
+                    if chapter_level.get("mode") == "new"
+                    else chapter_data["title"]
                 )
-                created["chapters"] += 1
+                chapter = block.chapters.filter(title__iexact=chapter_title).first()
+                if chapter is None:
+                    chapter = Chapter.objects.create(
+                        block=block,
+                        slug=_unique_slug(Chapter, chapter_title, block=block),
+                        title=chapter_title[:200],
+                        description=chapter_data.get("description", "")[:4000],
+                        order=block.chapters.count(),
+                    )
+                    created["chapters"] += 1
             for topic_data in chapter_data.get("topics", []) or []:
-                topic = block.topics.filter(title=topic_data["title"], chapter=chapter).first()
+                topic_title = (
+                    topic_level.get("name", "").strip()
+                    if topic_level.get("mode") == "new"
+                    else topic_data["title"]
+                )
+                topic = block.topics.filter(title__iexact=topic_title, chapter=chapter).first()
                 if topic is None:
                     topic = Topic.objects.create(
                         block=block,
                         chapter=chapter,
-                        slug=_unique_slug(Topic, topic_data["title"], block=block),
-                        title=topic_data["title"],
+                        slug=_unique_slug(Topic, topic_title, block=block),
+                        title=topic_title,
                         description=topic_data["description"],
                         order=chapter.topics.count(),
                     )

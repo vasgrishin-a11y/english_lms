@@ -606,6 +606,8 @@ def _clone_assignment_full(source, target_topic, order=None):
     copy.skills.set(source.skills.all())
     copy.groups.set(source.groups.all())
     copy.assigned_students.set(source.assigned_students.all())
+    copy.excluded_groups.set(source.excluded_groups.all())
+    copy.excluded_students.set(source.excluded_students.all())
     # attachments
     for att in source.attachments.order_by("order", "pk"):
         AssignmentAttachment.objects.create(assignment=copy, file=att.file, order=att.order)
@@ -672,6 +674,8 @@ def _clone_topic_to_block(source_topic, target_block, before=None, target_chapte
         )
         new_topic.groups.set(source_topic.groups.all())
         new_topic.students.set(source_topic.students.all())
+        new_topic.excluded_groups.set(source_topic.excluded_groups.all())
+        new_topic.excluded_students.set(source_topic.excluded_students.all())
         for assignment in source_topic.assignments.order_by("order", "pk"):
             _clone_assignment_full(assignment, new_topic)
         if before is not None and before.chapter_id == target_chapter.pk:
@@ -1088,12 +1092,21 @@ def chapter_form(request, pk=None):
     initial = {}
     if request.GET.get("block", "").isdigit():
         initial["block"] = request.GET["block"]
-    form = ChapterForm(request.POST or None, instance=chapter, initial=initial or None)
+    parent = chapter.block if chapter else _block_from_query(request)
+    posted_block = request.POST.get("block", "")
+    if posted_block.isdigit():
+        parent = Block.objects.filter(pk=int(posted_block)).first()
+    inherited_audience = audience.describe(parent) if parent else None
+    form = ChapterForm(
+        request.POST or None,
+        instance=chapter,
+        initial=initial or None,
+        inherited_audience=inherited_audience,
+    )
     if request.method == "POST" and form.is_valid():
         instance = form.save()
         messages.success(request, f"Глава сохранена: {instance.title}")
         return redirect(reverse("teacher_curriculum") + f"#block-{instance.block_id}")
-    parent = chapter.block if chapter else _block_from_query(request)
     return render(
         request,
         "lms/teacher_chapter_form.html",
@@ -1101,7 +1114,7 @@ def chapter_form(request, pk=None):
             "form": form,
             "chapter": chapter,
             "blocks": Block.objects.order_by("order", "name"),
-            "inherited_audience": audience.describe(parent) if parent else None,
+            "inherited_audience": inherited_audience,
             "workspace": "curriculum",
         },
     )
@@ -1183,19 +1196,23 @@ def topic_form(request, pk=None):
             initial["block"] = chapter.block_id
     if request.GET.get("block", "").isdigit():
         initial["block"] = request.GET["block"]
-    form = TopicForm(request.POST or None, instance=topic, initial=initial or None)
+    parent = topic.chapter if topic else None
+    parent_id = request.POST.get("chapter") or request.GET.get("chapter") or ""
+    if str(parent_id).isdigit():
+        parent = Chapter.objects.filter(pk=int(parent_id)).first()
+    parent = parent or _block_from_query(request)
+    inherited_audience = audience.describe(parent) if parent else None
+    form = TopicForm(
+        request.POST or None,
+        instance=topic,
+        initial=initial or None,
+        inherited_audience=inherited_audience,
+    )
     if request.method == "POST" and form.is_valid():
         instance = form.save()
         messages.success(request, f"Тема сохранена: {instance.title}")
         return redirect(reverse("teacher_curriculum") + f"#block-{instance.block_id}")
     groups = topic_suggestion_groups()
-    if topic is not None:
-        parent = topic.chapter
-    else:
-        parent = None
-        if request.GET.get("chapter", "").isdigit():
-            parent = Chapter.objects.filter(pk=int(request.GET["chapter"])).first()
-        parent = parent or _block_from_query(request)
     return render(
         request,
         "lms/teacher_topic_form.html",
@@ -1205,7 +1222,7 @@ def topic_form(request, pk=None):
             "blocks": Block.objects.order_by("order", "name"),
             "suggestion_groups": groups,
             "suggestion_payload": _flat_presets(groups),
-            "inherited_audience": audience.describe(parent) if parent else None,
+            "inherited_audience": inherited_audience,
             "workspace": "curriculum",
         },
     )
@@ -1342,8 +1359,17 @@ def assignment_form(request, pk=None):
         initial["skills"] = [
             skill.pk for skill in skills_for_type(requested_type or Assignment.Type.TEXT)
         ]
+    parent_topic = assignment.topic if assignment else None
+    parent_topic_id = request.POST.get("topic") or request.GET.get("topic") or ""
+    if str(parent_topic_id).isdigit():
+        parent_topic = Topic.objects.filter(pk=int(parent_topic_id)).first()
+    inherited_audience = audience.describe(parent_topic) if parent_topic else None
     form = AssignmentForm(
-        request.POST or None, request.FILES or None, instance=assignment, initial=initial or None
+        request.POST or None,
+        request.FILES or None,
+        instance=assignment,
+        initial=initial or None,
+        inherited_audience=inherited_audience,
     )
     if request.method == "POST" and form.is_valid():
         is_new = assignment is None
@@ -1415,7 +1441,7 @@ def assignment_form(request, pk=None):
             "skill_ids": skill_payload["ids"],
             "skills_by_type": skill_payload["by_type"],
             "progress": _submission_progress(assignment) if assignment else None,
-            "inherited_audience": audience.describe(assignment.topic) if assignment else None,
+            "inherited_audience": inherited_audience,
             "questions": question_items,
             "question_form": question_form,
             "total_points": sum(item.points for item in question_items),

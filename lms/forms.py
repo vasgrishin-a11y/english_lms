@@ -304,8 +304,8 @@ class SluglessModelForm(forms.ModelForm):
 class AudienceFormMixin(forms.Form):
     """Поля «Кому доступно» — одинаковые у класса, главы, темы и задания.
 
-    Пустые поля значат «как у родителя»: назначения по иерархии складываются,
-    а если нигде ничего не выбрано — материал видят все ученики.
+    Пустые поля значат «как у родителя»; отдельные поля исключений позволяют
+    снять унаследованный доступ. Если назначений нет во всей цепочке, материал общий.
     """
 
     groups = forms.ModelMultipleChoiceField(
@@ -322,8 +322,21 @@ class AudienceFormMixin(forms.Form):
         help_text="Открыть отдельным ученикам помимо групп.",
         widget=forms.CheckboxSelectMultiple(attrs={"class": "audience-list"}),
     )
+    excluded_groups = forms.ModelMultipleChoiceField(
+        queryset=Group.objects.none(),
+        required=False,
+        label="Убрать унаследованные группы",
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "audience-list audience-exclusions"}),
+    )
+    excluded_students = forms.ModelMultipleChoiceField(
+        queryset=User.objects.none(),
+        required=False,
+        label="Убрать унаследованных учеников",
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "audience-list audience-exclusions"}),
+    )
 
     def __init__(self, *args, **kwargs):
+        inherited_audience = kwargs.pop("inherited_audience", None)
         super().__init__(*args, **kwargs)
         self.fields["groups"].queryset = Group.objects.filter(is_active=True).order_by("name")
         self.fields["students"].queryset = User.objects.filter(
@@ -332,6 +345,29 @@ class AudienceFormMixin(forms.Form):
         self.fields["students"].label_from_instance = lambda user: (
             user.get_full_name() or user.username
         )
+        inherited_group_ids = [group.pk for group in (inherited_audience or {}).get("groups", [])]
+        inherited_student_ids = [
+            student.pk for student in (inherited_audience or {}).get("students", [])
+        ]
+        if inherited_group_ids:
+            inherited_student_ids += list(
+                User.objects.filter(student_groups__pk__in=inherited_group_ids).values_list(
+                    "pk", flat=True
+                )
+            )
+        instance = getattr(self, "instance", None)
+        if instance and instance.pk:
+            inherited_group_ids += list(instance.excluded_groups.values_list("pk", flat=True))
+            inherited_student_ids += list(instance.excluded_students.values_list("pk", flat=True))
+        self.fields["excluded_groups"].queryset = Group.objects.filter(
+            pk__in=set(inherited_group_ids), is_active=True
+        ).order_by("name")
+        self.fields["excluded_students"].queryset = User.objects.filter(
+            pk__in=set(inherited_student_ids), profile__role=Profile.Role.STUDENT, is_active=True
+        ).order_by("last_name", "first_name", "username")
+        self.fields["excluded_students"].label_from_instance = self.fields[
+            "students"
+        ].label_from_instance
 
 
 class BlockForm(AudienceFormMixin, SluglessModelForm):
@@ -339,7 +375,17 @@ class BlockForm(AudienceFormMixin, SluglessModelForm):
 
     class Meta:
         model = Block
-        fields = ["name", "cefr_level", "description", "order", "is_active", "groups", "students"]
+        fields = [
+            "name",
+            "cefr_level",
+            "description",
+            "order",
+            "is_active",
+            "groups",
+            "students",
+            "excluded_groups",
+            "excluded_students",
+        ]
         widgets = {
             "name": forms.TextInput(attrs={"placeholder": "Например: A2 — Базовый курс"}),
             "description": forms.Textarea(attrs={"rows": 3}),
@@ -353,7 +399,17 @@ class ChapterForm(AudienceFormMixin, SluglessModelForm):
 
     class Meta:
         model = Chapter
-        fields = ["block", "title", "description", "order", "is_active", "groups", "students"]
+        fields = [
+            "block",
+            "title",
+            "description",
+            "order",
+            "is_active",
+            "groups",
+            "students",
+            "excluded_groups",
+            "excluded_students",
+        ]
         labels = {"block": "Класс"}
         widgets = {
             "title": forms.TextInput(attrs={"placeholder": "Например: Хобби"}),
@@ -395,6 +451,8 @@ class TopicForm(AudienceFormMixin, SluglessModelForm):
             "is_active",
             "groups",
             "students",
+            "excluded_groups",
+            "excluded_students",
         ]
         labels = {"block": "Класс", "chapter": "Глава"}
         widgets = {
@@ -565,6 +623,18 @@ class AssignmentForm(forms.ModelForm):
         help_text="Открыть задание отдельным ученикам помимо групп",
         widget=forms.CheckboxSelectMultiple(attrs={"class": "audience-list"}),
     )
+    excluded_groups = forms.ModelMultipleChoiceField(
+        queryset=Group.objects.none(),
+        required=False,
+        label="Убрать унаследованные группы",
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "audience-list audience-exclusions"}),
+    )
+    excluded_students = forms.ModelMultipleChoiceField(
+        queryset=User.objects.none(),
+        required=False,
+        label="Убрать унаследованных учеников",
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "audience-list audience-exclusions"}),
+    )
     new_attachments = MultipleFileField(
         required=False,
         label="Дополнительные файлы",
@@ -583,6 +653,8 @@ class AssignmentForm(forms.ModelForm):
             "topic",
             "groups",
             "assigned_students",
+            "excluded_groups",
+            "excluded_students",
             "title",
             "description",
             "assignment_type",
@@ -631,6 +703,7 @@ class AssignmentForm(forms.ModelForm):
         return value
 
     def __init__(self, *args, **kwargs):
+        inherited_audience = kwargs.pop("inherited_audience", None)
         super().__init__(*args, **kwargs)
         self.fields["max_tries"].widget.attrs.update({"min": 1, "max": 5})
         self.fields["max_tries"].required = False
@@ -673,6 +746,30 @@ class AssignmentForm(forms.ModelForm):
         self.fields["assigned_students"].label_from_instance = lambda user: (
             user.get_full_name() or user.username
         )
+        inherited_group_ids = [group.pk for group in (inherited_audience or {}).get("groups", [])]
+        inherited_student_ids = [
+            student.pk for student in (inherited_audience or {}).get("students", [])
+        ]
+        if inherited_group_ids:
+            inherited_student_ids += list(
+                User.objects.filter(student_groups__pk__in=inherited_group_ids).values_list(
+                    "pk", flat=True
+                )
+            )
+        if self.instance and self.instance.pk:
+            inherited_group_ids += list(self.instance.excluded_groups.values_list("pk", flat=True))
+            inherited_student_ids += list(
+                self.instance.excluded_students.values_list("pk", flat=True)
+            )
+        self.fields["excluded_groups"].queryset = Group.objects.filter(
+            pk__in=set(inherited_group_ids), is_active=True
+        ).order_by("name")
+        self.fields["excluded_students"].queryset = User.objects.filter(
+            pk__in=set(inherited_student_ids), profile__role=Profile.Role.STUDENT, is_active=True
+        ).order_by("last_name", "first_name", "username")
+        self.fields["excluded_students"].label_from_instance = self.fields[
+            "assigned_students"
+        ].label_from_instance
 
         # Материалы можно прикрепить к заданию любого типа
         max_mb = settings.LMS_MAX_FILE_BYTES // (1024 * 1024)
@@ -1351,29 +1448,101 @@ class AIMaterialForm(forms.Form):
             )
         ),
     )
-    target_topic = forms.ModelChoiceField(
+    structure_confirmed = forms.BooleanField(
+        required=True,
+        label="Структура выбрана",
+        error_messages={"required": "Подтвердите структуру перед созданием материала."},
+        widget=forms.CheckboxInput(attrs={"data-structure-confirmed": "1"}),
+    )
+    structure_block = forms.ModelChoiceField(
+        queryset=Block.objects.none(),
+        required=False,
+        label="Класс",
+        empty_label="Автоматически — создаст ИИ",
+        widget=forms.Select(attrs={"class": "form-select", "data-structure-select": "block"}),
+    )
+    new_block_name = forms.CharField(
+        required=False,
+        max_length=150,
+        label="Новый класс",
+        widget=forms.TextInput(
+            attrs={
+                "placeholder": "Или введите название нового класса",
+                "data-structure-new": "block",
+            }
+        ),
+    )
+    structure_chapter = forms.ModelChoiceField(
+        queryset=Chapter.objects.none(),
+        required=False,
+        label="Глава",
+        empty_label="Автоматически — создаст ИИ",
+        widget=forms.Select(attrs={"class": "form-select", "data-structure-select": "chapter"}),
+    )
+    new_chapter_name = forms.CharField(
+        required=False,
+        max_length=200,
+        label="Новая глава",
+        widget=forms.TextInput(
+            attrs={
+                "placeholder": "Или введите название новой главы",
+                "data-structure-new": "chapter",
+            }
+        ),
+    )
+    structure_topic = forms.ModelChoiceField(
         queryset=Topic.objects.none(),
         required=False,
-        label="Добавить в существующую тему",
-        empty_label="Не выбрано — создать всю структуру",
-        help_text=(
-            "Для варианта «Задание» выберите тему. Если тему не выбрать, "
-            "ИИ соберёт всю структуру курса."
+        label="Тема",
+        empty_label="Автоматически — создаст ИИ",
+        widget=forms.Select(attrs={"class": "form-select", "data-structure-select": "topic"}),
+    )
+    new_topic_name = forms.CharField(
+        required=False,
+        max_length=200,
+        label="Новая тема",
+        widget=forms.TextInput(
+            attrs={"placeholder": "Или введите название новой темы", "data-structure-new": "topic"}
         ),
-        widget=forms.Select(attrs={"class": "form-select"}),
     )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["target_topic"].queryset = (
+        active_blocks = Block.objects.filter(is_active=True).order_by("order", "name")
+        active_chapters = (
+            Chapter.objects.select_related("block")
+            .filter(is_active=True, block__is_active=True)
+            .order_by("block__order", "block__name", "order", "title")
+        )
+        active_topics = (
             Topic.objects.select_related("block", "chapter")
             .filter(is_active=True, chapter__is_active=True, block__is_active=True)
             .order_by("block__order", "block__name", "chapter__order", "order", "title")
         )
-        self.fields["target_topic"].label_from_instance = lambda obj: (
+        self.fields["structure_block"].queryset = active_blocks
+        self.fields["structure_chapter"].queryset = active_chapters
+        self.fields["structure_topic"].queryset = active_topics
+        self.fields["structure_chapter"].label_from_instance = lambda obj: (
+            f"[{obj.block.name}] {obj.title}"
+        )
+        self.fields["structure_topic"].label_from_instance = lambda obj: (
             f"[{obj.block.name} → {obj.chapter.title}] {obj.title}"
         )
-        self.order_fields(["target", "target_topic", "prompt", "text", "upload"])
+        self.order_fields(
+            [
+                "structure_confirmed",
+                "structure_block",
+                "new_block_name",
+                "structure_chapter",
+                "new_chapter_name",
+                "structure_topic",
+                "new_topic_name",
+                "target",
+                "prompt",
+                "text",
+                "upload",
+            ]
+        )
 
     def clean_upload(self):
         upload = self.cleaned_data.get("upload")
@@ -1396,17 +1565,51 @@ class AIMaterialForm(forms.Form):
 
     def clean(self):
         cleaned = super().clean()
-        target = cleaned.get("target")
-        target_topic = cleaned.get("target_topic")
+        block = cleaned.get("structure_block")
+        chapter = cleaned.get("structure_chapter")
+        topic = cleaned.get("structure_topic")
+        new_block = (cleaned.get("new_block_name") or "").strip()
+        new_chapter = (cleaned.get("new_chapter_name") or "").strip()
+        new_topic = (cleaned.get("new_topic_name") or "").strip()
+        cleaned.update(
+            new_block_name=new_block,
+            new_chapter_name=new_chapter,
+            new_topic_name=new_topic,
+        )
 
-        # Одно задание можно добавить только в уже существующую тему. Без темы
-        # сохраняем материал как полную структуру, чтобы не создавать «висячее»
-        # задание вне класса, главы и темы.
-        if target == "assignment" and target_topic is None:
-            cleaned["target"] = "mixed"
-        elif target == "mixed":
-            # Выбранная тема относится только к варианту «Задание».
-            cleaned["target_topic"] = None
+        for selected, new_name, new_field, label in (
+            (block, new_block, "new_block_name", "класс"),
+            (chapter, new_chapter, "new_chapter_name", "главу"),
+            (topic, new_topic, "new_topic_name", "тему"),
+        ):
+            if selected is not None and new_name:
+                self.add_error(
+                    new_field,
+                    f"Выберите существующий {label} или создайте новый — не оба варианта сразу.",
+                )
+
+        # Выбор нижнего уровня однозначно задаёт родителей. Несовместимые значения
+        # отклоняем на сервере, даже если JavaScript был отключён или обойдён.
+        if topic is not None:
+            if chapter is not None and topic.chapter_id != chapter.pk:
+                self.add_error("structure_topic", "Тема не относится к выбранной главе.")
+            if block is not None and topic.block_id != block.pk:
+                self.add_error("structure_topic", "Тема не относится к выбранному классу.")
+            if new_block or new_chapter:
+                self.add_error(
+                    "structure_topic",
+                    "Существующую тему нельзя поместить в новый класс или новую главу.",
+                )
+            cleaned["structure_chapter"] = topic.chapter
+            cleaned["structure_block"] = topic.block
+        elif chapter is not None:
+            if block is not None and chapter.block_id != block.pk:
+                self.add_error("structure_chapter", "Глава не относится к выбранному классу.")
+            if new_block:
+                self.add_error(
+                    "structure_chapter", "Существующую главу нельзя поместить в новый класс."
+                )
+            cleaned["structure_block"] = chapter.block
 
         has_input = any(
             (
@@ -1420,3 +1623,36 @@ class AIMaterialForm(forms.Form):
                 "Приложите файл, вставьте текст или опишите задачу словами."
             )
         return cleaned
+
+    def structure(self):
+        """Сериализуемая и уже проверенная привязка Класс → Глава → Тема."""
+        if not self.is_valid():
+            raise ValueError("Структура доступна только для корректной формы")
+
+        def level(selected_key, new_key):
+            selected = self.cleaned_data.get(selected_key)
+            new_name = self.cleaned_data.get(new_key, "")
+            if selected is not None:
+                return {
+                    "mode": "existing",
+                    "id": selected.pk,
+                    "name": str(selected).split(": ")[-1],
+                }
+            if new_name:
+                return {"mode": "new", "id": None, "name": new_name}
+            return {"mode": "auto", "id": None, "name": ""}
+
+        structure = {
+            "confirmed": True,
+            "block": level("structure_block", "new_block_name"),
+            "chapter": level("structure_chapter", "new_chapter_name"),
+            "topic": level("structure_topic", "new_topic_name"),
+        }
+        # __str__ темы и главы включает родителей, поэтому берём реальные поля.
+        if self.cleaned_data.get("structure_block") is not None:
+            structure["block"]["name"] = self.cleaned_data["structure_block"].name
+        if self.cleaned_data.get("structure_chapter") is not None:
+            structure["chapter"]["name"] = self.cleaned_data["structure_chapter"].title
+        if self.cleaned_data.get("structure_topic") is not None:
+            structure["topic"]["name"] = self.cleaned_data["structure_topic"].title
+        return structure

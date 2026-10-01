@@ -19,7 +19,7 @@
             <form method="post" novalidate data-preset-form>
                 {% csrf_token %}
                 {% include "lms/form_fields.html" %}
-                {% include "lms/parts/audience_fields.html" with groups_field=form.groups students_field=form.students %}
+                {% include "lms/parts/audience_fields.html" with groups_field=form.groups students_field=form.students excluded_groups_field=form.excluded_groups excluded_students_field=form.excluded_students %}
                 {% if not form.instance.pk %}
                 <fieldset class="form-section" data-topic-copy-form style="margin-top:16px">
                     <legend>Добавить темы из других классов <span class="badge badge-turquoise">{{ other_topics|length }} доступно</span></legend>

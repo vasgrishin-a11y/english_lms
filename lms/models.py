@@ -210,10 +210,10 @@ class CefrLevel(models.TextChoices):
 class AudienceMixin(models.Model):
     """Кому назначен элемент курса: группы и отдельные ученики.
 
-    Назначения по иерархии складываются: класс → глава → тема → задание.
-    Если ни на одном уровне цепочки ничего не выбрано, материал общий — его
-    видят все ученики. Как только хоть где-то выбрана группа или ученик,
-    материал видят только те, кто назначен хотя бы на одном уровне.
+    Назначения наследуются по цепочке класс → глава → тема → задание.
+    Нижний уровень может исключить унаследованную группу или ученика и при
+    необходимости назначить их снова. Если назначений нет во всей цепочке,
+    материал общий; исключённое назначение не делает ветку общей.
     """
 
     groups = models.ManyToManyField(
@@ -230,6 +230,21 @@ class AudienceMixin(models.Model):
         verbose_name="Ученики персонально",
         limit_choices_to={"profile__role": "student"},
     )
+    excluded_groups = models.ManyToManyField(
+        "Group",
+        blank=True,
+        related_name="excluded_from_%(class)ss",
+        verbose_name="Исключённые группы",
+        help_text="Не наследовать назначение этих групп с верхнего уровня",
+    )
+    excluded_students = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name="excluded_from_%(class)ss",
+        verbose_name="Исключённые ученики",
+        limit_choices_to={"profile__role": "student"},
+        help_text="Не наследовать доступ этих учеников с верхнего уровня",
+    )
 
     class Meta:
         abstract = True
@@ -237,7 +252,12 @@ class AudienceMixin(models.Model):
     @property
     def has_own_audience(self):
         """Есть ли собственные назначения (без учёта родителей)."""
-        return self.groups.exists() or self.students.exists()
+        return (
+            self.groups.exists()
+            or self.students.exists()
+            or self.excluded_groups.exists()
+            or self.excluded_students.exists()
+        )
 
 
 class Block(AudienceMixin, models.Model):
@@ -489,6 +509,21 @@ class Assignment(models.Model):
         verbose_name="Ученики персонально",
         help_text="Открыть задание отдельным ученикам помимо групп",
     )
+    excluded_groups = models.ManyToManyField(
+        "Group",
+        blank=True,
+        related_name="excluded_from_assignments",
+        verbose_name="Исключённые группы",
+        help_text="Не наследовать назначение этих групп с верхнего уровня",
+    )
+    excluded_students = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name="excluded_from_assignments",
+        verbose_name="Исключённые ученики",
+        limit_choices_to={"profile__role": "student"},
+        help_text="Не наследовать доступ этих учеников с верхнего уровня",
+    )
     material_file = models.FileField(
         upload_to=assignment_upload_to,
         db_index=True,
@@ -571,7 +606,12 @@ class Assignment(models.Model):
 
     @property
     def has_own_audience(self):
-        return self.groups.exists() or self.assigned_students.exists()
+        return (
+            self.groups.exists()
+            or self.assigned_students.exists()
+            or self.excluded_groups.exists()
+            or self.excluded_students.exists()
+        )
 
     @property
     def is_visible(self):

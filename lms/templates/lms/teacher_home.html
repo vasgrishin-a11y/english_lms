@@ -9,9 +9,9 @@
     <div>
         <h1>Консоль преподавателя</h1>
         <div class="row" style="margin-top:16px">
-            <a class="btn" href="{% url 'teacher_review_queue' %}">{% icon "check-circle" %}К очереди проверки
+            <a class="btn btn-success-soft" href="{% url 'teacher_review_queue' %}">{% icon "check-circle" %}Проверка
                 {% if overview.queue.waiting %}<span class="chip count">{{ overview.queue.waiting }}</span>{% endif %}</a>
-            <a class="btn btn-secondary" href="{% url 'teacher_curriculum' %}">{% icon "layers" %}{% t "Карта курса" %}</a>
+            <a class="btn btn-secondary" href="{% url 'teacher_curriculum' %}">{% icon "layers" %}{% t "Классы" %}</a>
             <a class="btn btn-ghost" href="{% url 'teacher_assignment_new' %}">{% icon "plus" %}{% t "Новое задание" %}</a>
         </div>
     </div>
@@ -33,13 +33,12 @@
     <div class="stat stat-success"><div class="stat-value tnum">{{ overview.queue.checked }}</div><div class="stat-label">{% icon "check-circle" "icon icon-sm" %}Проверено</div></div>
     <div class="stat stat-accent"><div class="stat-value tnum">{{ overview.students }}</div><div class="stat-label">{% icon "users" "icon icon-sm" %}Учеников сдавали</div></div>
     <div class="stat"><div class="stat-value tnum">{{ overview.curriculum.assignments|default:0 }}</div><div class="stat-label">{% icon "file-text" "icon icon-sm" %}Заданий в курсе</div></div>
-    <div class="stat"><div class="stat-value tnum">{{ overview.average|default_if_none:"—" }}</div><div class="stat-label">{% icon "percent" "icon icon-sm" %}Средний балл</div></div>
 </div>
 
 <section class="card">
     <div class="card-head">
         <h2 class="card-title">{% icon "layers" %}Классы курса</h2>
-        <a class="btn btn-ghost btn-sm" href="{% url 'teacher_curriculum' %}">{% t "Карта курса" %}</a>
+        <a class="btn btn-ghost btn-sm" href="{% url 'teacher_curriculum' %}">{% t "Классы" %}</a>
     </div>
     <div class="class-grid">
         {% for block_item in blocks_data|slice:":5" %}
@@ -90,14 +89,14 @@
         {% endfor %}
         </div>
         <div class="console-card__foot">
-            <a class="btn btn-secondary btn-sm" href="{% url 'teacher_review_queue' %}">{% icon "check-circle" %}{% t "К очереди проверки" %}</a>
+            <a class="btn btn-success-soft btn-sm" href="{% url 'teacher_review_queue' %}">{% icon "check-circle" %}{% t "Проверка" %}</a>
         </div>
     </section>
 
     <section class="card console-card">
         <div class="card-head">
             <h2 class="card-title">{% icon "pencil" %}Черновики заданий</h2>
-            <a class="btn btn-ghost btn-sm" href="{% url 'teacher_curriculum' %}">{% t "Карта курса" %}</a>
+            <a class="btn btn-ghost btn-sm" href="{% url 'teacher_curriculum' %}">{% t "Классы" %}</a>
         </div>
         <div class="rows console-card__body">
         {% for assignment in drafts %}
