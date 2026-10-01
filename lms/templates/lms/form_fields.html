@@ -6,7 +6,7 @@
     {% if field.errors %}<div class="alert alert-danger" role="alert">{{ field.errors }}</div>{% endif %}
 {% endfor %}
 {% for field in form.visible_fields %}
-    {% if field.name == "groups" or field.name == "students" or field.name == "audio_comment" or field.name == "remove_audio" or field.name == "audio_comments" or field.name == "excluded_groups" or field.name == "excluded_students" or field.name == "structure_confirmed" or field.name == "structure_block" or field.name == "new_block_name" or field.name == "structure_chapter" or field.name == "new_chapter_name" or field.name == "structure_topic" or field.name == "new_topic_name" %}{# специальные поля рисуются рядом с контекстом #}{% else %}
+    {% if field.name == "groups" or field.name == "students" or field.name == "audio_comment" or field.name == "remove_audio" or field.name == "audio_comments" or field.name == "excluded_groups" or field.name == "excluded_students" or field.name == "structure_block" or field.name == "new_block_name" or field.name == "structure_chapter" or field.name == "new_chapter_name" or field.name == "structure_topic" or field.name == "new_topic_name" %}{# специальные поля рисуются рядом с контекстом #}{% else %}
     <div class="form-field{% if field.errors %} field-error{% endif %}{% if field.field.widget.input_type == 'checkbox' %} checkline{% endif %}{% if field.field.widget.input_type == 'file' %} upload-block{% endif %}">
         {% if field.field.widget.input_type == 'checkbox' %}
             {{ field }}<label for="{{ field.id_for_label }}">{{ field.label }}</label>

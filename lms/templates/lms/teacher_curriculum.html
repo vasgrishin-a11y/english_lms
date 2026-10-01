@@ -134,7 +134,7 @@
                 </div>
                 <div class="row row-tight" style="gap:6px;flex-wrap:wrap">
                     <form method="post" action="{% url 'teacher_block_assignments_publish' block.pk %}" style="display:inline">
-                        {% csrf_token %}<input type="hidden" name="publish" value="1"><input type="hidden" name="next" value="{% url 'teacher_curriculum' %}#block-{{ block.pk }}"><button class="btn btn-ghost btn-sm" type="submit" title="Опубликовать все задания класса">{% icon "check" "icon icon-sm" %}</button>
+                        {% csrf_token %}<input type="hidden" name="publish" value="{% if block_item.publication_state == 'published' %}0{% else %}1{% endif %}"><input type="hidden" name="next" value="{% url 'teacher_curriculum' %}#block-{{ block.pk }}"><button class="btn btn-ghost btn-sm" type="submit" title="{% if block_item.publication_state == 'published' %}Вернуть все главы, темы и задания в черновики{% else %}Опубликовать все главы, темы и задания{% endif %}">{% icon "check" "icon icon-sm" %}</button>
                     </form>
                     <a class="btn btn-ghost btn-sm" href="{% url 'teacher_chapter_new' %}?block={{ block.pk }}" title="Добавить главу">{% icon "plus" "icon icon-sm" %}</a>
                     <a class="btn btn-ghost btn-sm" href="{% url 'teacher_block_edit' block.pk %}" title="Изменить класс">{% icon "pencil" %}</a>
@@ -173,7 +173,7 @@
                             </div>
                             <div class="row row-tight" style="gap:4px;flex:0 0 auto;flex-wrap:wrap">
                                 <form method="post" action="{% url 'teacher_chapter_assignments_publish' chapter.pk %}" style="display:inline">
-                                    {% csrf_token %}<input type="hidden" name="publish" value="1"><input type="hidden" name="next" value="{% url 'teacher_curriculum' %}#chapter-{{ chapter.pk }}"><button class="btn btn-ghost btn-sm" type="submit" title="Опубликовать все задания главы">{% icon "check" "icon icon-sm" %}</button>
+                                    {% csrf_token %}<input type="hidden" name="publish" value="{% if chapter_item.publication_state == 'published' %}0{% else %}1{% endif %}"><input type="hidden" name="next" value="{% url 'teacher_curriculum' %}#chapter-{{ chapter.pk }}"><button class="btn btn-ghost btn-sm" type="submit" title="{% if chapter_item.publication_state == 'published' %}Вернуть задания главы в черновики{% else %}Опубликовать все задания главы{% endif %}">{% icon "check" "icon icon-sm" %}</button>
                                 </form>
                                 <a class="btn btn-ghost btn-sm" href="{% url 'teacher_topic_new' %}?chapter={{ chapter.pk }}" title="Добавить тему в главу">{% icon "plus" "icon icon-sm" %}</a>
                                 <a class="btn btn-ghost btn-sm" href="{% url 'teacher_chapter_edit' chapter.pk %}" title="Изменить главу">{% icon "pencil" "icon icon-sm" %}</a>
@@ -219,7 +219,7 @@
                                         </div>
                                         <div class="row row-tight" style="gap:4px;flex:0 0 auto;flex-wrap:wrap">
                                             <form method="post" action="{% url 'teacher_topic_assignments_publish' topic.pk %}" style="display:inline">
-                                                {% csrf_token %}<input type="hidden" name="publish" value="1"><input type="hidden" name="next" value="{% url 'teacher_curriculum' %}#block-{{ block.pk }}"><button class="btn btn-ghost btn-sm" type="submit" title="Опубликовать все задания темы">{% icon "check" "icon icon-sm" %}</button>
+                                                {% csrf_token %}<input type="hidden" name="publish" value="{% if topic_item.publication_state == 'published' %}0{% else %}1{% endif %}"><input type="hidden" name="next" value="{% url 'teacher_curriculum' %}#block-{{ block.pk }}"><button class="btn btn-ghost btn-sm" type="submit" title="{% if topic_item.publication_state == 'published' %}Вернуть все задания темы в черновики{% else %}Опубликовать все задания темы{% endif %}">{% icon "check" "icon icon-sm" %}</button>
                                             </form>
                                             <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_new' %}?topic={{ topic.pk }}" title="Добавить задание">{% icon "plus" "icon icon-sm" %}</a>
                                             <a class="btn btn-ghost btn-sm" href="{% url 'teacher_topic_edit' topic.pk %}" title="Изменить тему">{% icon "pencil" "icon icon-sm" %}</a>
