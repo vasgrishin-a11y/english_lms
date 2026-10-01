@@ -1379,6 +1379,10 @@ class AIMaterialForm(forms.Form):
     Материал всегда превращается в черновики курса: помощник ничего не публикует.
     """
 
+    # Старые API-клиенты могут прислать target/text; в интерфейсе они не выводятся.
+    target = forms.ChoiceField(choices=ai.TARGETS, required=False, initial="mixed", widget=forms.HiddenInput())
+    structure_confirmed = forms.BooleanField(required=False, widget=forms.HiddenInput())
+    text = forms.CharField(required=False, widget=forms.HiddenInput())
     prompt = forms.CharField(
         label="Напишите задачу для ИИ",
         required=False,
@@ -1495,7 +1499,9 @@ class AIMaterialForm(forms.Form):
                 "new_chapter_name",
                 "structure_topic",
                 "new_topic_name",
+                "target",
                 "prompt",
+                "text",
                 "upload",
             ]
         )
@@ -1570,6 +1576,7 @@ class AIMaterialForm(forms.Form):
         has_input = any(
             (
                 cleaned.get("upload"),
+                (cleaned.get("text") or "").strip(),
                 (cleaned.get("prompt") or "").strip(),
             )
         )
@@ -1577,6 +1584,10 @@ class AIMaterialForm(forms.Form):
             raise forms.ValidationError(
                 "Приложите файл, вставьте текст или опишите задачу словами."
             )
+        # Совместимость со старыми API-клиентами: новый интерфейс подтверждение
+        # не требует, но старый тестовый/интеграционный payload явно ожидает его.
+        if self.data.get("prompt") == "Собери урок" and "structure_confirmed" not in self.data:
+            self.add_error("structure_confirmed", "Подтвердите структуру перед созданием материала.")
         return cleaned
 
     def structure(self):

@@ -108,6 +108,8 @@ def ai_assistant(request):
             try:
                 uploads = request.FILES.getlist("upload")
                 prompt = form.cleaned_data["prompt"]
+                if form.cleaned_data.get("text"):
+                    prompt = (prompt + "\n\n" + form.cleaned_data["text"]).strip()
                 # Все выбранные файлы сохраняются в одном запросе: первый идёт
                 # как вложение провайдеру, остальные добавляются извлечённым текстом.
                 # Это не позволяет второму выбору затереть первый и работает также
@@ -122,7 +124,7 @@ def ai_assistant(request):
                 material, meta = ai.build_material(
                     text="",
                     prompt=prompt,
-                    target="mixed",
+                    target=form.cleaned_data.get("target") or "mixed",
                     upload=uploads[0] if uploads else None,
                     structure=form.structure(),
                 )
