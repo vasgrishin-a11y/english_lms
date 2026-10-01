@@ -1,0 +1,41 @@
+{% load static lms_tags %}
+{% if is_teacher_day %}
+<div class="teacher-day-badge" role="status">
+    <span class="teacher-day-badge__sparkle" aria-hidden="true">✦</span>
+    <span><strong>С Днём учителя!</strong> Спасибо за знания и вдохновение.</span>
+    <span class="teacher-day-badge__date">5 октября</span>
+</div>
+{% endif %}
+
+{% if show_teacher_day_card %}
+<div class="teacher-day-celebration" data-teacher-day-card>
+    <div class="teacher-day-celebration__veil" aria-hidden="true"></div>
+    <div class="teacher-day-confetti" data-teacher-day-confetti aria-hidden="true"></div>
+    <span class="teacher-day-popper teacher-day-popper--left" aria-hidden="true">🎉</span>
+    <span class="teacher-day-popper teacher-day-popper--right" aria-hidden="true">🎉</span>
+
+    <section class="teacher-day-card" role="dialog" aria-modal="true" aria-labelledby="teacher-day-title" aria-describedby="teacher-day-message" tabindex="-1">
+        <button class="teacher-day-card__close" type="button" data-teacher-day-close aria-label="Закрыть поздравление">{% icon "x" %}</button>
+        <div class="teacher-day-card__glow" aria-hidden="true"></div>
+        <div class="teacher-day-card__date"><span aria-hidden="true">✦</span> 5 октября 2026 <span aria-hidden="true">✦</span></div>
+        <div class="teacher-day-card__picture" aria-hidden="true">
+            <span class="teacher-day-card__ray teacher-day-card__ray--one"></span>
+            <span class="teacher-day-card__ray teacher-day-card__ray--two"></span>
+            <img class="teacher-day-card__raccoon" src="{% static 'lms/img/raccoon-face.svg' %}" alt="">
+            <img class="teacher-day-card__books" src="{% static 'lms/img/raccoon-books.svg' %}" alt="">
+            <span class="teacher-day-card__star teacher-day-card__star--one">✦</span>
+            <span class="teacher-day-card__star teacher-day-card__star--two">✦</span>
+            <span class="teacher-day-card__star teacher-day-card__star--three">●</span>
+        </div>
+        <p class="teacher-day-card__eyebrow">Сегодня ваш праздник</p>
+        <h2 id="teacher-day-title">С Днём учителя!</h2>
+        <p class="teacher-day-card__message" id="teacher-day-message">
+            Спасибо за знания, терпение и вдохновение.<br>
+            Пусть ученики радуют успехами, а каждый урок приносит удовольствие!
+        </p>
+        <button class="btn teacher-day-card__button" type="button" data-teacher-day-close>
+            <span aria-hidden="true">♥</span> Спасибо!
+        </button>
+    </section>
+</div>
+{% endif %}

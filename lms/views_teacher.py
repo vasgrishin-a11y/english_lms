@@ -10,6 +10,7 @@
 """
 
 import logging
+from datetime import date
 
 from django.conf import settings
 from django.contrib import messages
@@ -80,6 +81,7 @@ from .models import (
     QuestionResponse,
     Submission,
     Topic,
+    UserEventReceipt,
 )
 from .quiz_items import build_items, progress_of
 from .services import ConflictError, review_submission
@@ -244,6 +246,10 @@ def _delete_cascade(request, obj, redirect_to, kind, stats):
 
 
 # ── Главная консоли ────────────────────────────────────────────────────────
+TEACHER_DAY_2026 = date(2026, 10, 5)
+TEACHER_DAY_2026_EVENT = "teacher-day-2026"
+
+
 @teacher_required
 @require_GET
 def console_home(request):
@@ -260,6 +266,15 @@ def console_home(request):
     )[:5]
     blocks_data, _ = course_tree(query="", teacher_view=True)
     request.session["_queue_counts"] = {"ts": timezone.now().timestamp(), **overview["queue"]}
+
+    is_teacher_day = timezone.localdate() == TEACHER_DAY_2026
+    show_teacher_day_card = False
+    if is_teacher_day:
+        _, show_teacher_day_card = UserEventReceipt.objects.get_or_create(
+            user=request.user,
+            event_key=TEACHER_DAY_2026_EVENT,
+        )
+
     return render(
         request,
         "lms/teacher_home.html",
@@ -269,6 +284,8 @@ def console_home(request):
             "drafts": list(drafts),
             "blocks_data": blocks_data,
             "workspace": "home",
+            "is_teacher_day": is_teacher_day,
+            "show_teacher_day_card": show_teacher_day_card,
         },
     )
 

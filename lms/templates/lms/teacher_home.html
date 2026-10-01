@@ -1,10 +1,12 @@
 {% extends "lms/base.html" %}
-{% load lms_tags %}
+{% load static lms_tags %}
 
 {% block title %}Консоль преподавателя — English LMS{% endblock %}
 {% block workspace_class %}workspace-plain{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'lms/css/teacher_day.css' %}">{% endblock %}
 
 {% block content %}
+{% include "lms/parts/teacher_day_2026.html" %}
 <section class="hero">
     <div>
         <h1>Консоль преподавателя</h1>
@@ -144,3 +146,5 @@
     </div>
 </section>
 {% endblock %}
+
+{% block extra_js %}<script src="{% static 'lms/js/teacher_day.js' %}" defer></script>{% endblock %}

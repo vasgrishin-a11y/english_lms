@@ -148,6 +148,32 @@ def create_user_profile(sender, instance, created, **kwargs):
         Profile.objects.get_or_create(user=instance, defaults={"role": role})
 
 
+class UserEventReceipt(models.Model):
+    """Фиксирует одноразовые интерфейсные события, уже показанные пользователю."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="ui_event_receipts",
+        verbose_name="Пользователь",
+    )
+    event_key = models.CharField(max_length=100, verbose_name="Событие")
+    shown_at = models.DateTimeField(auto_now_add=True, verbose_name="Показано")
+
+    class Meta:
+        verbose_name = "Показ интерфейсного события"
+        verbose_name_plural = "Показы интерфейсных событий"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "event_key"],
+                name="unique_ui_event_receipt",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.user_id}: {self.event_key}"
+
+
 class Group(models.Model):
     """Учебная группа/класс для разделения учеников."""
 
