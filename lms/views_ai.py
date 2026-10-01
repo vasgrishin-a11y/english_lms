@@ -106,11 +106,24 @@ def ai_assistant(request):
             material, meta = None, {}
         elif form.is_valid():
             try:
+                uploads = request.FILES.getlist("upload")
+                prompt = form.cleaned_data["prompt"]
+                # Все выбранные файлы сохраняются в одном запросе: первый идёт
+                # как вложение провайдеру, остальные добавляются извлечённым текстом.
+                # Это не позволяет второму выбору затереть первый и работает также
+                # для PDF/DOCX/XLSX в офлайн-режиме.
+                for extra in uploads[1:]:
+                    try:
+                        extra_text = ai.extract_text(extra.name, extra.read())
+                    except ai.AiError as exc:
+                        prompt += f"\n\nМатериал из файла {extra.name}: {exc}"
+                    else:
+                        prompt += f"\n\nМатериал из файла {extra.name}:\n{extra_text}"
                 material, meta = ai.build_material(
-                    text=form.cleaned_data["text"],
-                    prompt=form.cleaned_data["prompt"],
-                    target=form.cleaned_data["target"],
-                    upload=form.cleaned_data["upload"],
+                    text="",
+                    prompt=prompt,
+                    target="mixed",
+                    upload=uploads[0] if uploads else None,
                     structure=form.structure(),
                 )
             except ai.AiError as exc:

@@ -4589,3 +4589,18 @@ ul.audience-exclusions label:has(input:checked) {
     border-color: var(--success-ink);
     background: var(--success-bg);
 }
+
+/* Статус публикации должен считываться с первого взгляда на карте курса. */
+.publication-indicator.is-published,
+.publication-indicator.is-partial,
+.publication-indicator.is-draft {
+    opacity: 1;
+    padding: 3px 7px;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    font-weight: 700;
+    background: var(--surface);
+}
+.publication-indicator.is-published { color: var(--success-ink); background: var(--success-bg); }
+.publication-indicator.is-partial { color: var(--warning-ink, #9a6700); background: var(--warning-bg, #fff8dc); }
+.publication-indicator.is-draft { color: var(--text-subtle); background: var(--canvas); }

@@ -71,6 +71,7 @@ class SubmissionForm(forms.Form):
             self.fields["file_answer"].widget.attrs.update(
                 {
                     "data-dropzone": "1",
+                "multiple": True,
                     "data-max-mb": str(settings.LMS_MAX_FILE_BYTES // (1024 * 1024)),
                     "data-dropzone-hint": (
                         "Перетащите аудио сюда" if audio else "Перетащите файл сюда"
@@ -889,7 +890,7 @@ class QuestionForm(forms.ModelForm):
         ]
         widgets = {
             "text": forms.Textarea(
-                attrs={"rows": 3, "placeholder": "Вопрос или предложение с пропуском"}
+                attrs={"rows": 12, "placeholder": "Вопрос или предложение с пропуском"}
             ),
             "explanation": forms.Textarea(attrs={"rows": 2}),
         }
@@ -1378,56 +1379,20 @@ class AIMaterialForm(forms.Form):
     Материал всегда превращается в черновики курса: помощник ничего не публикует.
     """
 
-    target = forms.ChoiceField(
-        label="Что собрать",
-        choices=ai.TARGETS,
-        initial="mixed",
-        widget=forms.Select(attrs={"class": "form-select"}),
-    )
     prompt = forms.CharField(
-        label="Пожелания к материалу",
+        label="Напишите задачу для ИИ",
         required=False,
         widget=forms.Textarea(
             attrs={
                 "rows": 3,
                 "placeholder": (
-                    "Например: сделай класс B1 по теме Travel, 2 главы (Airport, Hotel), "
-                    "в каждой по 2 темы, тест на Present Perfect и набор карточек"
+                    "Опишите задачу, тему, уровень и желаемый результат. При необходимости вставьте сюда текст материала:\n\n# Класс A2 — Travel\n## Глава — At the Airport\n### Тема — Check-in\n#### Задание — Слова"
                 ),
             }
         ),
         help_text=(
             "Можно указать главы: «раздели на главы Airport / Hotel / Restaurant». "
             "Профиль конкретного ученика заранее не передаётся — опишите общий уровень, тему, навык и цель."
-        ),
-    )
-    text = forms.CharField(
-        label="Или вставьте текст материала",
-        required=False,
-        widget=forms.Textarea(
-            attrs={
-                "rows": 12,
-                "placeholder": (
-                    "# Класс A2 — Travel [B1]\n"
-                    "## Глава 1 — At the Airport [глава]\n"
-                    "### Тема: Check-in\n"
-                    "#### Задание: Слова [карточки]\n"
-                    "- check-in | регистрация\n"
-                    "#### Задание: Диалог [quiz]\n"
-                    "? Где выход на посадку?\n"
-                    "* Where is the gate?\n"
-                    "- Where is gate?\n"
-                    "## Глава 2 — At the Hotel\n"
-                    "### Тема: Booking\n"
-                    "#### Задание: Бронирование [material]\n"
-                    "Текст задания..."
-                ),
-            }
-        ),
-        help_text=(
-            "Иерархия: # Класс → ## Глава → ### Тема → #### Задание. "
-            "Если глав нет — используйте # Блок / ## Тема / ### Задание, темы попадут в «Общее». "
-            "Тип задания в []: [quiz], [карточки], [material]."
         ),
     )
     upload = forms.FileField(
@@ -1447,12 +1412,6 @@ class AIMaterialForm(forms.Form):
                 mb=ai.max_upload_bytes() // (1024 * 1024)
             )
         ),
-    )
-    structure_confirmed = forms.BooleanField(
-        required=True,
-        label="Структура выбрана",
-        error_messages={"required": "Подтвердите структуру перед созданием материала."},
-        widget=forms.CheckboxInput(attrs={"data-structure-confirmed": "1"}),
     )
     structure_block = forms.ModelChoiceField(
         queryset=Block.objects.none(),
@@ -1530,16 +1489,13 @@ class AIMaterialForm(forms.Form):
         )
         self.order_fields(
             [
-                "structure_confirmed",
                 "structure_block",
                 "new_block_name",
                 "structure_chapter",
                 "new_chapter_name",
                 "structure_topic",
                 "new_topic_name",
-                "target",
                 "prompt",
-                "text",
                 "upload",
             ]
         )
@@ -1614,7 +1570,6 @@ class AIMaterialForm(forms.Form):
         has_input = any(
             (
                 cleaned.get("upload"),
-                (cleaned.get("text") or "").strip(),
                 (cleaned.get("prompt") or "").strip(),
             )
         )
