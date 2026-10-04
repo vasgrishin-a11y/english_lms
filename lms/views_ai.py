@@ -84,6 +84,17 @@ def ai_assistant(request):
                     )
                 except ai.AiError as exc:
                     messages.error(request, str(exc))
+                except Exception:
+                    logger.exception(
+                        "ai_material_revision_failed teacher=%s provider=%s",
+                        request.user.pk,
+                        ai.ai_provider(),
+                    )
+                    messages.error(
+                        request,
+                        "Не удалось обновить материал из-за внутренней ошибки помощника. "
+                        "Повторите попытку; подробности сохранены в журнале сервера.",
+                    )
                 else:
                     material = revised
                     meta.update(revision_meta)
@@ -131,6 +142,22 @@ def ai_assistant(request):
             except ai.AiError as exc:
                 _clear_session(request)
                 messages.error(request, str(exc))
+                material, meta = None, {}
+            except Exception:
+                # Неожиданный ответ модели или повреждённый документ не должен
+                # оставлять преподавателя на безликой странице HTTP 500.
+                logger.exception(
+                    "ai_material_request_failed teacher=%s provider=%s uploads=%s",
+                    request.user.pk,
+                    ai.ai_provider(),
+                    len(request.FILES.getlist("upload")),
+                )
+                _clear_session(request)
+                messages.error(
+                    request,
+                    "Не удалось собрать материал из-за внутренней ошибки помощника. "
+                    "Повторите попытку; подробности сохранены в журнале сервера.",
+                )
                 material, meta = None, {}
             else:
                 request.session[SESSION_MATERIAL] = material

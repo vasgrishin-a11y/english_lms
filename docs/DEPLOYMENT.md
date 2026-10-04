@@ -29,7 +29,8 @@ location / {
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For "";
-    proxy_read_timeout 120s;
+    # Должен быть больше WEB_TIMEOUT и LMS_AI_TIMEOUT.
+    proxy_read_timeout 210s;
 }
 ```
 
@@ -81,9 +82,12 @@ Compose хранит БД и media в двух именованных volumes; �
   с моделью». Compose уже прописывает для `web` алиас `host.docker.internal`; при сборке по Dockerfile
   без Compose берите адрес шлюза (`172.17.0.1` для сети bridge):
   `LMS_AI_ENDPOINT=http://host.docker.internal:11434/v1`.
-- **Ресурсы и таймауты.** Разбор страницы на CPU занимает десятки секунд: держите
-  `LMS_AI_TIMEOUT` (60 с по умолчанию, для локальной модели разумно 120 с) меньше, чем
-  `proxy_read_timeout` у Nginx, иначе пользователь увидит таймаут прокси вместо ответа.
+- **Ресурсы и таймауты.** Разбор страницы на CPU занимает десятки секунд. Соблюдайте
+  `LMS_AI_TIMEOUT < WEB_TIMEOUT < proxy_read_timeout`: например, `120 < 180 < 210` секунд,
+  как в примерах проекта. `WEB_TIMEOUT` управляет Gunicorn (по умолчанию 180 с). Если ingress
+  площадки имеет неизменяемый предел 60 секунд, уменьшите `LMS_AI_TIMEOUT`, например до 45:
+  иначе прокси оборвёт ещё работающий запрос и пользователь увидит безликую страницу 500/502,
+  а приложение не успеет показать понятное сообщение или перейти к офлайн-разбору.
 - **HTTPS не обязателен для localhost.** Локальный сервер модели общается по HTTP внутри
   контура: `LMS_AI_CA_BUNDLE` и `LMS_AI_VERIFY_SSL=0` нужны только для внутренних HTTPS-шлюзов,
   причём второй — лишь на время отладки: без проверки TLS можно перехватить ключ.

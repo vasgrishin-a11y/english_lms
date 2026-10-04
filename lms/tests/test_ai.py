@@ -223,6 +223,40 @@ class OfflineParsingTests(LMSCase):
         with self.assertRaises(ai.AiError):
             ai.normalise("не структура")
 
+    def test_wrong_nested_json_types_are_ignored_safely(self):
+        material = ai.normalise(
+            {
+                "blocks": [
+                    {
+                        "name": "Travel",
+                        "chapters": 2,
+                        "topics": [
+                            {
+                                "title": "Airport",
+                                "cards": {"front": "gate"},
+                                "assignments": [
+                                    {
+                                        "title": "Read",
+                                        "description": "Read the text.",
+                                        "questions": 4,
+                                        "skills": {"reading": True},
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+        assignment = material["blocks"][0]["topics"][0]["assignments"][0]
+        self.assertEqual(assignment["questions"], [])
+        self.assertEqual(assignment["skills"], [])
+
+    def test_unexpected_document_parser_error_becomes_ai_error(self):
+        with patch("lms.ai._xlsx_text", side_effect=ValueError("bad cell index")):
+            with self.assertRaisesMessage(ai.AiError, "Не удалось прочитать файл"):
+                ai.extract_text("broken.xlsx", b"not important")
+
     def test_docx_and_xlsx_text_is_extracted_offline(self):
         docx_text = ai.extract_text("lesson.docx", docx_blob("# Блок\n## Тема\nЗадание"))
         self.assertIn("Тема", docx_text)
@@ -274,6 +308,13 @@ class AssistantFormTests(LMSCase):
         self.assertFalse(response.context["form"].errors)
         self.assertEqual(len(response.context["form"].cleaned_data["upload"]), 2)
         self.assertContains(response, "Что получилось")
+
+    def test_unexpected_builder_error_is_rendered_instead_of_500(self):
+        with patch("lms.views_ai.ai.build_material", side_effect=RuntimeError("broken")):
+            response = self.post_form(text=MARKDOWN)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "внутренней ошибки помощника")
+        self.assertIsNone(response.context["material"])
 
     def test_preview_is_detailed_before_import(self):
         response = self.post_form(text=MARKDOWN)
@@ -544,6 +585,36 @@ class OnlineModeTests(LMSCase):
                 {"target": "mixed", "text": MARKDOWN, "structure_confirmed": "on"},
             )
         self.assertContains(response, "разобран офлайн")
+        self.assertContains(response, "Что получилось")
+
+    @override_settings(
+        LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="ollama", LMS_AI_LOCAL=True
+    )
+    def test_malformed_provider_collections_fall_back_instead_of_500(self):
+        malformed = {
+            "title": "Broken response",
+            "blocks": [{"name": "Travel", "chapters": 3, "topics": {"title": "Airport"}}],
+        }
+        with patch("lms.ai._provider_material", return_value=malformed):
+            response = self.teacher_client.post(
+                reverse("teacher_ai"),
+                {"target": "mixed", "text": MARKDOWN, "structure_confirmed": "on"},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Материал разобран офлайн")
+        self.assertContains(response, "Что получилось")
+
+    @override_settings(
+        LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="ollama", LMS_AI_LOCAL=True
+    )
+    def test_unexpected_provider_failure_falls_back_instead_of_500(self):
+        with patch("lms.ai._provider_material", side_effect=RuntimeError("broken adapter")):
+            response = self.teacher_client.post(
+                reverse("teacher_ai"),
+                {"target": "mixed", "text": MARKDOWN, "structure_confirmed": "on"},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "неожиданном формате")
         self.assertContains(response, "Что получилось")
 
     @override_settings(
