@@ -401,16 +401,30 @@ def offline_notes(filename):
 
 # ── Извлечение текста (офлайн) ─────────────────────────────────────────────
 def extract_text(filename, blob):
-    """Текст из файла без внешних библиотек. Пустая строка — нечего разобрать."""
+    """Текст из файла без внешних библиотек. Пустая строка — нечего разобрать.
+
+    Документ уже прошёл проверку расширения, но его внутренности всё равно могут
+    быть повреждены. Ошибка низкоуровневого парсера не должна превращать POST
+    помощника в HTTP 500: наружу всегда выходит понятная ``AiError``.
+    """
     kind = upload_kind(filename)
-    if kind == "text":
-        return _decode(blob)
-    if kind == "docx":
-        return _docx_text(blob)
-    if kind == "xlsx":
-        return _xlsx_text(blob)
-    if kind == "pdf":
-        return _pdf_text(blob)
+    try:
+        if kind == "text":
+            return _decode(blob)
+        if kind == "docx":
+            return _docx_text(blob)
+        if kind == "xlsx":
+            return _xlsx_text(blob)
+        if kind == "pdf":
+            return _pdf_text(blob)
+    except AiError:
+        raise
+    except Exception as exc:
+        # Не пишем имя и содержимое пользовательского файла в production-лог.
+        logger.exception("ai_extract_failed kind=%s", kind)
+        raise AiError(
+            "Не удалось прочитать файл: возможно, он повреждён или имеет неверный формат."
+        ) from exc
     return ""
 
 
@@ -1323,6 +1337,16 @@ def _clean_text(value, limit=4000):
     return str(value or "").strip()[:limit]
 
 
+def _list_items(value):
+    """Вернуть только JSON-массив, не пытаясь перебирать строку/число/объект.
+
+    Небольшие локальные модели иногда соблюдают внешний JSON, но меняют тип
+    вложенного поля (например, ``chapters: {}`` или ``questions: 3``). Такие
+    ответы считаются неполными, а не становятся необработанным ``TypeError``.
+    """
+    return value if isinstance(value, (list, tuple)) else ()
+
+
 def _normalise_topic(topic_data, caps, counters):
     """Тема из JSON → чистая тема с заданиями и карточками."""
     if not isinstance(topic_data, dict):
@@ -1335,18 +1359,18 @@ def _normalise_topic(topic_data, caps, counters):
         "assignments": [],
         "cards": [],
     }
-    for item in topic_data.get("assignments") or []:
+    for item in _list_items(topic_data.get("assignments")):
         if not isinstance(item, dict) or counters["assignments"] >= caps["assignments"]:
             continue
         assignment = _normalise_assignment(item, caps)
         if assignment:
             topic["assignments"].append(assignment)
             counters["assignments"] += 1
-    for card_set in topic_data.get("cards") or []:
+    for card_set in _list_items(topic_data.get("cards")):
         if not isinstance(card_set, dict):
             continue
         cards = []
-        for card in card_set.get("cards") or []:
+        for card in _list_items(card_set.get("cards")):
             if counters["cards"] + len(cards) >= caps["cards"] or not isinstance(card, dict):
                 break
             front = _clean(card.get("front"), 200)
@@ -1405,7 +1429,7 @@ def normalise(payload, *, source=""):
         if block["cefr_level"] not in AI_CEFR_LEVELS:
             block["cefr_level"] = ""
         # Главы (новый формат)
-        for chapter_data in block_data.get("chapters") or []:
+        for chapter_data in _list_items(block_data.get("chapters")):
             if not isinstance(chapter_data, dict):
                 continue
             if counters["chapters"] >= caps["chapters"]:
@@ -1415,7 +1439,7 @@ def normalise(payload, *, source=""):
                 "description": _clean_text(chapter_data.get("description")),
                 "topics": [],
             }
-            for topic_data in chapter_data.get("topics") or []:
+            for topic_data in _list_items(chapter_data.get("topics")):
                 topic = _normalise_topic(topic_data, caps, counters)
                 if topic:
                     chapter["topics"].append(topic)
@@ -1423,7 +1447,7 @@ def normalise(payload, *, source=""):
                 block["chapters"].append(chapter)
                 counters["chapters"] += 1
         # Темы без главы (legacy и офлайн-разбор)
-        for topic_data in block_data.get("topics") or []:
+        for topic_data in _list_items(block_data.get("topics")):
             topic = _normalise_topic(topic_data, caps, counters)
             if topic:
                 block["topics"].append(topic)
@@ -1440,7 +1464,7 @@ def _normalise_assignment(item, caps):
     if assignment_type not in AI_ASSIGNMENT_TYPES:
         assignment_type = Assignment.Type.TEXT
     questions = []
-    for question in item.get("questions") or []:
+    for question in _list_items(item.get("questions")):
         if len(questions) >= caps["questions"] or not isinstance(question, dict):
             break
         kind = _clean(question.get("kind"), 10).lower()
@@ -1450,7 +1474,7 @@ def _normalise_assignment(item, caps):
         if not text:
             continue
         choices = []
-        for choice in question.get("choices") or []:
+        for choice in _list_items(question.get("choices")):
             if not isinstance(choice, dict):
                 continue
             label = _clean(choice.get("text"), 500)
@@ -1502,7 +1526,7 @@ def _normalise_assignment(item, caps):
         description = f"{title}. Выполните тест."
     skills = [
         _clean(skill, 20).lower()
-        for skill in item.get("skills") or []
+        for skill in _list_items(item.get("skills"))
         if _clean(skill, 20).lower() in {value for value, _ in Skill.Kind.choices}
     ]
     try:
@@ -1614,6 +1638,14 @@ def build_material(
                 return material, meta
             except AiError as exc:
                 meta["notes"].append(f"{exc} Материал разобран офлайн.")
+            except Exception:
+                # Ответ внешнего процесса — недоверенная граница. Даже корректный
+                # JSON может содержать неожиданную схему; сохраняем traceback для
+                # администратора, но не показываем пользователю HTTP 500.
+                logger.exception("ai_provider_failed provider=%s", spec["key"])
+                meta["notes"].append(
+                    "Модель вернула ответ в неожиданном формате. Материал разобран офлайн."
+                )
         else:
             notes.append(
                 "Онлайн-разбор недоступен: этот файл провайдер не читает, "
@@ -2053,7 +2085,7 @@ def normalise_revision(payload, *, assignment_type):
         revision["questions"] = []
     if assignment_type == Assignment.Type.FLASHCARDS:
         cards = []
-        for card in payload.get("cards") or []:
+        for card in _list_items(payload.get("cards")):
             if len(cards) >= limits()["cards"] or not isinstance(card, dict):
                 break
             front = _clean(card.get("front"), 200)
