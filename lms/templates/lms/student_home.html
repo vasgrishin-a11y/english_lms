@@ -87,22 +87,34 @@
         <h2 class="card-title">{% icon "layers" %}Мои классы</h2>
         <a class="btn btn-ghost btn-sm" href="{% url 'student_assignments' %}">{% t "Открыть карту" %}</a>
     </div>
-    {% regroup assignments by topic.block as block_groups %}
-    {% if block_groups %}
+    {% if class_cards %}
         <div class="class-grid">
-            {% for block_group in block_groups|slice:":6" %}
-                {% with block=block_group.grouper %}
+            {% for class_item in class_cards|slice:":6" %}
+                {% with block=class_item.block %}
                 <a class="class-card" href="{% url 'student_assignments' %}#block-{{ block.pk }}">
                     {% include "lms/parts/cover.html" with course=block %}
                     <div class="class-body">
                         <h3 class="class-title">{{ block.name }}</h3>
                         <div class="class-meta">
-                            <span>{{ block_group.list|length }} {{ block_group.list|length|pluralize_ru:"задание,задания,заданий" }}</span>
+                            <span>{{ class_item.assignments|length }} {{ class_item.assignments|length|pluralize_ru:"задание,задания,заданий" }}</span>
                             {% if block.cefr_level %}<span class="tag tag-cefr">{{ block.cefr_level }}</span>{% endif %}
                         </div>
-                        <div class="class-foot">
-                            <span class="progress-dots">{% for _ in block_group.list|slice:":4" %}<span class="progress-dot {% if forloop.counter <= 2 %}is-done{% endif %}"></span>{% endfor %}</span>
-                            <span class="tiny muted">{{ block_group.list|length }} уроков</span>
+                        <div class="student-home-class-progress">
+                            <div class="row row-between tiny">
+                                {% if class_item.total %}
+                                    <strong class="tnum">{{ class_item.done }}/{{ class_item.total }} выполнено</strong>
+                                    <span class="tnum muted">{{ class_item.progress }}%</span>
+                                {% else %}
+                                    <span class="muted">Материалы и тренажёры</span>
+                                {% endif %}
+                            </div>
+                            {% if class_item.total %}<div class="progress progress-success"><span style="width:{{ class_item.progress }}%"></span></div>{% endif %}
+                            {% if class_item.waiting or class_item.revision %}
+                                <div class="student-progress-statuses">
+                                    {% if class_item.waiting %}<span class="badge badge-submitted">{{ class_item.waiting }} на проверке</span>{% endif %}
+                                    {% if class_item.revision %}<span class="badge badge-needs_revision">{{ class_item.revision }} доработать</span>{% endif %}
+                                </div>
+                            {% endif %}
                         </div>
                     </div>
                 </a>

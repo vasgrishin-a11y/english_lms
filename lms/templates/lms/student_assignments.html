@@ -20,17 +20,28 @@
     </form>
 
     <div class="rail-card">
-        <p class="rail-title">Прогресс курса</p>
+        <p class="rail-title">{% if query and mode == 'map' %}Прогресс по результатам{% else %}Прогресс курса{% endif %}</p>
         <div class="row row-tight">
             <div class="ring" style="--value:{{ totals.progress }}" role="img" aria-label="Выполнено {{ totals.progress }} процентов">
                 <span>{{ totals.progress }}%</span>
             </div>
             <div class="grow">
-                <p class="small mb-0"><strong class="tnum">{{ totals.done }}</strong> из <span class="tnum">{{ totals.total }}</span> заданий проверено</p>
-                <p class="tiny muted mb-0">{% if totals.waiting %}{{ totals.waiting }} ждут проверки · {% endif %}{{ totals.blocks }} {{ totals.blocks|pluralize_ru:"класс,класса,классов" }} · {{ totals.topics }} {{ totals.topics|pluralize_ru:"тема,темы,тем" }}</p>
+                <p class="small mb-0"><strong class="tnum">{{ totals.done }}</strong> из <span class="tnum">{{ totals.total }}</span> заданий выполнено</p>
+                <p class="tiny muted mb-0">
+                    {{ totals.blocks }} {{ totals.blocks|pluralize_ru:"класс,класса,классов" }} ·
+                    {{ totals.chapters }} {{ totals.chapters|pluralize_ru:"глава,главы,глав" }} ·
+                    {{ totals.topics }} {{ totals.topics|pluralize_ru:"тема,темы,тем" }}
+                </p>
+                {% if totals.waiting or totals.revision %}
+                    <p class="tiny muted mb-0" style="margin-top:4px">
+                        {% if totals.waiting %}{{ totals.waiting }} на проверке{% endif %}
+                        {% if totals.waiting and totals.revision %} · {% endif %}
+                        {% if totals.revision %}{{ totals.revision }} нужно доработать{% endif %}
+                    </p>
+                {% endif %}
             </div>
         </div>
-        <div class="progress" style="margin-top:12px" aria-hidden="true"><span style="width:{{ totals.progress }}%"></span></div>
+        <div class="progress progress-success" style="margin-top:12px" aria-hidden="true"><span style="width:{{ totals.progress }}%"></span></div>
     </div>
 
     <div class="rail-card">
@@ -39,7 +50,7 @@
             <a class="pill {% if mode == 'map' %}is-active turquoise{% endif %}" {% if mode == 'map' %}aria-current="page"{% endif %} href="{% querystring mode='map' %}">{% icon "grid" "icon icon-sm" %}Карточки</a>
             <a class="pill {% if mode == 'list' %}is-active{% endif %}" {% if mode == 'list' %}aria-current="page"{% endif %} href="{% querystring mode='list' %}">{% icon "list" "icon icon-sm" %}Список</a>
         </div>
-        <p class="tiny muted" style="margin-top:12px">Классы — карточками с обложками, внутри — главы, темы и задания.</p>
+        <p class="tiny muted" style="margin-top:12px">В карте можно раскрывать класс, главу или отдельную тему. Вложенные разделы остаются свёрнутыми, пока они не нужны.</p>
     </div>
 
     <div class="rail-card">
@@ -58,88 +69,108 @@
 <div class="classes-head">
     <div>
         <h1 class="classes-title">{% t "Карта курса" %}</h1>
-        <p class="page-note mb-0">Классы → главы → темы → задания: поиск, фильтр, обложки и быстрый переход в урок.</p>
+        <p class="page-note mb-0">Классы → главы → темы → задания. Нажмите на раздел, чтобы посмотреть его содержимое.</p>
     </div>
     <div class="classes-toolbar">
-        {% if query %}<span class="badge badge-info">Найдено: {{ page_obj.paginator.count }}</span>{% endif %}
-        <span class="badge badge-turquoise tnum">{{ totals.total }} заданий</span>
+        {% if query %}<span class="badge badge-info">Найдено: {{ found_count }}</span>{% endif %}
+        <span class="badge badge-turquoise tnum">{{ totals.assignments }} {{ totals.assignments|pluralize_ru:"элемент,элемента,элементов" }} курса</span>
+        {% if mode == 'map' and blocks_data %}
+            <button type="button" class="btn btn-secondary btn-sm" data-student-toggle-all hidden aria-controls="student-course-tree" aria-expanded="false">
+                {% icon "chevron-down" "icon icon-sm" %}<span data-student-toggle-label>Развернуть всё</span>
+            </button>
+        {% endif %}
     </div>
 </div>
 
-{% if page_obj.object_list %}
+{% if has_assignments %}
     {% if mode == 'map' %}
-        {% regroup page_obj by topic.block as block_groups %}
-        <div class="class-grid" style="margin-bottom:24px">
-            {% for block_group in block_groups %}
-                {% with block=block_group.list.0.topic.block %}
-                <a class="class-card" href="#block-{{ block.pk }}" style="text-decoration:none">
-                    {% include "lms/parts/cover.html" with course=block badge=block.cefr_level badge_class="tag-cefr" %}
-                    <div class="class-body">
-                        <h2 class="class-title">{{ block.name }}</h2>
-                        <div class="class-meta">
-                            <span>{{ block_group.list|length }} {{ block_group.list|length|pluralize_ru:"задание,задания,заданий" }}</span>
-                            <span aria-hidden="true">·</span>
-                            <span>{{ block_group.list|length }} уроков</span>
-                        </div>
-                        {% if block.description %}<p class="tiny muted mb-0" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">{{ block.description|truncatechars:90 }}</p>{% endif %}
-                        <div class="class-foot">
-                            <span>{% icon "layers" "icon icon-sm" %}{{ block_group.list|length }}</span>
-                            <span class="progress-dots" aria-hidden="true">
-                                {% for _ in block_group.list|slice:":5" %}<span class="progress-dot {% if forloop.counter <= 2 %}is-done{% endif %}"></span>{% endfor %}
+        <div class="student-course-tree" id="student-course-tree" data-student-course-tree>
+            {% for block_item in blocks_data %}
+                {% with block=block_item.block %}
+                <details class="student-course-class card" id="block-{{ block.pk }}" data-student-course-node>
+                    <summary class="student-course-class__summary">
+                        <span class="student-course-class__mark" aria-hidden="true">{% icon "layers" %}</span>
+                        <span class="student-course-class__identity">
+                            <span class="student-course-class__eyebrow">Класс{% if block.cefr_level %}<span class="tag tag-cefr">{{ block.cefr_level }}</span>{% endif %}</span>
+                            <span class="student-course-class__title">{{ block.name }}</span>
+                            {% if block.description %}<span class="student-course-class__description">{{ block.description|truncatechars:110 }}</span>{% endif %}
+                        </span>
+                        <span class="student-course-class__summary-meta">
+                            <span class="student-course-class__score">
+                                {% if block_item.total %}<strong>{{ block_item.done }}/{{ block_item.total }}</strong><span>выполнено</span>
+                                {% else %}<strong>{{ block_item.assignments }}</strong><span>элементов без сдачи</span>{% endif %}
                             </span>
+                            {% if block_item.total %}<span class="student-course-class__percent">{{ block_item.progress }}%</span>{% endif %}
+                            {% include "lms/parts/student_progress_statuses.html" with waiting=block_item.waiting revision=block_item.revision %}
+                            <span class="student-course-chevron" aria-hidden="true">{% icon "chevron-down" "icon icon-sm" %}</span>
+                        </span>
+                    </summary>
+                    <div class="student-course-class__body">
+                        {% if block.description %}<p class="student-course-description">{{ block.description }}</p>{% endif %}
+                        {% if block_item.total %}
+                            <div class="progress progress-success student-course-class__progress" role="img" aria-label="Выполнено {{ block_item.done }} из {{ block_item.total }} заданий в классе {{ block.name }}">
+                                <span style="width:{{ block_item.progress }}%"></span>
+                            </div>
+                        {% endif %}
+                        <div class="student-course-chapters">
+                            {% for chapter_item in block_item.chapters %}
+                                {% with chapter=chapter_item.chapter %}
+                                <details class="student-course-chapter" id="chapter-{{ chapter.pk }}" data-student-course-node>
+                                    <summary class="student-course-chapter__summary">
+                                        <span class="student-course-chevron" aria-hidden="true">{% icon "chevron-down" "icon icon-sm" %}</span>
+                                        <span class="student-course-chapter__identity">
+                                            <span class="student-course-chapter__eyebrow">Глава</span>
+                                            <span class="student-course-chapter__title">{{ chapter.title }}</span>
+                                            {% if chapter.description %}<span class="student-course-chapter__description">{{ chapter.description|truncatechars:90 }}</span>{% endif %}
+                                        </span>
+                                        <span class="student-course-chapter__stats">
+                                            {% if chapter_item.total %}<strong class="tnum">{{ chapter_item.done }}/{{ chapter_item.total }}</strong><span>{{ chapter_item.progress }}%</span>
+                                            {% else %}<span>{{ chapter_item.assignments }} элементов без сдачи</span>{% endif %}
+                                            {% include "lms/parts/student_progress_statuses.html" with waiting=chapter_item.waiting revision=chapter_item.revision %}
+                                        </span>
+                                    </summary>
+                                    <div class="student-course-chapter__body">
+                                        {% if chapter.description %}<p class="student-course-description">{{ chapter.description }}</p>{% endif %}
+                                        {% if chapter_item.total %}<div class="progress progress-success student-course-chapter__progress" role="img" aria-label="Выполнено {{ chapter_item.done }} из {{ chapter_item.total }} заданий в главе {{ chapter.title }}"><span style="width:{{ chapter_item.progress }}%"></span></div>{% endif %}
+                                        <div class="student-course-topics">
+                                            {% for topic_item in chapter_item.topics %}
+                                                {% with topic=topic_item.topic %}
+                                                <details class="student-course-topic" id="topic-{{ topic.pk }}" data-student-course-node>
+                                                    <summary class="student-course-topic__summary">
+                                                        <span class="student-course-chevron" aria-hidden="true">{% icon "chevron-down" "icon icon-sm" %}</span>
+                                                        <span class="student-course-topic__identity">
+                                                            <span class="student-course-topic__eyebrow">Тема</span>
+                                                            <span class="student-course-topic__title">{{ topic.title }}</span>
+                                                        </span>
+                                                        <span class="student-course-topic__stats">
+                                                            {% if topic_item.total %}<strong class="tnum">{{ topic_item.done }}/{{ topic_item.total }}</strong><span>{{ topic_item.progress }}%</span>
+                                                            {% else %}<span>{{ topic_item.assignments|length }} элементов без сдачи</span>{% endif %}
+                                                            {% include "lms/parts/student_progress_statuses.html" with waiting=topic_item.waiting revision=topic_item.revision %}
+                                                        </span>
+                                                    </summary>
+                                                    <div class="student-course-topic__body">
+                                                        {% if topic.description %}<p class="student-course-description">{{ topic.description }}</p>{% endif %}
+                                                        {% if topic_item.total %}<div class="progress progress-success student-course-topic__progress" role="img" aria-label="Выполнено {{ topic_item.done }} из {{ topic_item.total }} заданий по теме {{ topic.title }}"><span style="width:{{ topic_item.progress }}%"></span></div>{% endif %}
+                                                        <ul class="task-list student-course-topic__tasks">
+                                                            {% for entry in topic_item.assignments %}
+                                                                {% include "lms/parts/task_item.html" with assignment=entry.assignment state=entry.state %}
+                                                            {% endfor %}
+                                                        </ul>
+                                                    </div>
+                                                </details>
+                                                {% endwith %}
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                </details>
+                                {% endwith %}
+                            {% endfor %}
                         </div>
                     </div>
-                </a>
+                </details>
                 {% endwith %}
             {% endfor %}
         </div>
-
-        {% for block_group in block_groups %}
-            {% with block=block_group.list.0.topic.block %}
-                <section class="card" id="block-{{ block.pk }}" aria-labelledby="block-title-{{ block.pk }}">
-                    <div class="card-head">
-                        <div>
-                            <div class="row row-tight">
-                                {% if block.cefr_level %}<span class="tag tag-cefr">{{ block.cefr_level }}</span>{% endif %}
-                                <h2 id="block-title-{{ block.pk }}" class="mb-0">{{ block.name }}</h2>
-                            </div>
-                            {% if block.description %}<p class="muted small mb-0">{{ block.description }}</p>{% endif %}
-                        </div>
-                        <span class="badge badge-turquoise tnum">{{ block_group.list|length }} заданий</span>
-                    </div>
-
-                    {% regroup block_group.list by topic.chapter as chapter_groups %}
-                    {% for chapter_group in chapter_groups %}
-                        {% with chapter=chapter_group.grouper %}
-                        <section class="chapter" id="chapter-{{ chapter.pk }}" aria-labelledby="chapter-title-{{ chapter.pk }}" style="margin-bottom:14px">
-                            <div class="chapter-head">
-                                <h3 id="chapter-title-{{ chapter.pk }}" class="chapter-title">{% icon "layers" "icon icon-sm" %}{{ chapter.title }}</h3>
-                                <span class="tiny muted tnum">{{ chapter_group.list|length }} {{ chapter_group.list|length|pluralize_ru:"задание,задания,заданий" }}</span>
-                            </div>
-                            {% if chapter.description %}<p class="muted small mb-0">{{ chapter.description }}</p>{% endif %}
-                            {% regroup chapter_group.list by topic as topic_groups %}
-                            {% for topic_group in topic_groups %}
-                                {% with topic=topic_group.list.0.topic %}
-                                    <div class="panel">
-                                        <div class="row row-between">
-                                            <h4 class="mb-0">{% icon "book" %} {{ topic.title }}</h4>
-                                            <span class="tiny muted tnum">{{ topic_group.list|length }} {{ topic_group.list|length|pluralize_ru:"задание,задания,заданий" }}</span>
-                                        </div>
-                                        {% if topic.description %}<p class="muted small">{{ topic.description }}</p>{% endif %}
-                                        <ul class="task-list">
-                                            {% for assignment in topic_group.list %}
-                                                {% include "lms/parts/task_item.html" with assignment=assignment state=assignment.state %}
-                                            {% endfor %}
-                                        </ul>
-                                    </div>
-                                {% endwith %}
-                            {% endfor %}
-                        </section>
-                        {% endwith %}
-                    {% endfor %}
-                </section>
-            {% endwith %}
-        {% endfor %}
     {% else %}
         <section class="card">
             {% for assignment in page_obj %}
@@ -155,6 +186,8 @@
                     <span class="row-side">
                         {% if assignment.is_material %}
                             <a class="btn btn-secondary btn-sm" href="{% url 'assignment_detail' assignment.pk %}">{% icon "book" %}{% t "Открыть" %}</a>
+                        {% elif assignment.is_flashcards %}
+                            <a class="btn btn-secondary btn-sm" href="{% url 'trainer_session' assignment.pk %}">{% icon "play" %}{% t "Тренировать" %}</a>
                         {% elif assignment.state.status %}
                             <span class="badge badge-{{ assignment.state.status }}">{% icon assignment.state.status|status_icon "icon icon-sm" %}{{ assignment.state.status|status_label }}</span>
                             {% if assignment.state.grade != None %}
@@ -171,7 +204,7 @@
 {% else %}
     <div class="card">
         <div class="empty">
-            <div class="empty-ill">🔍</div>
+            <div class="empty-ill">{% if query %}🔍{% else %}📚{% endif %}</div>
             <h3>{% if query %}Ничего не нашлось{% else %}Пока нет опубликованных заданий{% endif %}</h3>
             <p>{% if query %}Попробуйте другой запрос — например, название темы или главы.{% else %}Как только преподаватель опубликует задания, они появятся на этой странице.{% endif %}</p>
             {% if query %}<a class="btn btn-secondary" href="{% url 'student_assignments' %}">{% t "Показать все задания" %}</a>{% endif %}
@@ -179,5 +212,32 @@
     </div>
 {% endif %}
 
-{% include "lms/pagination.html" %}
+{% if mode == 'list' %}{% include "lms/pagination.html" %}{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if mode == 'map' and blocks_data %}
+<script>
+(() => {
+  const tree = document.querySelector('[data-student-course-tree]');
+  const toggle = document.querySelector('[data-student-toggle-all]');
+  if (!tree || !toggle) return;
+  const nodes = Array.from(tree.querySelectorAll('[data-student-course-node]'));
+  const label = toggle.querySelector('[data-student-toggle-label]');
+  const sync = () => {
+    const anyOpen = nodes.some((node) => node.open);
+    label.textContent = anyOpen ? 'Свернуть всё' : 'Развернуть всё';
+    toggle.setAttribute('aria-expanded', String(anyOpen));
+  };
+  toggle.hidden = false;
+  tree.addEventListener('toggle', sync, true);
+  toggle.addEventListener('click', () => {
+    const shouldOpen = !nodes.some((node) => node.open);
+    nodes.forEach((node) => { node.open = shouldOpen; });
+    sync();
+  });
+  sync();
+})();
+</script>
+{% endif %}
 {% endblock %}

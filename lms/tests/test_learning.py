@@ -87,6 +87,23 @@ class StudentHomeTests(LMSCase):
         self.assertEqual([item.pk for item in response.context["due_soon"]], [second.pk])
         self.assertContains(response, "Essay")
 
+    def test_home_class_cards_show_real_progress_and_exclude_no_submission_items(self):
+        checked = self.submit()
+        self.review(checked)
+        waiting = Assignment.objects.create(
+            topic=self.topic, title="Waiting", description="Write", order=2
+        )
+        self.submit(assignment_id=waiting.pk)
+        self.card_assignment(title="Practice words", order=3)
+
+        response = self.student_client.get("/my/")
+        class_item = response.context["class_cards"][0]
+        self.assertEqual(class_item["total"], 2)
+        self.assertEqual(class_item["done"], 1)
+        self.assertEqual(class_item["waiting"], 1)
+        self.assertEqual(len(class_item["assignments"]), 3)
+        self.assertContains(response, "1/2 выполнено")
+
     def test_home_offers_draft_to_continue(self):
         AnswerDraft.objects.create(
             student=self.student, assignment=self.assignment, text="Начатый ответ"
@@ -149,6 +166,39 @@ class CatalogTests(LMSCase):
         self.assertContains(response, "Grammar")
         self.assertContains(response, "Past tense")
         self.assertEqual(response.context["totals"]["total"], 1)
+
+    def test_map_has_collapsed_class_chapter_topic_and_nested_progress_counts(self):
+        checked = self.submit()
+        self.review(checked)
+        waiting = Assignment.objects.create(
+            topic=self.topic, title="Waiting task", description="Write", order=2
+        )
+        self.submit(assignment_id=waiting.pk)
+        self.card_assignment(title="Word practice", order=3)
+
+        response = self.student_client.get("/assignments/")
+        block_item = response.context["blocks_data"][0]
+        chapter_item = block_item["chapters"][0]
+        topic_item = chapter_item["topics"][0]
+        for node in (block_item, chapter_item, topic_item):
+            self.assertEqual(node["done"], 1)
+            self.assertEqual(node["total"], 2)
+            self.assertEqual(node["waiting"], 1)
+        self.assertEqual(block_item["assignments"], 3)
+
+        html = response.content.decode()
+        expected_tags = (
+            f'<details class="student-course-class card" id="block-{self.block.pk}"',
+            f'<details class="student-course-chapter" id="chapter-{self.topic.chapter_id}"',
+            f'<details class="student-course-topic" id="topic-{self.topic.pk}"',
+        )
+        for expected in expected_tags:
+            tag = next(line for line in html.splitlines() if expected in line)
+            self.assertNotRegex(tag, r"\sopen(?:\s|>)")
+        self.assertIn('data-student-toggle-all hidden', html)
+        self.assertContains(response, "1/2")
+        self.assertContains(response, "1 на проверке")
+        self.assertNotContains(response, "1/3")
 
     def test_list_mode_and_invalid_mode_fallback(self):
         self.assertEqual(self.student_client.get("/assignments/?mode=list").context["mode"], "list")

@@ -201,7 +201,7 @@
                                 <span style="flex:1 1 auto;min-width:0">{% include "lms/parts/missing_file.html" with name=att.file.name|slice:"-40:" %}</span>
                                 {% else %}
                                 {% if att.file.name|media_kind == 'image' %}<img src="{% url 'media_preview' att.file.name %}" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:6px">{% endif %}
-                                <a href="{% url 'private_file' att.file.name %}" target="_blank" style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ att.file.name|slice:"-40:" }}</a>
+                                <a href="{% url 'private_file' att.file.name %}" target="_blank" style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ att.title|default:att.file.name|slice:"-40:" }}</a>
                                 {% endif %}
                                 <label style="display:flex;align-items:center;gap:4px;margin:0;font-weight:500;font-size:12px"><input type="checkbox" name="delete_attachments" value="{{ att.pk }}"> Удалить</label>
                             </div>
@@ -227,7 +227,7 @@
                             <label for="ai-extract-source">Файл для распознавания</label>
                             <select id="ai-extract-source">
                                 {% if assignment.material_file %}<option value="material:{{ assignment.pk }}">Основной файл: {{ assignment.material_file.name }}</option>{% endif %}
-                                {% for att in assignment.attachments.all %}<option value="attachment:{{ att.pk }}">{{ att.file.name }}</option>{% endfor %}
+                                {% for att in assignment.attachments.all %}<option value="attachment:{{ att.pk }}">{{ att.title|default:att.file.name }}</option>{% endfor %}
                             </select>
                             <div class="row row-tight" style="margin-top:8px">
                                 <button type="button" class="btn btn-secondary btn-sm" id="ai-extract-btn">{% icon "sparkles" "icon icon-sm" %} Распознать текст с файла</button>

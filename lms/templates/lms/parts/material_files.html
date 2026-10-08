@@ -24,7 +24,7 @@
         {% elif att.file.name|media_kind == 'audio' %}
         <audio controls src="{% url 'media_preview' att.file.name %}"></audio>
         {% endif %}
-        <a href="{% url 'private_file' att.file.name %}">Скачать: {{ att.file.name }}</a>
+        <a href="{% url 'private_file' att.file.name %}">Скачать: {{ att.title|default:att.file.name|truncatechars:100 }}</a>
     {% endif %}
 </div>
 {% endfor %}
