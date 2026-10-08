@@ -202,6 +202,9 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
                 check_page("dictionary")
                 page.goto(self.live_server_url + "/assignments/")
                 check_page("catalog")
+                page.locator(f"#block-{block.pk} > summary").click()
+                page.locator(f"#chapter-{topic.chapter_id} > summary").click()
+                page.locator(f"#topic-{topic.pk} > summary").click()
                 page.get_by_role("link", name="Browser assignment", exact=True).click()
                 check_page("assignment")
                 page.get_by_label("Текстовый ответ", exact=True).fill("Browser answer")
@@ -405,6 +408,8 @@ class BrowserItemFlowTests(StaticLiveServerTestCase):
             )
             page = context.new_page()
             page.goto(self.live_server_url + reverse("teacher_topic_board", args=[topic.pk]))
+            # Задания теперь свёрнуты: сначала раскрываем строку, затем открываем редактор.
+            page.locator(f"#assignment-{assignment.pk} > summary").click()
             page.locator(f'[data-open-editor="edit-{assignment.pk}"]').click()
             editor = page.locator(f"#edit-{assignment.pk}")
             expect(editor).to_have_attribute("open", "")

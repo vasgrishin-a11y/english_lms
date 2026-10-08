@@ -195,7 +195,7 @@ class CatalogTests(LMSCase):
         for expected in expected_tags:
             tag = next(line for line in html.splitlines() if expected in line)
             self.assertNotRegex(tag, r"\sopen(?:\s|>)")
-        self.assertIn('data-student-toggle-all hidden', html)
+        self.assertIn("data-student-toggle-all hidden", html)
         self.assertContains(response, "1/2")
         self.assertContains(response, "1 на проверке")
         self.assertNotContains(response, "1/3")

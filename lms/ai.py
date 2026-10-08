@@ -1386,9 +1386,11 @@ def _normalise_attachments(value):
         if not isinstance(item, dict):
             continue
         title = _clean(item.get("title"), 200)
-        content = _clean_text(
-            item.get("content"), min(AI_ATTACHMENT_MAX_CHARS, remaining)
-        ).replace("\x00", "").strip()
+        content = (
+            _clean_text(item.get("content"), min(AI_ATTACHMENT_MAX_CHARS, remaining))
+            .replace("\x00", "")
+            .strip()
+        )
         if not title or not content:
             continue
         attachments.append({"title": title, "content": content})
@@ -1612,9 +1614,7 @@ def material_summary(material):
         "quizzes": len([item for item in assignments if item["questions"]]),
         "card_sets": len(card_sets),
         "cards": sum(len(item["cards"]) for item in card_sets),
-        "attachments": sum(
-            len(item.get("attachments", [])) for item in assignments + card_sets
-        ),
+        "attachments": sum(len(item.get("attachments", [])) for item in assignments + card_sets),
     }
 
 
@@ -2074,9 +2074,7 @@ def assignment_payload(assignment):
         existing_attachments.append({"title": filename, "filename": filename})
     for attachment in assignment.attachments.order_by("order", "pk"):
         filename = attachment.file.name.rsplit("/", 1)[-1]
-        existing_attachments.append(
-            {"title": attachment.title or filename, "filename": filename}
-        )
+        existing_attachments.append({"title": attachment.title or filename, "filename": filename})
     payload["existing_attachments"] = existing_attachments
     if assignment.is_quiz:
         payload["questions"] = [

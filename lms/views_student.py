@@ -192,9 +192,7 @@ def student_home(request):
     due_soon.sort(key=lambda item: item[0])
     for class_row in class_progress.values():
         class_row["progress"] = (
-            int(round(100 * class_row["done"] / class_row["total"]))
-            if class_row["total"]
-            else 0
+            int(round(100 * class_row["done"] / class_row["total"])) if class_row["total"] else 0
         )
     recent = list(
         Submission.objects.filter(student=student, feedback__isnull=False)
@@ -239,9 +237,7 @@ def _student_course_map(student, query=""):
     for block in blocks_data:
         chapters = []
         for chapter in block["chapters"]:
-            chapter["topics"] = [
-                topic for topic in chapter["topics"] if topic["assignments"]
-            ]
+            chapter["topics"] = [topic for topic in chapter["topics"] if topic["assignments"]]
             if chapter["topics"]:
                 chapters.append(chapter)
         block["chapters"] = chapters
@@ -289,16 +285,12 @@ def student_assignments(request):
     blocks_data = []
     if mode == "map":
         blocks_data, map_assignments, summary = _student_course_map(request.user, query)
-        page = Paginator(map_assignments, settings.LMS_PAGE_SIZE).get_page(
-            request.GET.get("page")
-        )
+        page = Paginator(map_assignments, settings.LMS_PAGE_SIZE).get_page(request.GET.get("page"))
         found_count = len(map_assignments)
         has_assignments = bool(map_assignments)
     else:
         assignments = annotate_student_states(
-            visible_assignments(request.user).select_related(
-                "topic__block", "topic__chapter"
-            ),
+            visible_assignments(request.user).select_related("topic__block", "topic__chapter"),
             request.user,
         ).annotate(card_total=Count("cards"))
         if query:
@@ -319,9 +311,7 @@ def student_assignments(request):
             "order",
             "pk",
         )
-        page = Paginator(assignments, settings.LMS_PAGE_SIZE).get_page(
-            request.GET.get("page")
-        )
+        page = Paginator(assignments, settings.LMS_PAGE_SIZE).get_page(request.GET.get("page"))
         for assignment in page:
             assignment.state = state_of(assignment)
             assignment.cards_count = assignment.card_total or 0
@@ -336,9 +326,7 @@ def student_assignments(request):
                 "pk",
                 filter=Q(latest_status=Submission.Status.CHECKED) & requires_submission,
             ),
-            waiting=Count(
-                "pk", filter=Q(latest_status__in=WAITING_STATUSES) & requires_submission
-            ),
+            waiting=Count("pk", filter=Q(latest_status__in=WAITING_STATUSES) & requires_submission),
             revision=Count(
                 "pk",
                 filter=Q(latest_status=Submission.Status.NEEDS_REVISION) & requires_submission,
@@ -352,9 +340,7 @@ def student_assignments(request):
         found_count = page.paginator.count
         has_assignments = bool(page.object_list)
         summary["progress"] = (
-            int(round(100 * summary["done"] / summary["total"]))
-            if summary["total"]
-            else 0
+            int(round(100 * summary["done"] / summary["total"])) if summary["total"] else 0
         )
 
     return render(

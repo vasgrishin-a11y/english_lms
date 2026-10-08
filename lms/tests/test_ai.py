@@ -1336,8 +1336,7 @@ class NormaliseRevisionTests(SimpleTestCase):
                 "title": "Task",
                 "description": "Do it.",
                 "attachments": [
-                    {"title": f"Material {index}", "content": "x" * 13000}
-                    for index in range(4)
+                    {"title": f"Material {index}", "content": "x" * 13000} for index in range(4)
                 ],
             },
             assignment_type=Assignment.Type.TEXT,
