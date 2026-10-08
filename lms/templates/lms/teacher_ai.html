@@ -96,6 +96,7 @@
                         <div class="stat"><div class="stat-value tnum">{{ summary.assignments }}</div><div class="stat-label">заданий</div></div>
                         <div class="stat"><div class="stat-value tnum">{{ summary.questions }}</div><div class="stat-label">вопросов теста</div></div>
                         <div class="stat"><div class="stat-value tnum">{{ summary.cards }}</div><div class="stat-label">карточек</div></div>
+                        {% if summary.attachments %}<div class="stat"><div class="stat-value tnum">{{ summary.attachments }}</div><div class="stat-label">вложений к заданиям</div></div>{% endif %}
                     </div>
 
                     {% if meta.structure_label %}
@@ -152,7 +153,7 @@
                                 {% csrf_token %}
                                 <div class="form-field">
                                     <label for="id_revision_instruction">Что изменить в текущей версии</label>
-                                    <textarea id="id_revision_instruction" name="revision_instruction" rows="3" maxlength="4000" placeholder="Например: добавь текст для чтения перед вопросами, убери повторяющиеся вопросы, сделай инструкцию понятнее для B1">{{ revision_instruction }}</textarea>
+                                    <textarea id="id_revision_instruction" name="revision_instruction" rows="3" maxlength="4000" placeholder="Например: добавь текст для чтения и приложи его отдельным файлом, убери повторы, сделай инструкцию понятнее для B1">{{ revision_instruction }}</textarea>
                                     <div class="help-text">ИИ вернёт материал целиком, сохранив структуру курса; предыдущая версия заменится только в этом предпросмотре.</div>
                                 </div>
                                 <div class="form-actions">
@@ -181,7 +182,8 @@
                 <ol class="small muted" style="padding-left:18px">
                     <li>Материал разбирается в структуру: <strong>класс → главы → темы → задания → вопросы → карточки</strong>. Если главы не указаны — темы попадут в главу «Общее».</li>
                     <li>Задание рассчитано на заранее неизвестного ученика: ИИ использует только уровень, тему, навык и другие параметры из запроса, не имя или историю попыток.</li>
-                    <li>Если ответ зависит от текста, картинки, аудио или файла, материал попадёт в условие или должен быть реальным вложением — ИИ не оставляет ссылок на отсутствующий текст.</li>
+                    {% if mode == 'online' %}<li>Если попросить, ИИ создаст к заданию отдельный текстовый материал: он будет приложен как скачиваемый TXT-файл. Исходный загруженный файл автоматически не копируется.</li>{% else %}<li>Офлайн-разбор не создаёт вложения: отдельные TXT-файлы для задания доступны с подключённой моделью.</li>{% endif %}
+                    <li>Если ответ зависит от материала, он должен быть в условии или среди реальных вложений — ИИ не оставляет ссылок на отсутствующий текст.</li>
                     <li>Локальная vision-модель понимает фото страницы; Word, Excel и PDF читаются офлайн.</li>
                     <li>Импорт создаёт только черновики — ученики ничего не видят до публикации и назначения.</li>
                     <li>Черновики дальше правятся вручную: как обычные задания курса. Главы можно переименовать на карте курса.</li>

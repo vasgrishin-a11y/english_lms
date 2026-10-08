@@ -14,6 +14,7 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 from .curriculum import (
     WAITING_STATUSES,
     annotate_student_states,
+    course_tree,
     state_of,
     visible_assignments,
 )
@@ -138,16 +139,40 @@ def student_home(request):
         )
     )
     drafts = {draft.assignment_id: draft for draft in AnswerDraft.objects.filter(student=student)}
-    # Материалы для занятий остаются в списке (структура курса), но прогресс,
-    # сроки и «продолжить» не затрагивают: отвечать на них не нужно.
+    # Материалы и тренажёры остаются в списке структуры курса, но не входят
+    # в прогресс сдачи, сроки и очередь «Продолжить».
     total = done = waiting = revision = graded = 0
     due_soon = []
     continue_candidates = []
+    class_progress = {}
     for assignment in assignments:
         state = state_of(assignment)
         assignment.state = state
-        if assignment.is_material:
+        block = assignment.topic.block
+        class_row = class_progress.setdefault(
+            block.pk,
+            {
+                "block": block,
+                "assignments": [],
+                "total": 0,
+                "done": 0,
+                "waiting": 0,
+                "revision": 0,
+                "progress": 0,
+            },
+        )
+        class_row["assignments"].append(assignment)
+        # Карточки и материалы остаются в классе, но не требуют сдачи и не
+        # должны раздувать знаменатель прогресса или попадать в «Продолжить».
+        if assignment.is_no_submission:
             continue
+        class_row["total"] += 1
+        if state["status"] == Submission.Status.CHECKED:
+            class_row["done"] += 1
+        elif state["status"] in WAITING_STATUSES:
+            class_row["waiting"] += 1
+        elif state["status"] == Submission.Status.NEEDS_REVISION:
+            class_row["revision"] += 1
         total += 1
         if state["status"] == Submission.Status.CHECKED:
             done += 1
@@ -165,6 +190,10 @@ def student_home(request):
         if unfinished or assignment.pk in drafts:
             continue_candidates.append(assignment)
     due_soon.sort(key=lambda item: item[0])
+    for class_row in class_progress.values():
+        class_row["progress"] = (
+            int(round(100 * class_row["done"] / class_row["total"])) if class_row["total"] else 0
+        )
     recent = list(
         Submission.objects.filter(student=student, feedback__isnull=False)
         .exclude(assignment__assignment_type__in=Assignment.NO_SUBMISSION_TYPES)
@@ -184,6 +213,7 @@ def student_home(request):
         "continue_draft": drafts.get(continue_candidates[0].pk if continue_candidates else None),
         "due_soon": [item[1] for item in due_soon[:6]],
         "assignments": assignments,
+        "class_cards": list(class_progress.values()),
         "totals": {
             "total": total,
             "done": done,
@@ -200,63 +230,129 @@ def student_home(request):
     return render(request, "lms/student_home.html", context)
 
 
+def _student_course_map(student, query=""):
+    """Полное дерево видимых заданий со счётчиками прогресса по каждой ветке."""
+    blocks_data, _tree_totals = course_tree(student=student, query=query)
+    blocks_data = [block for block in blocks_data if block["assignments"]]
+    for block in blocks_data:
+        chapters = []
+        for chapter in block["chapters"]:
+            chapter["topics"] = [topic for topic in chapter["topics"] if topic["assignments"]]
+            if chapter["topics"]:
+                chapters.append(chapter)
+        block["chapters"] = chapters
+        block["topics"] = [topic for chapter in chapters for topic in chapter["topics"]]
+
+    assignments = []
+    for block in blocks_data:
+        for chapter in block["chapters"]:
+            for topic in chapter["topics"]:
+                for entry in topic["assignments"]:
+                    assignment = entry["assignment"]
+                    assignment.state = entry["state"]
+                    assignment.cards_count = getattr(assignment, "card_total", 0) or 0
+                    assignments.append(assignment)
+
+    total = sum(block["total"] for block in blocks_data)
+    done = sum(block["done"] for block in blocks_data)
+    totals = {
+        "blocks": len(blocks_data),
+        "chapters": sum(len(block["chapters"]) for block in blocks_data),
+        "topics": sum(len(block["topics"]) for block in blocks_data),
+        "assignments": len(assignments),
+        "total": total,
+        "done": done,
+        "waiting": sum(block["waiting"] for block in blocks_data),
+        "revision": sum(block["revision"] for block in blocks_data),
+        "progress": int(round(100 * done / total)) if total else 0,
+    }
+    return blocks_data, assignments, totals
+
+
 @student_required
 @require_GET
 def student_assignments(request):
-    """Карта курса: страница заданий, сгруппированных по блокам и темам в шаблоне.
+    """Карта курса ученика: сворачиваемые классы, главы и темы с прогрессом.
 
-    Бюджет — фиксированное число запросов независимо от размера курса: сессия,
-    пользователь, роль, счётчик страниц, сама страница и одна агрегирующая
-    сводка. Задания с карточками приходят в общем списке с числом карточек.
+    Карта строится по полному дереву курса, чтобы счётчики отражали весь класс,
+    а не только текущую страницу. Режим «Список» остаётся постраничным.
     """
     query = request.GET.get("q", "").strip()[:200]
-    assignments = annotate_student_states(
-        visible_assignments(request.user).select_related("topic__block", "topic__chapter"),
-        request.user,
-    ).annotate(card_total=Count("cards"))
-    if query:
-        assignments = assignments.filter(
-            Q(title__icontains=query)
-            | Q(description__icontains=query)
-            | Q(topic__title__icontains=query)
-            | Q(topic__chapter__title__icontains=query)
-            | Q(topic__block__name__icontains=query)
-        )
-    assignments = assignments.order_by(
-        "topic__block__order",
-        "topic__block__name",
-        "topic__chapter__order",
-        "topic__chapter__title",
-        "topic__order",
-        "topic__title",
-        "order",
-        "pk",
-    )
-    page = Paginator(assignments, settings.LMS_PAGE_SIZE).get_page(request.GET.get("page"))
-    for assignment in page:
-        assignment.state = state_of(assignment)
-        assignment.cards_count = assignment.card_total or 0
-    not_material = ~Q(assignment_type=Assignment.Type.MATERIAL)
-    summary = annotate_student_states(visible_assignments(request.user), request.user).aggregate(
-        # Материалы для занятий в прогресс не входят: их не сдают и не проверяют.
-        total=Count("pk", filter=not_material),
-        done=Count("pk", filter=Q(latest_status=Submission.Status.CHECKED) & not_material),
-        waiting=Count("pk", filter=Q(latest_status__in=WAITING_STATUSES) & not_material),
-        blocks=Count("topic__block_id", distinct=True),
-        topics=Count("topic_id", distinct=True),
-    )
-    total = summary["total"] or 0
-    summary["progress"] = int(round(100 * summary["done"] / total)) if total else 0
     mode = request.GET.get("mode", "map")
     if mode not in {"map", "list"}:
         mode = "map"
+
+    blocks_data = []
+    if mode == "map":
+        blocks_data, map_assignments, summary = _student_course_map(request.user, query)
+        page = Paginator(map_assignments, settings.LMS_PAGE_SIZE).get_page(request.GET.get("page"))
+        found_count = len(map_assignments)
+        has_assignments = bool(map_assignments)
+    else:
+        assignments = annotate_student_states(
+            visible_assignments(request.user).select_related("topic__block", "topic__chapter"),
+            request.user,
+        ).annotate(card_total=Count("cards"))
+        if query:
+            assignments = assignments.filter(
+                Q(title__icontains=query)
+                | Q(description__icontains=query)
+                | Q(topic__title__icontains=query)
+                | Q(topic__chapter__title__icontains=query)
+                | Q(topic__block__name__icontains=query)
+            )
+        assignments = assignments.order_by(
+            "topic__block__order",
+            "topic__block__name",
+            "topic__chapter__order",
+            "topic__chapter__title",
+            "topic__order",
+            "topic__title",
+            "order",
+            "pk",
+        )
+        page = Paginator(assignments, settings.LMS_PAGE_SIZE).get_page(request.GET.get("page"))
+        for assignment in page:
+            assignment.state = state_of(assignment)
+            assignment.cards_count = assignment.card_total or 0
+        requires_submission = ~Q(assignment_type__in=Assignment.NO_SUBMISSION_TYPES)
+        summary = annotate_student_states(
+            visible_assignments(request.user), request.user
+        ).aggregate(
+            # Тренажёры и материалы остаются в списке, но сдавать их не нужно.
+            assignments=Count("pk"),
+            total=Count("pk", filter=requires_submission),
+            done=Count(
+                "pk",
+                filter=Q(latest_status=Submission.Status.CHECKED) & requires_submission,
+            ),
+            waiting=Count("pk", filter=Q(latest_status__in=WAITING_STATUSES) & requires_submission),
+            revision=Count(
+                "pk",
+                filter=Q(latest_status=Submission.Status.NEEDS_REVISION) & requires_submission,
+            ),
+            blocks=Count("topic__block_id", distinct=True),
+            chapters=Count("topic__chapter_id", distinct=True),
+            topics=Count("topic_id", distinct=True),
+        )
+        summary["assignments"] = summary["assignments"] or 0
+        summary["total"] = summary["total"] or 0
+        found_count = page.paginator.count
+        has_assignments = bool(page.object_list)
+        summary["progress"] = (
+            int(round(100 * summary["done"] / summary["total"])) if summary["total"] else 0
+        )
+
     return render(
         request,
         "lms/student_assignments.html",
         {
             "assignments": page,
+            "blocks_data": blocks_data,
             "totals": summary,
             "page_obj": page,
+            "found_count": found_count,
+            "has_assignments": has_assignments,
             "query": query,
             "mode": mode,
             "workspace": "curriculum",

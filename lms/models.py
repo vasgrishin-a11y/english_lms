@@ -680,6 +680,7 @@ class AssignmentAttachment(models.Model):
         validators=[file_validator, validate_upload],
         verbose_name="Файл",
     )
+    title = models.CharField(max_length=200, blank=True, verbose_name="Название материала")
     order = models.PositiveIntegerField(default=0, verbose_name="Порядок")
     created_at = models.DateTimeField(auto_now_add=True)
 

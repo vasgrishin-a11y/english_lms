@@ -2,57 +2,7 @@
 {% load lms_tags %}
 
 {% block title %}Тема: {{ topic.title }} — Задания — English LMS{% endblock %}
-{% block workspace_class %}workspace-wide has-rail{% endblock %}
-
-{% block rail %}
-<aside class="rail" aria-label="Навигация по навыкам">
-    <div class="rail-card">
-        <a class="btn btn-ghost btn-sm btn-block" href="{% url 'teacher_curriculum' %}#block-{{ block.pk }}">{% icon "arrow-left" %}Назад к Классам</a>
-        <div style="margin-top:12px">
-            <p class="rail-title">Тема</p>
-            <p class="small strong mb-0">{{ topic.title }}</p>
-            <p class="tiny muted mb-0">{{ block.name }}{% if block.cefr_level %} · {{ block.cefr_level }}{% endif %}</p>
-            <p class="tiny muted">{{ all_assignments|length }} {{ all_assignments|length|pluralize_ru:"задание,задания,заданий" }}</p>
-        </div>
-    </div>
-
-    <div class="rail-card">
-        <p class="rail-title">Навыки — Skills</p>
-        <div class="col" style="gap:6px">
-            {% for item in skill_menu %}
-                <a class="pill {% if selected_skill == item.slug %}is-active turquoise{% endif %}" href="{% if item.slug == 'all' %}{% url 'teacher_topic_board' topic.pk %}{% else %}{% url 'teacher_topic_board' topic.pk %}?skill={{ item.slug }}{% endif %}" style="justify-content:space-between">
-                    <span>{{ item.label }}</span>
-                    <span class="tnum" style="font-size:11px">{{ item.count }}</span>
-                </a>
-            {% endfor %}
-        </div>
-        <p class="tiny muted" style="margin-top:12px">Фильтр по навыкам. Порядок — как в теме.</p>
-    </div>
-
-    <div class="rail-card">
-        <p class="rail-title">Добавить</p>
-        <div class="col" style="gap:8px">
-            <a class="btn btn-sm btn-block" href="{% url 'teacher_assignment_new' %}?topic={{ topic.pk }}">{% icon "plus" %}Задание</a>
-            <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_assignment_new' %}?type=quiz&topic={{ topic.pk }}">{% icon "target" %}Тест</a>
-            <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_assignment_new' %}?type=flashcards&topic={{ topic.pk }}">{% icon "cards" %}Карточки</a>
-            <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_assignment_new' %}?type=material&topic={{ topic.pk }}">{% icon "file-text" %}Материалы</a>
-        </div>
-    </div>
-
-    <div class="rail-card">
-        <p class="rail-title">Действия с темой</p>
-        <div class="col" style="gap:6px">
-            <a class="btn btn-ghost btn-sm btn-block" href="{% url 'teacher_topic_edit' topic.pk %}">{% icon "pencil" %}Изменить тему</a>
-            <form method="post" action="{% url 'teacher_topic_assignments_publish' topic.pk %}" data-confirm="Опубликовать все задания темы «{{ topic.title }}»?">
-                {% csrf_token %}<input type="hidden" name="publish" value="1"><input type="hidden" name="next" value="{% url 'teacher_topic_board' topic.pk %}"><button class="btn btn-ghost btn-sm btn-block" type="submit">{% icon "check" %}Опубликовать всё</button>
-            </form>
-            <form method="post" action="{% url 'teacher_topic_assignments_publish' topic.pk %}" data-confirm="В черновики все задания темы?">
-                {% csrf_token %}<input type="hidden" name="publish" value="0"><input type="hidden" name="next" value="{% url 'teacher_topic_board' topic.pk %}"><button class="btn btn-ghost btn-sm btn-block" type="submit">{% icon "pencil" %}В черновики всё</button>
-            </form>
-        </div>
-    </div>
-</aside>
-{% endblock %}
+{% block workspace_class %}workspace-wide{% endblock %}
 
 {% block content %}
 <nav aria-label="Хлебные крошки">
@@ -64,44 +14,102 @@
     </ol>
 </nav>
 
+<details class="card topic-tools" data-topic-tools>
+    <summary class="topic-tools__summary">
+        <span class="topic-tools__summary-title">{% icon "sliders" "icon icon-sm" %}Панель темы</span>
+        <span class="topic-tools__summary-hint">Тема · Навыки · Добавить · Действия с темой</span>
+        {% icon "chevron-down" "icon icon-sm topic-tools__chevron" %}
+    </summary>
+    <div class="topic-tools__grid">
+        <section class="topic-tools__section" aria-labelledby="topic-tools-topic-title">
+            <p class="rail-title" id="topic-tools-topic-title">Тема</p>
+            <p class="small strong mb-0">{{ topic.title }}</p>
+            <p class="tiny muted mb-0">{{ block.name }}{% if block.cefr_level %} · {{ block.cefr_level }}{% endif %}</p>
+            <p class="tiny muted">{{ all_assignments|length }} {{ all_assignments|length|pluralize_ru:"задание,задания,заданий" }}</p>
+            <a class="btn btn-ghost btn-sm" href="{% url 'teacher_curriculum' %}#block-{{ block.pk }}">{% icon "arrow-left" %}Назад к Классам</a>
+        </section>
+
+        <section class="topic-tools__section" aria-labelledby="topic-tools-skills-title">
+            <p class="rail-title" id="topic-tools-skills-title">Навыки — Skills</p>
+            <div class="col" style="gap:6px">
+                {% for item in skill_menu %}
+                    <a class="pill {% if selected_skill == item.slug %}is-active turquoise{% endif %}" href="{% if item.slug == 'all' %}{% url 'teacher_topic_board' topic.pk %}{% else %}{% url 'teacher_topic_board' topic.pk %}?skill={{ item.slug }}{% endif %}" style="justify-content:space-between">
+                        <span>{{ item.label }}</span>
+                        <span class="tnum" style="font-size:11px">{{ item.count }}</span>
+                    </a>
+                {% endfor %}
+            </div>
+            <p class="tiny muted" style="margin-top:12px">Фильтр по навыкам. Порядок — как в теме.</p>
+        </section>
+
+        <section class="topic-tools__section" aria-labelledby="topic-tools-add-title">
+            <p class="rail-title" id="topic-tools-add-title">Добавить</p>
+            <div class="col" style="gap:8px">
+                <a class="btn btn-sm btn-block" href="{% url 'teacher_assignment_new' %}?topic={{ topic.pk }}">{% icon "plus" %}Задание</a>
+                <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_assignment_new' %}?type=quiz&topic={{ topic.pk }}">{% icon "target" %}Тест</a>
+                <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_assignment_new' %}?type=flashcards&topic={{ topic.pk }}">{% icon "cards" %}Карточки</a>
+                <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_assignment_new' %}?type=material&topic={{ topic.pk }}">{% icon "file-text" %}Материалы</a>
+            </div>
+        </section>
+
+        <section class="topic-tools__section" aria-labelledby="topic-tools-actions-title">
+            <p class="rail-title" id="topic-tools-actions-title">Действия с темой</p>
+            <div class="col" style="gap:6px">
+                <a class="btn btn-ghost btn-sm btn-block" href="{% url 'teacher_topic_edit' topic.pk %}">{% icon "pencil" %}Изменить тему</a>
+                <form method="post" action="{% url 'teacher_topic_assignments_publish' topic.pk %}" data-confirm="Опубликовать все задания темы «{{ topic.title }}»?">
+                    {% csrf_token %}<input type="hidden" name="publish" value="1"><input type="hidden" name="next" value="{% url 'teacher_topic_board' topic.pk %}"><button class="btn btn-ghost btn-sm btn-block" type="submit">{% icon "check" %}Опубликовать всё</button>
+                </form>
+                <form method="post" action="{% url 'teacher_topic_assignments_publish' topic.pk %}" data-confirm="В черновики все задания темы?">
+                    {% csrf_token %}<input type="hidden" name="publish" value="0"><input type="hidden" name="next" value="{% url 'teacher_topic_board' topic.pk %}"><button class="btn btn-ghost btn-sm btn-block" type="submit">{% icon "pencil" %}В черновики всё</button>
+                </form>
+            </div>
+        </section>
+    </div>
+</details>
+
 <div class="classes-head" style="margin-bottom:12px">
     <div>
         <h1 class="classes-title" style="font-size:22px">{{ topic.title }} {% url 'teacher_topic_edit' topic.pk as topic_edit_url %}{% include "lms/parts/audience_badge.html" with audience=topic_audience href=topic_edit_url %}</h1>
     </div>
     <div class="classes-toolbar">
         <span class="badge badge-turquoise">{{ assignments|length }} из {{ all_assignments|length }}</span>
+        <button class="btn btn-ghost btn-sm" type="button" data-toggle-all-assignments hidden aria-expanded="false" aria-controls="assignment-list">
+            {% icon "chevron-down" "icon icon-sm" %}<span data-toggle-all-label>Развернуть все задания</span>
+        </button>
         {% if selected_skill != 'all' %}<a class="btn btn-ghost btn-sm" href="{% url 'teacher_topic_board' topic.pk %}">Сбросить фильтр</a>{% endif %}
     </div>
 </div>
 
 {% if assignments %}
-<div class="col" style="gap:16px" data-topic-board data-topic-id="{{ topic.pk }}">
+<div class="col assignment-list" id="assignment-list" data-topic-board data-topic-id="{{ topic.pk }}">
     {% for assignment in assignments %}
-    <section class="card" id="assignment-{{ assignment.pk }}" data-assignment-card data-skills="{% for s in assignment.skills.all %}{{ s.kind }} {{ s.slug }} {% endfor %}" style="padding:20px">
-        <div class="card-head" style="margin-bottom:12px">
-            <div style="min-width:0;flex:1">
-                <div class="row row-tight" style="flex-wrap:wrap;gap:8px">
-                    <h3 style="margin:0;font-size:16px;flex:1 1 auto;min-width:0">{{ assignment.title }}</h3>
-                    <span class="badge badge-{{ assignment.status }}">{{ assignment.get_status_display }}</span>
-                    <span class="badge badge-turquoise">{% icon assignment.assignment_type|type_icon "icon icon-sm" %}{{ assignment.get_assignment_type_display }}</span>
-                    {% if assignment.deadline %}<span class="badge badge-outline">{{ assignment.deadline|date:"d.m.Y H:i" }}</span>{% endif %}
+    <details class="card assignment-accordion" id="assignment-{{ assignment.pk }}" data-assignment-card data-skills="{% for s in assignment.skills.all %}{{ s.kind }} {{ s.slug }} {% endfor %}" {% if assignment.edit_open %}open{% endif %}>
+        <summary class="assignment-row">
+            <span class="assignment-row__chevron" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span>
+            <span class="assignment-row__title" role="heading" aria-level="2">{{ assignment.title }}</span>
+            <span class="badge badge-{{ assignment.status }}">{{ assignment.get_status_display }}</span>
+            <span class="badge badge-turquoise">{% icon assignment.assignment_type|type_icon "icon icon-sm" %}{{ assignment.get_assignment_type_display }}</span>
+            {% if assignment.deadline %}<span class="badge badge-outline">{{ assignment.deadline|date:"d.m.Y H:i" }}</span>{% endif %}
+        </summary>
+        <div class="assignment-accordion__body">
+            <div class="card-head" style="margin-bottom:12px">
+                <div style="min-width:0;flex:1">
                     {% url 'teacher_assignment_form' assignment.pk as assignment_edit_url %}{% include "lms/parts/audience_badge.html" with audience=assignment.audience href=assignment_edit_url %}
+                    <div class="row row-tight" style="margin-top:6px;gap:6px;flex-wrap:wrap">
+                        {% for skill in assignment.skills.all %}<span class="tag tag-skill">{{ skill.name }}</span>{% empty %}<span class="tiny muted">без навыка</span>{% endfor %}
+                        <span class="tiny muted tnum">{% if not assignment.is_material %}{{ assignment.max_points }} б. · {% endif %}порядок {{ assignment.order }}</span>
+                    </div>
                 </div>
-                <div class="row row-tight" style="margin-top:6px;gap:6px;flex-wrap:wrap">
-                    {% for skill in assignment.skills.all %}<span class="tag tag-skill">{{ skill.name }}</span>{% empty %}<span class="tiny muted">без навыка</span>{% endfor %}
-                    <span class="tiny muted tnum">{% if not assignment.is_material %}{{ assignment.max_points }} б. · {% endif %}порядок {{ assignment.order }}</span>
+                <div class="row row-tight" style="gap:4px;flex-wrap:wrap">
+                    <a class="btn btn-secondary btn-sm" href="#edit-{{ assignment.pk }}" data-open-editor="edit-{{ assignment.pk }}">{% icon "pencil" %}Редактировать</a>
+                    <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_preview' assignment.pk %}" title="Как увидит ученик">{% icon "eye" %}</a>
+                    <form method="post" action="{% url 'teacher_assignment_publish' assignment.pk %}" style="display:inline">
+                        {% csrf_token %}<input type="hidden" name="publish" value="{% if assignment.status == 'published' %}0{% else %}1{% endif %}"><input type="hidden" name="next" value="{% url 'teacher_topic_board' topic.pk %}"><button class="btn btn-ghost btn-sm" type="submit">{% if assignment.status == 'published' %}В черновики{% else %}Опубликовать{% endif %}</button>
+                    </form>
                 </div>
             </div>
-            <div class="row row-tight" style="gap:4px;flex-wrap:wrap">
-                <a class="btn btn-secondary btn-sm" href="#edit-{{ assignment.pk }}" data-open-editor="edit-{{ assignment.pk }}">{% icon "pencil" %}Редактировать</a>
-                <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_preview' assignment.pk %}" title="Как увидит ученик">{% icon "eye" %}</a>
-                <form method="post" action="{% url 'teacher_assignment_publish' assignment.pk %}" style="display:inline">
-                    {% csrf_token %}<input type="hidden" name="publish" value="{% if assignment.status == 'published' %}0{% else %}1{% endif %}"><input type="hidden" name="next" value="{% url 'teacher_topic_board' topic.pk %}"><button class="btn btn-ghost btn-sm" type="submit">{% if assignment.status == 'published' %}В черновики{% else %}Опубликовать{% endif %}</button>
-                </form>
-            </div>
-        </div>
 
-        <div class="col" style="gap:12px">
+            <div class="col" style="gap:12px">
             <div style="background:var(--surface-sunken);border:1px solid var(--border-subtle);border-radius:8px;padding:12px 14px;font-size:14px;line-height:1.6;white-space:pre-wrap">{{ assignment.description }}</div>
 
             {% include "lms/parts/material_files.html" %}
@@ -149,7 +157,7 @@
                         <label>Удалить вложения</label>
                         <div style="display:flex;flex-wrap:wrap;gap:6px">
                             {% for att in assignment.attachments.all %}
-                            <label style="display:flex;align-items:center;gap:6px;font-size:11px;background:var(--surface);border:1px solid var(--border-subtle);border-radius:6px;padding:4px 8px"><input type="checkbox" name="delete_attachments" value="{{ att.pk }}"> {{ att.file.name|slice:"-20:" }}</label>
+                            <label style="display:flex;align-items:center;gap:6px;font-size:11px;background:var(--surface);border:1px solid var(--border-subtle);border-radius:6px;padding:4px 8px"><input type="checkbox" name="delete_attachments" value="{{ att.pk }}"> {{ att.title|default:att.file.name|slice:"-40:" }}</label>
                             {% endfor %}
                         </div>
                     </div>
@@ -169,7 +177,8 @@
             <form method="post" action="{% url 'teacher_archive_item' 'assignment' assignment.pk %}" data-confirm="В архив задание «{{ assignment.title }}»?">{% csrf_token %}<button class="btn btn-ghost btn-sm" type="submit">{% icon "archive" "icon icon-sm" %}</button></form>
             <form method="post" action="{% url 'teacher_assignment_delete' assignment.pk %}" data-confirm="Удалить задание навсегда?">{% csrf_token %}<button class="btn btn-danger-ghost btn-sm" type="submit">{% icon "trash" "icon icon-sm" %}</button></form>
         </div>
-    </section>
+        </div>
+    </details>
     {% endfor %}
 </div>
 {% else %}
@@ -182,14 +191,38 @@
 (function(){
   const board = document.querySelector('[data-topic-board]');
   if(!board) return;
+
+  const cards = Array.from(board.querySelectorAll('[data-assignment-card]'));
+  const toggleAll = document.querySelector('[data-toggle-all-assignments]');
+  const toggleLabel = toggleAll?.querySelector('[data-toggle-all-label]');
+  if(toggleAll && cards.length){
+    toggleAll.hidden = false;
+    const syncToggle = function(){
+      const anyOpen = cards.some(function(card){ return card.open; });
+      toggleLabel.textContent = anyOpen ? 'Свернуть все задания' : 'Развернуть все задания';
+      toggleAll.setAttribute('aria-expanded', anyOpen ? 'true' : 'false');
+    };
+    toggleAll.addEventListener('click', function(){
+      const openAll = !cards.some(function(card){ return card.open; });
+      cards.forEach(function(card){ card.open = openAll; });
+      syncToggle();
+    });
+    board.addEventListener('toggle', syncToggle, true);
+    syncToggle();
+  }
+
   board.addEventListener('click', function(event){
     const opener = event.target.closest('[data-open-editor]');
     if(opener){
       event.preventDefault();
       const editor = document.getElementById(opener.dataset.openEditor);
-      editor.open = true;
-      editor.scrollIntoView({block:'start'});
-      editor.querySelector('input:not([type=hidden]), textarea')?.focus();
+      const assignmentCard = editor?.closest('[data-assignment-card]');
+      if(assignmentCard) assignmentCard.open = true;
+      if(editor){
+        editor.open = true;
+        editor.scrollIntoView({block:'start'});
+        editor.querySelector('input:not([type=hidden]), textarea')?.focus();
+      }
     }
     const cancel = event.target.closest('[data-cancel-editor]');
     if(cancel){ cancel.closest('form').reset(); cancel.closest('details').open = false; }

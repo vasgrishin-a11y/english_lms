@@ -18,7 +18,16 @@ from django.test import SimpleTestCase, override_settings
 from django.urls import reverse
 
 from lms import ai
-from lms.models import Assignment, Block, Chapter, Choice, Flashcard, Question, Topic
+from lms.models import (
+    Assignment,
+    AssignmentAttachment,
+    Block,
+    Chapter,
+    Choice,
+    Flashcard,
+    Question,
+    Topic,
+)
 
 from .base import LMSCase
 
@@ -506,6 +515,12 @@ class OnlineModeTests(LMSCase):
                                         ],
                                     }
                                 ],
+                                "attachments": [
+                                    {
+                                        "title": "Airport dialogue",
+                                        "content": "Clerk: May I see your passport?\nPassenger: Here it is.",
+                                    }
+                                ],
                             }
                         ],
                         "cards": [
@@ -534,9 +549,17 @@ class OnlineModeTests(LMSCase):
                 {"target": "mixed", "prompt": "Сделай блок B1", "structure_confirmed": "on"},
             )
         self.assertContains(response, "разобрал ИИ")
+        self.assertContains(response, "Airport dialogue")
         self.teacher_client.post(reverse("teacher_ai_import"))
         assignment = Assignment.objects.get(title="Airport quiz")
         self.assertEqual(assignment.status, Assignment.Publication.DRAFT)
+        attachment = assignment.attachments.get()
+        self.assertEqual(attachment.title, "Airport dialogue")
+        attachment.file.open("rb")
+        self.assertEqual(
+            attachment.file.read().decode("utf-8"),
+            "Clerk: May I see your passport?\nPassenger: Here it is.",
+        )
         self.assertEqual(Block.objects.get(name="Travel B1").cefr_level, "B1")
         self.assertEqual(Flashcard.objects.count(), 2)
 
@@ -1225,6 +1248,38 @@ class AssignmentRevisionTests(LMSCase):
         self.assertIn("Old quiz", captured["prompt"])
 
     @ONLINE
+    def test_revision_adds_requested_material_and_preserves_existing_files(self):
+        quiz = self.make_quiz()
+        AssignmentAttachment.objects.create(
+            assignment=quiz,
+            file=SimpleUploadedFile("lesson.txt", b"Existing lesson text"),
+            title="Existing lesson",
+        )
+        revised = dict(
+            REVISION_QUIZ,
+            attachments=[{"title": "Reading passage", "content": "A new short passage."}],
+        )
+        captured = {}
+
+        def fake(_spec, prompt_text, **_kwargs):
+            captured["prompt"] = prompt_text
+            return revised
+
+        with patch("lms.ai._provider_material", side_effect=fake):
+            response = self.teacher_client.post(
+                self.ai_url(quiz), {"instruction": "Добавь текст и приложи его отдельным файлом"}
+            )
+        self.assertContains(response, "Reading passage")
+        self.assertIn("Existing lesson", captured["prompt"])
+        self.assertIn("attachments", captured["prompt"])
+
+        self.teacher_client.post(self.apply_url(quiz))
+        saved = list(quiz.attachments.order_by("order", "pk"))
+        self.assertEqual([item.title for item in saved], ["Existing lesson", "Reading passage"])
+        saved[-1].file.open("rb")
+        self.assertEqual(saved[-1].file.read().decode("utf-8"), "A new short passage.")
+
+    @ONLINE
     def test_empty_instruction_is_rejected(self):
         response = self.teacher_client.post(self.ai_url(self.assignment), {"instruction": "   "})
         self.assertContains(response, "Опишите, что изменить")
@@ -1275,6 +1330,20 @@ class AssignmentRevisionTests(LMSCase):
 
 
 class NormaliseRevisionTests(SimpleTestCase):
+    def test_attachment_materials_are_bounded_and_text_only(self):
+        revision = ai.normalise_revision(
+            {
+                "title": "Task",
+                "description": "Do it.",
+                "attachments": [
+                    {"title": f"Material {index}", "content": "x" * 13000} for index in range(4)
+                ],
+            },
+            assignment_type=Assignment.Type.TEXT,
+        )
+        self.assertEqual([len(item["content"]) for item in revision["attachments"]], [12000, 8000])
+        self.assertEqual(sum(len(item["content"]) for item in revision["attachments"]), 20000)
+
     def test_forces_original_type_and_drops_questions_for_text(self):
         revision = ai.normalise_revision(REVISION_QUIZ, assignment_type=Assignment.Type.TEXT)
         self.assertEqual(revision["type"], Assignment.Type.TEXT)

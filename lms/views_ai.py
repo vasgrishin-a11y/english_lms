@@ -229,13 +229,14 @@ def ai_import(request):
     _clear_session(request)
     message = (
         "Черновики созданы: блоков {blocks}, глав {chapters}, тем {topics}, заданий {assignments}, "
-        "вопросов {questions}, карточек {cards}.".format(
+        "вопросов {questions}, карточек {cards}, вложений {attachments}.".format(
             blocks=created.get("blocks", 0),
             chapters=created.get("chapters", 0),
             topics=created.get("topics", 0),
             assignments=created.get("assignments", 0),
             questions=created.get("questions", 0),
             cards=created.get("cards", 0),
+            attachments=created.get("attachments", 0),
         )
     )
     if created.get("skipped"):
@@ -327,6 +328,8 @@ def assignment_ai_apply(request, pk):
         parts.append(f"Вопросов теперь: {summary['questions']}.")
     if summary["cards"]:
         parts.append(f"Карточек теперь: {summary['cards']}.")
+    if summary.get("attachments"):
+        parts.append(f"Добавлено TXT-вложений: {summary['attachments']}.")
     messages.success(request, " ".join(parts))
     return redirect("teacher_assignment_form", pk=pk)
 

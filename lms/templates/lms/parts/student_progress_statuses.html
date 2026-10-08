@@ -1,0 +1,7 @@
+{% load lms_tags %}
+{% if waiting or revision %}
+<span class="student-progress-statuses">
+    {% if waiting %}<span class="badge badge-submitted">{% icon "clock" "icon icon-sm" %}{{ waiting }} на проверке</span>{% endif %}
+    {% if revision %}<span class="badge badge-needs_revision">{% icon "refresh" "icon icon-sm" %}{{ revision }} доработать</span>{% endif %}
+</span>
+{% endif %}

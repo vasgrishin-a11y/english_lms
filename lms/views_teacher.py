@@ -719,7 +719,9 @@ def _clone_assignment_full(source, target_topic, order=None):
     copy.excluded_students.set(source.excluded_students.all())
     # attachments
     for att in source.attachments.order_by("order", "pk"):
-        AssignmentAttachment.objects.create(assignment=copy, file=att.file, order=att.order)
+        AssignmentAttachment.objects.create(
+            assignment=copy, file=att.file, title=att.title, order=att.order
+        )
     # flashcards
     for card in source.cards.order_by("order", "pk"):
         Flashcard.objects.create(
@@ -1499,7 +1501,7 @@ def assignment_form(request, pk=None):
             last_order = instance.attachments.aggregate(m=Max("order"))["m"] or 0
             for idx, f in enumerate(new_files, start=1):
                 AssignmentAttachment.objects.create(
-                    assignment=instance, file=f, order=last_order + idx
+                    assignment=instance, file=f, title=f.name[:200], order=last_order + idx
                 )
         # Handle deletion of existing attachments
         delete_ids = request.POST.getlist("delete_attachments")
@@ -1686,7 +1688,9 @@ def assignment_quick_edit(request, pk):
 
     attachments = []
     for upload in request.FILES.getlist("new_attachments"):
-        attachment = AssignmentAttachment(assignment=assignment, file=upload)
+        attachment = AssignmentAttachment(
+            assignment=assignment, file=upload, title=upload.name[:200]
+        )
         try:
             attachment.full_clean()
         except ValidationError as error:

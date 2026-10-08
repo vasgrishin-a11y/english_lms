@@ -48,11 +48,21 @@ from dataclasses import dataclass, field
 from io import BytesIO
 
 from django.conf import settings
+from django.core.files.base import ContentFile
 from django.db import transaction
 from django.utils.text import slugify
 
 from .library import _create_questions
-from .models import Assignment, Block, CefrLevel, Flashcard, Question, Skill, Topic
+from .models import (
+    Assignment,
+    AssignmentAttachment,
+    Block,
+    CefrLevel,
+    Flashcard,
+    Question,
+    Skill,
+    Topic,
+)
 from .skills import apply_default_skills, ensure_skill_catalog
 
 logger = logging.getLogger("lms.ai")
@@ -83,6 +93,12 @@ TARGETS = (
     ("mixed", "Класс → главы → темы → задания"),
     ("assignment", "Задание"),
 )
+
+# ИИ может добавлять к заданию отдельные текстовые файлы. Ограничения удерживают
+# предпросмотр и данные сессии компактными, даже если модель вернула слишком много.
+AI_ATTACHMENT_MAX_COUNT = 3
+AI_ATTACHMENT_MAX_CHARS = 12000
+AI_ATTACHMENT_TOTAL_CHARS = 20000
 
 TYPE_MARKERS = {
     "текст": Assignment.Type.TEXT,
@@ -917,9 +933,11 @@ AI_AUTHORING_CONTEXT = """Ты — профессиональный препод
   или «изучите приложенный файл», если после такой инструкции нет самого текста, картинки
   или файла;
 - загруженный файл, переданный модели для разбора, является исходным материалом и не
-  становится вложением задания автоматически. Если его нельзя передать ученику как
-  вложение, включи нужный текст и контекст в description или создай другое, самодостаточное
-  задание. Не оставляй скрытых ссылок на материал, которого ученик не увидит.
+  становится вложением задания автоматически. Если преподаватель явно просит приложить
+  материал, создай отдельное текстовое вложение через поле attachments; LMS сохранит его
+  как доступный ученику UTF-8-файл .txt. Сам исходный бинарный файл автоматически не копируется.
+  Если прикладывать не просили, включи нужный полный текст в description или создай другое,
+  самодостаточное задание. Не оставляй скрытых ссылок на материал, которого ученик не увидит.
 
 В этой LMS учитель сначала получает содержание как черновик и сам проверяет его,
 а назначает его группе или отдельным ученикам позже. Не добавляй в текст задания
@@ -949,9 +967,11 @@ PROMPT_SCHEMA = """Верни строго JSON без пояснений в ф�
           "max_points": 10, "skills": ["grammar|vocabulary|listening|speaking|writing|reading"],
           "questions": [{"kind": "mcq|multi|gap|match|order|sort|spell|text|voice", "text": "вопрос",
               "points": 1, "explanation": "",
-              "choices": [{"text": "вариант", "correct": true, "match_text": ""}]}]}],
+              "choices": [{"text": "вариант", "correct": true, "match_text": ""}]}],
+          "attachments": [{"title": "Название материала", "content": "Текст отдельного материала для файла .txt"}]}],
        "cards": [{"title": "Карточки: тема", "description": "",
-          "cards": [{"front": "слово", "back": "перевод", "example": "пример"}]}]}]}],
+          "cards": [{"front": "слово", "back": "перевод", "example": "пример"}],
+          "attachments": [{"title": "Название материала", "content": "Текст отдельного материала для файла .txt"}]}]}]}],
    "topics": []
   }]}
 
@@ -976,8 +996,14 @@ PROMPT_SCHEMA = """Верни строго JSON без пояснений в ф�
   языку этого материала. Не создавай персональную адаптацию.
 - questions и cards не добавляй без педагогической причины; для типов, которым они не
   нужны, возвращай пустые списки. Для flashcards создай минимум две карточки.
+- attachments — отдельные текстовые материалы к заданию или набору карточек;
+  добавляй их только если преподаватель явно попросил приложить/создать материал отдельным
+  файлом. В каждом элементе верни title и полный content: LMS сохранит его для ученика как
+  UTF-8 .txt-вложение. Не создавай внешние ссылки, base64, фиктивные файлы, картинки или аудио.
+  Если вложение не просили — верни пустой список. Не дублируй вложение в description без нужды.
 - Не добавляй поля, которых нет в схеме. Лимиты проекта: не более 5 классов, 10 глав
-  на класс, 30 тем, 60 заданий, 20 вопросов и 300 карточек.
+  на класс, 30 тем, 60 заданий, 20 вопросов и 300 карточек; до 3 вложений на объект,
+  не более 12 000 знаков в каждом и 20 000 знаков суммарно.
 """
 
 TARGET_PROMPTS = {
@@ -1096,13 +1122,15 @@ def build_prompt(text, *, prompt="", target="mixed", filename="", kind="text", s
         parts.append(
             f"Исходный файл для разбора: {filename}. Тип файла: {kind}. "
             "Он доступен модели как источник, но не считается автоматически вложенным "
-            "в итоговое задание для ученика."
+            "в итоговое задание для ученика. Если преподаватель явно просит приложить "
+            "материал, верни его отдельный полный текст в поле attachments."
         )
     if text.strip():
         parts.append(
             "Текст материала (если задание будет на него ссылаться, включи нужный полный "
-            "текст в description, потому что исходный текст сам по себе не прикрепляется "
-            "к итоговому заданию):\n" + text.strip()[: limits()["text_chars"]]
+            "текст в description либо, если преподаватель попросил, в отдельное поле "
+            "attachments; исходный текст сам по себе не прикрепляется к заданию):\n"
+            + text.strip()[: limits()["text_chars"]]
         )
     elif kind in {"image", "video", "audio", "pdf"}:
         parts.append(
@@ -1127,7 +1155,8 @@ def build_material_revision_prompt(material, instruction, structure=None):
             structure_instruction(structure),
             "Ты редактируешь текущий предпросмотр материала ИИ до его импорта в LMS. "
             "Верни полную новую версию материала в той же структуре: не описывай отличия "
-            "и не удаляй элементы, которые не затронуты пожеланием преподавателя.",
+            "и не удаляй элементы, которые не затронуты пожеланием преподавателя. Сохрани "
+            "уже существующие attachments без изменений; новые добавляй только по прямой просьбе.",
             f"Пожелания преподавателя к текущей версии: {instruction.strip()}",
             "Текущая версия материала (JSON):\n" + current,
             PROMPT_SCHEMA,
@@ -1347,6 +1376,28 @@ def _list_items(value):
     return value if isinstance(value, (list, tuple)) else ()
 
 
+def _normalise_attachments(value):
+    """Текстовые вложения ИИ → ограниченный и безопасный список .txt-материалов."""
+    attachments = []
+    remaining = AI_ATTACHMENT_TOTAL_CHARS
+    for item in _list_items(value):
+        if len(attachments) >= AI_ATTACHMENT_MAX_COUNT or remaining <= 0:
+            break
+        if not isinstance(item, dict):
+            continue
+        title = _clean(item.get("title"), 200)
+        content = (
+            _clean_text(item.get("content"), min(AI_ATTACHMENT_MAX_CHARS, remaining))
+            .replace("\x00", "")
+            .strip()
+        )
+        if not title or not content:
+            continue
+        attachments.append({"title": title, "content": content})
+        remaining -= len(content)
+    return attachments
+
+
 def _normalise_topic(topic_data, caps, counters):
     """Тема из JSON → чистая тема с заданиями и карточками."""
     if not isinstance(topic_data, dict):
@@ -1390,6 +1441,7 @@ def _normalise_topic(topic_data, caps, counters):
                     "title": _clean(card_set.get("title"), 200) or f"Карточки: {topic['title']}",
                     "description": _clean_text(card_set.get("description")),
                     "cards": cards,
+                    "attachments": _normalise_attachments(card_set.get("attachments")),
                 }
             )
             counters["cards"] += len(cards)
@@ -1540,6 +1592,7 @@ def _normalise_assignment(item, caps):
         "max_points": max(1, min(1000, max_points)),
         "questions": questions,
         "skills": skills,
+        "attachments": _normalise_attachments(item.get("attachments")),
     }
 
 
@@ -1561,6 +1614,7 @@ def material_summary(material):
         "quizzes": len([item for item in assignments if item["questions"]]),
         "card_sets": len(card_sets),
         "cards": sum(len(item["cards"]) for item in card_sets),
+        "attachments": sum(len(item.get("attachments", [])) for item in assignments + card_sets),
     }
 
 
@@ -1774,6 +1828,7 @@ def import_material(material, *, target_topic=None, structure=None):
         "assignments": 0,
         "questions": 0,
         "cards": 0,
+        "attachments": 0,
         "skipped": 0,
     }
     for block_data in material.get("blocks", []):
@@ -1865,15 +1920,37 @@ def import_material(material, *, target_topic=None, structure=None):
             created["cards"] += _import_cards(topic, topic_data, created)
 
     logger.info(
-        "ai_import blocks=%s chapters=%s topics=%s assignments=%s questions=%s cards=%s",
+        "ai_import blocks=%s chapters=%s topics=%s assignments=%s questions=%s cards=%s attachments=%s",
         created["blocks"],
         created.get("chapters", 0),
         created["topics"],
         created["assignments"],
         created["questions"],
         created["cards"],
+        created["attachments"],
     )
     return created
+
+
+def _save_ai_attachments(assignment, materials):
+    """Сохранить сгенерированные тексты как реальные доступные ученику TXT-вложения."""
+    attachments = _normalise_attachments(materials)
+    last_order = (
+        assignment.attachments.order_by("-order", "-pk").values_list("order", flat=True).first()
+        or 0
+    )
+    for position, material in enumerate(attachments, start=1):
+        attachment = AssignmentAttachment(
+            assignment=assignment,
+            title=material["title"],
+            order=last_order + position,
+        )
+        attachment.file.save(
+            "material.txt",
+            ContentFile(material["content"].encode("utf-8")),
+            save=True,
+        )
+    return len(attachments)
 
 
 def _import_assignments(topic, topic_data, created):
@@ -1904,6 +1981,7 @@ def _import_assignments(topic, topic_data, created):
             assignment.skills.set(skills)
         else:
             apply_default_skills(assignment)
+        created["attachments"] += _save_ai_attachments(assignment, item.get("attachments"))
     return count
 
 
@@ -1937,6 +2015,7 @@ def _import_cards(topic, topic_data, created):
             ]
         )
         apply_default_skills(assignment)
+        created["attachments"] += _save_ai_attachments(assignment, card_set.get("attachments"))
         total += len(card_set["cards"])
     return total
 
@@ -1949,16 +2028,21 @@ REVISION_SCHEMA = """Верни строго JSON без пояснений в �
  "questions": [{"kind": "mcq|multi|gap|match|order|sort|spell|text|voice", "text": "вопрос",
     "points": 1, "explanation": "",
     "choices": [{"text": "вариант", "correct": true, "match_text": ""}]}],
- "cards": [{"front": "слово", "back": "перевод", "example": "пример"}]}
+ "cards": [{"front": "слово", "back": "перевод", "example": "пример"}],
+ "attachments": [{"title": "Название нового материала", "content": "Полный текст для отдельного .txt-файла"}]}
 Правила: верни задание ЦЕЛИКОМ, уже с правкой — не описывай отличия. Сохраняй язык,
 уровень и тип исходного задания; не добавляй имя, профиль, прошлые ошибки или другую
 персонализацию ученика. Описание должно быть пригодно для любого ученика, которому
 позже назначат это задание. Если новая версия требует прочитать текст, посмотреть
 картинку, прослушать аудио или открыть файл, полный материал должен быть в description
 либо среди реально доступных ученику вложений; не оставляй ссылку на скрытый или
-несуществующий материал. Для mcq/order ровно один верный вариант, для multi — от
-двух; для match/sort в choices пары text ↔ match_text; для gap/spell принимаемые
-ответы как верные варианты; text и voice — без choices."""
+несуществующий материал. В attachments возвращай только новые текстовые материалы,
+которые преподаватель прямо попросил приложить; LMS сохранит их как UTF-8 .txt. Если
+вложение не просили — верни пустой список. Текущие файлы передаются в existing_attachments:
+не дублируй их, они сохранятся автоматически. Не генерируй base64, ссылки, картинки или
+аудио. Для mcq/order ровно один верный вариант, для multi — от двух; для match/sort в
+choices пары text ↔ match_text; для gap/spell принимаемые ответы как верные варианты;
+text и voice — без choices."""
 
 
 def assignment_payload(assignment):
@@ -1984,6 +2068,14 @@ def assignment_payload(assignment):
             "chapter": chapter.title if chapter is not None else "",
             "topic": topic.title,
         }
+    existing_attachments = []
+    if assignment.material_file:
+        filename = assignment.material_file.name.rsplit("/", 1)[-1]
+        existing_attachments.append({"title": filename, "filename": filename})
+    for attachment in assignment.attachments.order_by("order", "pk"):
+        filename = attachment.file.name.rsplit("/", 1)[-1]
+        existing_attachments.append({"title": attachment.title or filename, "filename": filename})
+    payload["existing_attachments"] = existing_attachments
     if assignment.is_quiz:
         payload["questions"] = [
             {
@@ -2037,8 +2129,8 @@ def build_revision_prompt(assignment, instruction):
         )
     else:
         parts.append(
-            "Тип задания менять нельзя: правь только title и description, "
-            "questions и cards верни пустыми списками."
+            "Тип задания менять нельзя: правь title и description, questions и cards "
+            "верни пустыми списками; новые attachments добавляй только по прямой просьбе."
         )
     parts.append(REVISION_SCHEMA)
     return "\n\n".join(parts)
@@ -2107,8 +2199,8 @@ def normalise_revision(payload, *, assignment_type):
 
 @transaction.atomic
 def apply_revision(assignment, revision):
-    """Заменить содержимое задания версией ИИ. Статус, дедлайн, вложение сохраняются."""
-    summary = {"questions": 0, "cards": 0}
+    """Заменить содержимое задания и добавить новые ИИ-вложения, не удаляя старые."""
+    summary = {"questions": 0, "cards": 0, "attachments": 0}
     assignment.title = revision["title"][:200]
     assignment.description = revision["description"]
     if assignment.is_quiz:
@@ -2137,11 +2229,13 @@ def apply_revision(assignment, revision):
     if skills:
         assignment.skills.set(skills)
     assignment.save(update_fields=["title", "description", "max_points", "updated_at"])
+    summary["attachments"] = _save_ai_attachments(assignment, revision.get("attachments"))
     logger.info(
-        "ai_revision_applied assignment=%s questions=%s cards=%s",
+        "ai_revision_applied assignment=%s questions=%s cards=%s attachments=%s",
         assignment.pk,
         summary["questions"],
         summary["cards"],
+        summary["attachments"],
     )
     return summary
 

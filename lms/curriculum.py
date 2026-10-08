@@ -229,6 +229,8 @@ def _topic_entry(topic, assignments, *, stats, student_view, query, parent_audie
             topic_total += 1
             if state["status"] == Submission.Status.CHECKED:
                 topic_done += 1
+            elif state["status"] in WAITING_STATUSES:
+                topic_waiting += 1
             elif state["status"] == Submission.Status.NEEDS_REVISION:
                 topic_revision += 1
         if stats is not None:
@@ -335,12 +337,17 @@ def _assemble(
                 audience.accumulate(chapter, block_audience) if with_audience else None
             )
             for topic in topics_by_chapter.get(chapter.pk, []):
+                # Совпадение по названию класса, главы или темы означает, что
+                # показываем всю ветку, а не только задания с совпавшим текстом.
+                topic_query = (
+                    "" if _matches(query, block.name, chapter.title, topic.title) else query
+                )
                 item = _topic_entry(
                     topic,
                     assignments_by_topic.get(topic.pk, []),
                     stats=stats,
                     student_view=student_view,
-                    query=query,
+                    query=topic_query,
                     parent_audience=chapter_audience,
                 )
                 item["publication_state"] = topic_publication[topic.pk]

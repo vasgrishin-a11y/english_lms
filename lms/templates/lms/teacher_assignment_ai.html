@@ -47,6 +47,7 @@
                     {% if assignment.is_flashcards %}<span class="pill">Карточек: {{ card_count }}</span>{% endif %}
                     {% if not assignment.is_quiz and not assignment.is_no_submission %}<span class="pill">{{ assignment.max_points }} баллов</span>{% endif %}
                     {% if assignment.material_file %}<span class="pill">{% icon "file-text" "icon icon-sm" %}Вложение сохранится</span>{% endif %}
+                    {% if assignment.attachments.exists %}<span class="pill">{% icon "file-text" "icon icon-sm" %}Вложений сохранится: {{ assignment.attachments.count }}</span>{% endif %}
                     {% if assignment.status == 'published' %}<span class="pill">Опубликовано — статус не изменится</span>{% else %}<span class="pill">Черновик</span>{% endif %}
                 </div>
                 {% if submissions_count %}
@@ -63,11 +64,12 @@
                     {% csrf_token %}
                     <div class="form-field">
                         <label for="id_instruction">Правка для помощника</label>
-                        <textarea id="id_instruction" name="instruction" rows="3" maxlength="4000" placeholder="Например: сделай вопросы на уровень сложнее, добавь два вопроса про Past Simple, перепиши условие короче, переведи примеры на тему Travel">{{ instruction }}</textarea>
+                        <textarea id="id_instruction" name="instruction" rows="3" maxlength="4000" placeholder="Например: сделай вопросы сложнее, добавь примерный диалог отдельным TXT-вложением, перепиши условие короче">{{ instruction }}</textarea>
                         <div class="help-text" id="id_instruction_helptext">
                             {% if assignment.is_quiz %}Помощник вернёт тест целиком: название, условие и все вопросы.
                             {% elif assignment.is_flashcards %}Помощник вернёт тренажёр целиком: название, условие и все карточки.
                             {% else %}Тип задания не меняется: помощник перепишет название и условие.{% endif %}
+                            Отдельно можно попросить создать и приложить к заданию текстовый материал — он станет скачиваемым TXT-файлом.
                         </div>
                     </div>
                     <div class="form-actions">
@@ -126,9 +128,23 @@
                         </ul>
                     {% endif %}
 
+                    {% if revision.attachments %}
+                        <section class="panel" aria-label="Новые материалы для вложения" style="margin-bottom:16px">
+                            <p class="small strong mb-0">Новые материалы — будут приложены к заданию как TXT-файлы</p>
+                            <div class="col small" style="gap:12px;margin-top:8px">
+                                {% for attachment in revision.attachments %}
+                                    <div>
+                                        <p class="strong mb-0">{{ attachment.title }}</p>
+                                        <div class="tiny muted">{{ attachment.content|linebreaksbr }}</div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        </section>
+                    {% endif %}
+
                     <div class="alert alert-warning" role="alert">
                         {% icon "alert" %}
-                        <span>При применении текущие {% if assignment.is_quiz %}вопросы и варианты ответов{% elif assignment.is_flashcards %}карточки{% else %}название и условие{% endif %} будут заменены версией выше. Отменить замену нельзя.</span>
+                        <span>При применении текущее содержимое задания будет заменено версией выше. Существующие файлы, статус, дедлайн и назначения сохранятся; новые TXT-вложения добавятся к заданию. Отменить замену нельзя.</span>
                     </div>
                     <form method="post" action="{% url 'teacher_assignment_ai_apply' assignment.pk %}">
                         {% csrf_token %}
@@ -147,7 +163,7 @@
                 <ol class="small muted" style="padding-left:18px">
                     <li>Помощник видит текущее задание целиком и вашу правку.</li>
                     <li>Он возвращает новую версию целиком — сравните её с текущей.</li>
-                    <li>Кнопка «Применить правки» заменяет содержимое; вложение, дедлайн, группа и статус публикации сохраняются.</li>
+                    <li>«Применить правки» заменит текст/вопросы/карточки, сохранит текущие вложения, дедлайн, группы и статус. По просьбе помощник добавит новые TXT-файлы.</li>
                     <li>Не понравилась версия — уточните правку и сгенерируйте заново.</li>
                 </ol>
                 <p class="tiny muted mb-0">Приватность: текст задания уходит только локальной модели на своём сервере. В журнал попадают лишь счётчики замен.</p>
@@ -158,6 +174,7 @@
                     <li>«Сделай вопросы на уровень C1 и добавь пояснения»</li>
                     <li>«Сократи условие до трёх предложений»</li>
                     <li>«Добавь 5 карточек про аэропорт»</li>
+                    <li>«Создай диалог и приложи его отдельным TXT-файлом»</li>
                     <li>«Замени половину вопросов на вписывание ответа»</li>
                 </ul>
             </section>

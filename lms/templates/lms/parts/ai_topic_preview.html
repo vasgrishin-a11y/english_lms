@@ -20,6 +20,16 @@
                     {% if assignment.skills %}
                         <p class="tiny muted mb-0">Навыки: {{ assignment.skills|join:", " }}</p>
                     {% endif %}
+                    {% if assignment.attachments %}
+                        <div class="panel" style="padding:10px 12px">
+                            <p class="tiny strong mb-0">Материалы, которые будут приложены как TXT-файлы</p>
+                            <ul class="tiny muted" style="margin:6px 0 0;padding-left:18px">
+                                {% for attachment in assignment.attachments %}
+                                    <li><strong>{{ attachment.title }}</strong><br>{{ attachment.content|linebreaksbr }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
                     {% if assignment.questions %}
                         <div>
                             <p class="tiny strong mb-0">Вопросы и ключи</p>
@@ -55,6 +65,16 @@
                 </summary>
                 <div class="col small" style="gap:10px;margin-top:12px">
                     {% if card_set.description %}<div>{{ card_set.description|linebreaks }}</div>{% endif %}
+                    {% if card_set.attachments %}
+                        <div class="panel" style="padding:10px 12px">
+                            <p class="tiny strong mb-0">Материалы, которые будут приложены как TXT-файлы</p>
+                            <ul class="tiny muted" style="margin:6px 0 0;padding-left:18px">
+                                {% for attachment in card_set.attachments %}
+                                    <li><strong>{{ attachment.title }}</strong><br>{{ attachment.content|linebreaksbr }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
                     <div class="card-grid">
                         {% for card in card_set.cards %}
                             <div class="panel" style="height:100%;display:flex;flex-direction:column;gap:6px">

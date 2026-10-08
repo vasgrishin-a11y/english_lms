@@ -33,6 +33,22 @@ class BoardControlsTests(LMSCase):
         self.assertNotIn("data-assignment-row", html)
         self.assertNotIn(self.assignment.title, html)
 
+    def test_topic_board_starts_with_collapsed_tasks_and_tools_panel(self):
+        html = self.teacher_client.get(
+            reverse("teacher_topic_board", args=[self.topic.pk])
+        ).content.decode()
+        self.assertIn("data-topic-tools", html)
+        self.assertIn("data-toggle-all-assignments", html)
+        self.assertIn("data-assignment-card", html)
+        self.assertIn(f">{self.assignment.title}</span>", html)
+        topic_tools_tag = next(line for line in html.splitlines() if "data-topic-tools" in line)
+        assignment_tag = next(
+            line for line in html.splitlines() if f'id="assignment-{self.assignment.pk}"' in line
+        )
+        self.assertNotIn(" open", topic_tools_tag)
+        self.assertNotIn(" open", assignment_tag)
+        self.assertIn("Развернуть все задания", html)
+
 
 class BoardRenameTests(LMSCase):
     def setUp(self):
