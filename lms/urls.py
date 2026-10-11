@@ -85,8 +85,21 @@ urlpatterns = [
         views_teacher.review_detail,
         name="teacher_submission_review_legacy",
     ),
+    path("teacher/curriculum/", views_teacher.curriculum, name="teacher_curriculum"),
     path(
-        "teacher/curriculum/", views_teacher.curriculum, name="teacher_curriculum"
+        "teacher/curriculum/backup/",
+        views_teacher.curriculum_backup,
+        name="teacher_curriculum_backup",
+    ),
+    path(
+        "teacher/curriculum/export/",
+        views_teacher.curriculum_export,
+        name="teacher_curriculum_export",
+    ),
+    path(
+        "teacher/curriculum/blocks/<int:pk>/export/",
+        views_teacher.block_export,
+        name="teacher_block_export",
     ),  # ── ИИ-помощник: материал → черновики курса ──────────────────────────
     path("teacher/ai/", views_ai.ai_assistant, name="teacher_ai"),
     path("teacher/ai/import/", views_ai.ai_import, name="teacher_ai_import"),
