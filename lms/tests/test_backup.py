@@ -109,6 +109,9 @@ class BackupTests(LMSCase):
         self.assertRedirects(
             self.student_client.get(block_export_url), reverse("student_assignments")
         )
+        # Ученик не может отправлять POST-запросы (403 Forbidden)
+        res_post = self.student_client.post(backup_url, {"strategy": "merge"})
+        self.assertEqual(res_post.status_code, 403)
 
         # Преподаватель
         res = self.teacher_client.get(backup_url)
