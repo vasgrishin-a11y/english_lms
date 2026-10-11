@@ -145,9 +145,10 @@ def serialize_curriculum(blocks=None):
                                 assignment.material_file.name
                             ):
                                 orig_name = Path(assignment.material_file.name).name
-                                safe_name = slugify(
-                                    orig_name, allow_unicode=True
-                                ) or f"file_{assignment.pk}"
+                                safe_name = (
+                                    slugify(orig_name, allow_unicode=True)
+                                    or f"file_{assignment.pk}"
+                                )
                                 ext = Path(orig_name).suffix
                                 if ext and not safe_name.endswith(ext):
                                     safe_name = f"{safe_name}{ext}"
@@ -171,9 +172,9 @@ def serialize_curriculum(blocks=None):
                             try:
                                 if att.file.storage.exists(att.file.name):
                                     orig_name = Path(att.file.name).name
-                                    safe_name = slugify(
-                                        orig_name, allow_unicode=True
-                                    ) or f"att_{att.pk}"
+                                    safe_name = (
+                                        slugify(orig_name, allow_unicode=True) or f"att_{att.pk}"
+                                    )
                                     ext = Path(orig_name).suffix
                                     if ext and not safe_name.endswith(ext):
                                         safe_name = f"{safe_name}{ext}"
@@ -335,9 +336,7 @@ def load_backup_file(uploaded_file) -> tuple[dict, ZipFile | None]:
         data = json.loads(raw_json)
         return data, None
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ValidationError(
-            "Файл не является корректным ZIP-архивом или JSON-файлом."
-        ) from exc
+        raise ValidationError("Файл не является корректным ZIP-архивом или JSON-файлом.") from exc
 
 
 @transaction.atomic

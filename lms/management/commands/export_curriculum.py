@@ -49,7 +49,9 @@ class Command(BaseCommand):
             import json
 
             manifest, _ = serialize_curriculum(blocks=blocks)
-            out_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+            out_path.write_text(
+                json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
         else:
             buf = build_curriculum_zip(blocks=blocks)
             out_path.write_bytes(buf.getvalue())

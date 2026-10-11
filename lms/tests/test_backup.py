@@ -248,7 +248,9 @@ class BackupTests(LMSCase):
     def test_import_strategy_merge_and_skip_duplicates(self):
         """При стратегии merge и skip дубликаты заданий не создаются повторно."""
         zip_buf = build_curriculum_zip()
-        zip_file = SimpleUploadedFile("backup.zip", zip_buf.getvalue(), content_type="application/zip")
+        zip_file = SimpleUploadedFile(
+            "backup.zip", zip_buf.getvalue(), content_type="application/zip"
+        )
 
         data, zf = load_backup_file(zip_file)
         stats = import_curriculum(
@@ -269,7 +271,9 @@ class BackupTests(LMSCase):
     def test_import_strategy_copy(self):
         """При стратегии copy создаётся отдельная независимая копия класса."""
         zip_buf = build_curriculum_zip()
-        zip_file = SimpleUploadedFile("backup.zip", zip_buf.getvalue(), content_type="application/zip")
+        zip_file = SimpleUploadedFile(
+            "backup.zip", zip_buf.getvalue(), content_type="application/zip"
+        )
 
         data, zf = load_backup_file(zip_file)
         stats = import_curriculum(
@@ -289,7 +293,9 @@ class BackupTests(LMSCase):
     def test_import_strategy_draft_status(self):
         """При publication_status='draft' все задания восстанавливаются как черновики."""
         zip_buf = build_curriculum_zip()
-        zip_file = SimpleUploadedFile("backup.zip", zip_buf.getvalue(), content_type="application/zip")
+        zip_file = SimpleUploadedFile(
+            "backup.zip", zip_buf.getvalue(), content_type="application/zip"
+        )
 
         data, zf = load_backup_file(zip_file)
         import_curriculum(
@@ -385,7 +391,9 @@ class BackupTests(LMSCase):
         # Очищаем и восстанавливаем
         Block.objects.all().delete()
 
-        upload = SimpleUploadedFile("backup.zip", zip_buf.getvalue(), content_type="application/zip")
+        upload = SimpleUploadedFile(
+            "backup.zip", zip_buf.getvalue(), content_type="application/zip"
+        )
         data, zf = load_backup_file(upload)
         import_curriculum(data, zf, strategy="merge")
         zf.close()

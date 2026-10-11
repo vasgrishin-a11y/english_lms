@@ -639,9 +639,7 @@ def curriculum_backup(request):
     if request.method == "POST":
         uploaded_file = request.FILES.get("backup_file")
         if not uploaded_file:
-            messages.error(
-                request, "Выберите файл резервной копии (.zip или .json) для загрузки."
-            )
+            messages.error(request, "Выберите файл резервной копии (.zip или .json) для загрузки.")
             return redirect("teacher_curriculum_backup")
 
         strategy = request.POST.get("strategy", "merge")

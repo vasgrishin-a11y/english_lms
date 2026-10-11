@@ -85,9 +85,7 @@ urlpatterns = [
         views_teacher.review_detail,
         name="teacher_submission_review_legacy",
     ),
-    path(
-        "teacher/curriculum/", views_teacher.curriculum, name="teacher_curriculum"
-    ),
+    path("teacher/curriculum/", views_teacher.curriculum, name="teacher_curriculum"),
     path(
         "teacher/curriculum/backup/",
         views_teacher.curriculum_backup,
