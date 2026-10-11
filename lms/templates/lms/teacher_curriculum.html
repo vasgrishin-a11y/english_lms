@@ -13,6 +13,8 @@
         <p class="tiny muted" style="margin-top:4px">Учебные классы, структура глав, тем и заданий</p>
     </div>
     <div class="classes-toolbar">
+        <a class="btn btn-secondary btn-sm" href="{% url 'teacher_curriculum_export' %}" title="{% t 'Выгрузить все материалы на компьютер' %}">{% icon "download" %}{% t "Выгрузить всё" %}</a>
+        <a class="btn btn-secondary btn-sm" href="{% url 'teacher_curriculum_backup' %}" title="{% t 'Загрузить материалы из бэкапа' %}">{% icon "upload" %}{% t "Загрузить" %}</a>
         <a class="btn btn-secondary btn-sm" href="{% url 'teacher_library' %}">{% icon "database" %}{% t "Библиотека" %}</a>
         <a class="btn btn-ghost btn-sm" href="{% url 'teacher_archive' %}">{% icon "archive" %}{% t "Архив" %}</a>
         <a class="btn btn-secondary btn-sm" href="{% url 'teacher_ai' %}">{% icon "sparkles" %}{% t "ИИ-помощник" %}</a>
@@ -96,6 +98,7 @@
                     </p>
                 </div>
                 <div class="row row-tight" style="gap:6px;flex-wrap:wrap">
+                    <a class="btn btn-ghost btn-sm" href="{% url 'teacher_block_export' block.pk %}" title="{% t 'Выгрузить класс' %}" aria-label="Выгрузить класс {{ block.name }}">{% icon "download" %}</a>
                     <form method="post" action="{% url 'teacher_block_assignments_publish' block.pk %}" style="display:inline">
                         {% csrf_token %}<input type="hidden" name="publish" value="{% if block_item.publication_state == 'published' %}0{% else %}1{% endif %}"><input type="hidden" name="next" value="{% url 'teacher_curriculum' %}#block-{{ block.pk }}"><button class="btn btn-ghost btn-sm" type="submit" title="{% if block_item.publication_state == 'published' %}Вернуть все главы, темы и задания в черновики{% else %}Опубликовать все главы, темы и задания{% endif %}">{% if block_item.publication_state == 'published' %}{% icon "file-text" "icon icon-sm" %}{% else %}{% icon "check" "icon icon-sm" %}{% endif %}</button>
                     </form>

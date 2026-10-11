@@ -1,0 +1,153 @@
+{% extends "lms/base.html" %}
+{% load lms_tags %}
+
+{% block title %}Резервная копия курса — English LMS{% endblock %}
+{% block workspace_class %}workspace-wide{% endblock %}
+
+{% block content %}
+<nav aria-label="Хлебные крошки">
+    <ol class="crumbs">
+        <li><a href="{% url 'teacher_curriculum' %}">{% t "Классы" %}</a></li>
+        <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">{% t "Резервная копия курса" %}</span></li>
+    </ol>
+</nav>
+
+<div class="classes-head">
+    <div>
+        <h1 class="classes-title">{% t "Резервная копия курса" %}</h1>
+        <p class="tiny muted" style="margin-top:4px">Выгрузка всех материалов, классов, глав, тем и заданий на компьютер и загрузка обратно на сайт</p>
+    </div>
+    <div class="classes-toolbar">
+        <a class="btn btn-secondary btn-sm" href="{% url 'teacher_curriculum' %}">{% icon "layers" %}{% t "Классы" %}</a>
+        <a class="btn btn-sm" href="{% url 'teacher_curriculum_export' %}" title="Выгрузить все материалы в ZIP-архив">{% icon "download" %}{% t "Выгрузить всё" %}</a>
+    </div>
+</div>
+
+<div class="filter-pills" style="margin-bottom:24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+    <div class="row row-tight" style="gap:8px;flex-wrap:wrap">
+        <span class="pill is-active turquoise">{% t "Классов" %}: <strong class="tnum">{{ totals.blocks }}</strong></span>
+        <span class="pill">{% t "Глав" %}: <strong class="tnum">{{ totals.chapters }}</strong></span>
+        <span class="pill">{% t "Тем" %}: <strong class="tnum">{{ totals.topics }}</strong></span>
+        <span class="pill">{% t "Заданий" %}: <strong class="tnum">{{ totals.assignments }}</strong></span>
+        <span class="pill">Тестов: <strong class="tnum">{{ totals.quizzes }}</strong></span>
+        <span class="pill">Карточек: <strong class="tnum">{{ totals.cards }}</strong></span>
+        <span class="pill">Файлов материалов: <strong class="tnum">{{ totals.attachments }}</strong></span>
+    </div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(360px, 1fr));gap:24px;align-items:start">
+    {# ── КАРТОЧКА 1: ВЫГРУЗКА НА КОМПЬЮТЕР ──────────────────────────────── #}
+    <section class="card" style="padding:24px">
+        <div class="card-head" style="margin-bottom:16px">
+            <div>
+                <h2 class="card-title mb-0">{% icon "download" %}{% t "Выгрузить материалы на компьютер" %}</h2>
+                <p class="tiny muted" style="margin-top:4px">Экспорт структуры курса и всех файлов в архив</p>
+            </div>
+        </div>
+
+        <div class="callout callout-info" style="margin-bottom:20px">
+            <span class="small">
+                Архив <strong>.zip</strong> содержит полную структуру курса: все классы, главы, темы, задания, вопросы тестов с правильными ответами, карточки слов, а также все прикреплённые документы и медиафайлы.
+            </span>
+        </div>
+
+        <form method="get" action="{% url 'teacher_curriculum_export' %}" class="col" style="gap:16px">
+            <div class="form-group">
+                <label class="label" for="id_export_block">Объём выгрузки</label>
+                <select name="block" id="id_export_block" class="select">
+                    <option value="">Все классы (полный бэкап курса · {{ totals.blocks }} кл., {{ totals.assignments }} зад.)</option>
+                    {% for block in blocks %}
+                        <option value="{{ block.pk }}">{{ block.name }} ({{ block.topics.count }} тем, {{ block.assignments.count }} зад.)</option>
+                    {% endfor %}
+                </select>
+                <p class="tiny muted" style="margin-top:4px">Можно выгрузить всю систему целиком или выбрать отдельный класс.</p>
+            </div>
+
+            <div class="row row-tight" style="gap:10px;flex-wrap:wrap;margin-top:8px">
+                <button class="btn" type="submit" name="format" value="zip" style="flex:1 1 200px">
+                    {% icon "download" %}{% t "Скачать полный бэкап (.zip)" %}
+                </button>
+                <button class="btn btn-secondary" type="submit" name="format" value="json" title="Выгрузить только текстовую структуру без бинарных файлов">
+                    {% icon "file-text" %}{% t "Скачать структуру (.json)" %}
+                </button>
+            </div>
+        </form>
+    </section>
+
+    {# ── КАРТОЧКА 2: ЗАГРУЗКА НА САЙТ ────────────────────────────────────── #}
+    <section class="card" style="padding:24px">
+        <div class="card-head" style="margin-bottom:16px">
+            <div>
+                <h2 class="card-title mb-0">{% icon "upload" %}{% t "Загрузить материалы на сайт" %}</h2>
+                <p class="tiny muted" style="margin-top:4px">Восстановление или добавление курса из файла бэкапа</p>
+            </div>
+        </div>
+
+        <div class="callout" style="margin-bottom:20px">
+            <span class="small">
+                Загрузите ранее сохранённый <strong>.zip</strong>-архив (или <strong>.json</strong>). Система распакует структуру, создаст классы, главы, темы и задания, и сохранит все прикреплённые файлы.
+            </span>
+        </div>
+
+        <form method="post" enctype="multipart/form-data" class="col" style="gap:18px">
+            {% csrf_token %}
+            <div class="form-group">
+                <label class="label" for="id_backup_file">Файл резервной копии (.zip или .json)</label>
+                <input type="file" name="backup_file" id="id_backup_file" accept=".zip,.json" data-dropzone data-dropzone-hint="Перетащите файл архива сюда или выберите на диске" data-max-mb="50" required>
+            </div>
+
+            <fieldset style="border:1px solid var(--border-subtle);border-radius:var(--r-md);padding:14px 16px;margin:0">
+                <legend class="small strong" style="padding:0 6px">Стратегия при совпадении классов</legend>
+                <div class="col" style="gap:8px;margin-top:4px">
+                    <label class="check">
+                        <input type="radio" name="strategy" value="merge" checked>
+                        <span>
+                            <strong>Дополнять существующие классы</strong>
+                            <span class="tiny muted" style="display:block">Объединяет классы и темы по названию/URL, добавляет недостающие подразделы и задания</span>
+                        </span>
+                    </label>
+                    <label class="check">
+                        <input type="radio" name="strategy" value="copy">
+                        <span>
+                            <strong>Создавать как новые копии</strong>
+                            <span class="tiny muted" style="display:block">Создаёт отдельные копии классов с отметкой «(копия)» и новыми URL</span>
+                        </span>
+                    </label>
+                </div>
+            </fieldset>
+
+            <fieldset style="border:1px solid var(--border-subtle);border-radius:var(--r-md);padding:14px 16px;margin:0">
+                <legend class="small strong" style="padding:0 6px">Если задание уже есть в теме</legend>
+                <div class="col" style="gap:8px;margin-top:4px">
+                    <label class="check">
+                        <input type="radio" name="duplicate_assignments" value="skip" checked>
+                        <span>Пропускать дубликаты (не создавать повторно)</span>
+                    </label>
+                    <label class="check">
+                        <input type="radio" name="duplicate_assignments" value="add">
+                        <span>Добавлять как новое задание</span>
+                    </label>
+                </div>
+            </fieldset>
+
+            <fieldset style="border:1px solid var(--border-subtle);border-radius:var(--r-md);padding:14px 16px;margin:0">
+                <legend class="small strong" style="padding:0 6px">Статус публикации</legend>
+                <div class="col" style="gap:8px;margin-top:4px">
+                    <label class="check">
+                        <input type="radio" name="publication_status" value="preserve" checked>
+                        <span>Сохранить как в бэкапе (опубликованные остаются опубликованными)</span>
+                    </label>
+                    <label class="check">
+                        <input type="radio" name="publication_status" value="draft">
+                        <span>Сделать все задания черновиками (для проверки перед показом ученикам)</span>
+                    </label>
+                </div>
+            </fieldset>
+
+            <button class="btn btn-block" type="submit" style="margin-top:6px">
+                {% icon "upload" %}{% t "Загрузить и восстановить" %}
+            </button>
+        </form>
+    </section>
+</div>
+{% endblock %}

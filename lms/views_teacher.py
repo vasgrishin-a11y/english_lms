@@ -9,6 +9,7 @@
 при этом идут через существующие сервисы с блокировками и контролем версий.
 """
 
+import json
 import logging
 from datetime import date
 
@@ -31,13 +32,19 @@ from django.db.models import (
     Value,
     When,
 )
-from django.http import Http404, HttpResponse, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from . import audience, xlsx
+from .backup import (
+    build_curriculum_zip,
+    import_curriculum,
+    load_backup_file,
+    serialize_curriculum,
+)
 from .curriculum import course_tree, gradebook, queue_counts, teacher_overview
 from .decorators import get_user_role, teacher_required
 from .forms import (
@@ -69,6 +76,7 @@ from .library import (
 )
 from .models import (
     Assignment,
+    AssignmentAttachment,
     Block,
     CardReview,
     Chapter,
@@ -575,6 +583,153 @@ def curriculum(request):
             "blocks_data": blocks_data,
             "totals": totals,
             "query": query,
+            "workspace": "curriculum",
+        },
+    )
+
+
+@teacher_required
+@require_GET
+def curriculum_export(request):
+    """Выгрузка материалов курса в формате ZIP (со всеми файлами) или JSON."""
+    block_id = request.GET.get("block")
+    export_format = request.GET.get("format", "zip").lower()
+
+    blocks = None
+    prefix = "english_lms"
+    if block_id:
+        block = get_object_or_404(Block, pk=block_id)
+        blocks = [block]
+        prefix = f"english_lms_{block.slug or block.pk}"
+
+    now_str = timezone.now().strftime("%Y%m%d_%H%M%S")
+
+    if export_format == "json":
+        manifest, _ = serialize_curriculum(blocks=blocks)
+        content = json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8")
+        filename = f"{prefix}_curriculum_{now_str}.json"
+        response = HttpResponse(content, content_type="application/json; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+    zip_buf = build_curriculum_zip(blocks=blocks)
+    filename = f"{prefix}_backup_{now_str}.zip"
+    return FileResponse(
+        zip_buf, as_attachment=True, filename=filename, content_type="application/zip"
+    )
+
+
+@teacher_required
+@require_GET
+def block_export(request, pk):
+    """Выгрузка одного класса со всеми материалами и файлами."""
+    block = get_object_or_404(Block, pk=pk)
+    now_str = timezone.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"english_lms_{block.slug or block.pk}_{now_str}.zip"
+    zip_buf = build_curriculum_zip(blocks=[block])
+    return FileResponse(
+        zip_buf, as_attachment=True, filename=filename, content_type="application/zip"
+    )
+
+
+@teacher_required
+@require_http_methods(["GET", "POST"])
+def curriculum_backup(request):
+    """Страница резервного копирования: выгрузка на компьютер и загрузка обратно на сайт."""
+    if request.method == "POST":
+        uploaded_file = request.FILES.get("backup_file")
+        if not uploaded_file:
+            messages.error(
+                request, "Выберите файл резервной копии (.zip или .json) для загрузки."
+            )
+            return redirect("teacher_curriculum_backup")
+
+        strategy = request.POST.get("strategy", "merge")
+        if strategy not in {"merge", "copy"}:
+            strategy = "merge"
+
+        duplicate_assignments = request.POST.get("duplicate_assignments", "skip")
+        if duplicate_assignments not in {"skip", "add"}:
+            duplicate_assignments = "skip"
+
+        publication_status = request.POST.get("publication_status", "preserve")
+        if publication_status not in {"preserve", "draft"}:
+            publication_status = "preserve"
+
+        try:
+            data, zip_obj = load_backup_file(uploaded_file)
+            stats = import_curriculum(
+                data=data,
+                zip_file=zip_obj,
+                strategy=strategy,
+                duplicate_assignments=duplicate_assignments,
+                publication_status=publication_status,
+            )
+            if zip_obj:
+                zip_obj.close()
+        except ValidationError as exc:
+            msg = exc.messages[0] if hasattr(exc, "messages") and exc.messages else str(exc)
+            messages.error(request, f"Ошибка загрузки резервной копии: {msg}")
+            return redirect("teacher_curriculum_backup")
+        except Exception as exc:
+            logger.exception("Backup restore failed: %s", exc)
+            messages.error(request, f"Не удалось загрузить резервную копию: {exc}")
+            return redirect("teacher_curriculum_backup")
+
+        parts = []
+        if stats["blocks_created"]:
+            parts.append(f"классов: {stats['blocks_created']}")
+        if stats["chapters_created"]:
+            parts.append(f"глав: {stats['chapters_created']}")
+        if stats["topics_created"]:
+            parts.append(f"тем: {stats['topics_created']}")
+        if stats["assignments_created"]:
+            files_count = stats["attachments_created"] + stats["materials_restored"]
+            extra = []
+            if stats["questions_created"]:
+                extra.append(f"вопросов: {stats['questions_created']}")
+            if stats["cards_created"]:
+                extra.append(f"карточек: {stats['cards_created']}")
+            if files_count:
+                extra.append(f"файлов: {files_count}")
+            extra_str = f" ({', '.join(extra)})" if extra else ""
+            parts.append(f"заданий: {stats['assignments_created']}{extra_str}")
+
+        added_text = ", ".join(parts) if parts else "новых элементов не добавлено"
+        msg = f"Резервная копия успешно загружена! Добавлено: {added_text}."
+        matched = stats["blocks_matched"] + stats["chapters_matched"] + stats["topics_matched"]
+        if matched:
+            msg += (
+                f" Сопоставлено с существующими: классов — {stats['blocks_matched']}, "
+                f"глав — {stats['chapters_matched']}, тем — {stats['topics_matched']}."
+            )
+        if stats["assignments_skipped"]:
+            msg += f" Пропущено дубликатов заданий: {stats['assignments_skipped']}."
+
+        messages.success(request, msg)
+        return redirect("teacher_curriculum")
+
+    # GET: обзор текущего курса для страницы выгрузки/загрузки
+    blocks = Block.objects.all().order_by("order", "pk")
+    totals = {
+        "blocks": blocks.count(),
+        "chapters": Chapter.objects.count(),
+        "topics": Topic.objects.count(),
+        "assignments": Assignment.objects.count(),
+        "quizzes": Assignment.objects.filter(assignment_type=Assignment.Type.QUIZ).count(),
+        "cards": Flashcard.objects.filter(assignment__isnull=False).count(),
+        "attachments": (
+            AssignmentAttachment.objects.count()
+            + Assignment.objects.filter(material_file__gt="").count()
+        ),
+    }
+
+    return render(
+        request,
+        "lms/teacher_backup.html",
+        {
+            "blocks": blocks,
+            "totals": totals,
             "workspace": "curriculum",
         },
     )
