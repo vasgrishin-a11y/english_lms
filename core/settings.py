@@ -226,6 +226,12 @@ LMS_AI_UPLOAD_KINDS = os.getenv("LMS_AI_UPLOAD_KINDS", "").strip()
 LMS_AI_TIMEOUT = env_int("LMS_AI_TIMEOUT", 60)
 LMS_MAX_FILE_BYTES = env_int("LMS_MAX_FILE_BYTES", 20 * 1024 * 1024)
 LMS_STUDENT_QUOTA_BYTES = env_int("LMS_STUDENT_QUOTA_BYTES", 200 * 1024 * 1024)
+# Общий лимит файлового хранилища LMS: сколько места отведено всем материалам,
+# вложениям и ответам вместе. 0 — лимит не задан, и потолок ограничен только
+# местом на диске с MEDIA_ROOT. Значение — только для индикатора в настройках
+# консоли (lms/storage_usage.py): загрузки оно не блокирует, потому что упёршийся
+# в лимит ученик иначе теряет возможность сдать работу.
+LMS_STORAGE_QUOTA_BYTES = env_int("LMS_STORAGE_QUOTA_BYTES", 0, minimum=0)
 LMS_SUBMISSIONS_PER_HOUR = env_int("LMS_SUBMISSIONS_PER_HOUR", 30)
 LMS_PAGE_SIZE = env_int("LMS_PAGE_SIZE", 25)
 DATA_UPLOAD_MAX_MEMORY_SIZE = 1024 * 1024
