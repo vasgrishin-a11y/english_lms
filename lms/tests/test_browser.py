@@ -112,6 +112,160 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
         page.locator("[data-dropzone-clear]").first.click()
         expect(zone.locator("[data-dropzone-name]")).to_be_hidden()
 
+    def test_ai_review_buttons_fill_points_and_show_audio_transcript(self):
+        import io
+        import wave
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.urls import reverse
+        from playwright.sync_api import expect, sync_playwright
+
+        from lms.models import Question, QuestionResponse, QuizAttempt
+
+        password = "BrowserTestingPassword!542"
+        User = get_user_model()
+        student = User.objects.create_user("ai_browser_student", password=password)
+        teacher = User.objects.create_user("ai_browser_teacher", password=password)
+        teacher.profile.role = Profile.Role.TEACHER
+        teacher.profile.save()
+        block = Block.objects.create(name="AI review block", slug="ai-review")
+        topic = Topic.objects.create(block=block, title="AI review", slug="ai-review")
+        quiz = Assignment.objects.create(
+            topic=topic,
+            title="Manual answer quiz",
+            description="Answer the question.",
+            assignment_type=Assignment.Type.QUIZ,
+            max_points=4,
+        )
+        question = Question.objects.create(
+            assignment=quiz,
+            kind=Question.Kind.TEXT,
+            text="Describe your weekend.",
+            points=4,
+        )
+        quiz_attempt = Submission.objects.create(
+            student=student,
+            assignment=quiz,
+            version=1,
+            status=Submission.Status.SUBMITTED,
+            text_answer="Answer by question.",
+        )
+        QuizAttempt.objects.create(
+            submission=quiz_attempt, score=0, max_score=4, total_count=0, answers={}
+        )
+        item_response = QuestionResponse.objects.create(
+            student=student,
+            assignment=quiz,
+            question=question,
+            submission=quiz_attempt,
+            round=1,
+            state=QuestionResponse.State.ANSWERED,
+            text_answer="I went to the park with my friends.",
+        )
+
+        audio = io.BytesIO()
+        with wave.open(audio, "wb") as recording:
+            recording.setnchannels(1)
+            recording.setsampwidth(2)
+            recording.setframerate(8000)
+            recording.writeframes(bytes(8000))
+        audio_assignment = Assignment.objects.create(
+            topic=topic,
+            title="Speaking answer",
+            assignment_type=Assignment.Type.AUDIO,
+            max_points=10,
+        )
+        audio_attempt = Submission.objects.create(
+            student=student,
+            assignment=audio_assignment,
+            version=1,
+            status=Submission.Status.SUBMITTED,
+            file_answer=SimpleUploadedFile("answer.wav", audio.getvalue(), "audio/wav"),
+        )
+
+        with sync_playwright() as playwright:
+            options = {"headless": True}
+            if os.getenv("BROWSER_EXECUTABLE"):
+                options["executable_path"] = os.environ["BROWSER_EXECUTABLE"]
+                options["args"] = json.loads(os.getenv("BROWSER_ARGS", "[]"))
+            browser = playwright.chromium.launch(**options)
+            context = browser.new_context(viewport={"width": 1280, "height": 900})
+            page = context.new_page()
+            page.set_default_timeout(15000)
+            try:
+                page.goto(self.live_server_url + "/accounts/login/")
+                page.get_by_label("Имя пользователя", exact=True).fill("ai_browser_teacher")
+                page.get_by_label("Пароль", exact=True).fill(password)
+                page.get_by_role("button", name="Войти", exact=True).click()
+                page.wait_for_url("**/teacher/")
+                page.route(
+                    "**/ai-check/item/**",
+                    lambda route: route.fulfill(
+                        status=200,
+                        content_type="application/json",
+                        body=json.dumps(
+                            {
+                                "ok": True,
+                                "grade": 3,
+                                "max_points": 4,
+                                "comment": "Хороший ответ.",
+                                "criteria_note": "Оценены содержание и грамматика.",
+                            },
+                            ensure_ascii=False,
+                        ),
+                    ),
+                )
+                page.goto(
+                    self.live_server_url
+                    + reverse("teacher_submission_review", args=[quiz_attempt.pk])
+                )
+                expect(page.locator("[data-answer-text]")).to_have_count(0)
+                page.locator(
+                    f'[data-ai-grade-item][data-points-field="id_item_{item_response.pk}"]'
+                ).click()
+                expect(page.locator(f"#id_item_{item_response.pk}")).to_have_value("3")
+                expect(page.locator("#id_comment")).to_have_value(
+                    re.compile(
+                        "Пункт 1[\\s\\S]*Хороший ответ[\\s\\S]*Оценены содержание и грамматика"
+                    )
+                )
+                expect(page.locator("[data-ai-grade-item-result]")).to_be_visible()
+                expect(page.locator("[data-ai-grade-item-result]")).to_contain_text("Хороший ответ")
+
+                page.route(
+                    "**/ai-check/audio/**",
+                    lambda route: route.fulfill(
+                        status=200,
+                        content_type="application/json",
+                        body=json.dumps(
+                            {
+                                "ok": True,
+                                "grade": 7,
+                                "max_points": 10,
+                                "comment": "Понятный ответ.",
+                                "criteria_note": "Хорошая беглость.",
+                                "transcript": "Hello, my name is Anna.",
+                            },
+                            ensure_ascii=False,
+                        ),
+                    ),
+                )
+                page.goto(
+                    self.live_server_url
+                    + reverse("teacher_submission_review", args=[audio_attempt.pk])
+                )
+                expect(page.locator("[data-answer-text]")).to_have_count(0)
+                page.locator("[data-ai-grade-audio]").click()
+                expect(page.locator("#id_grade")).to_have_value("7")
+                expect(page.locator("#id_comment")).to_have_value(re.compile("Понятный ответ."))
+                expect(page.locator("#ai-transcript-audio")).to_be_visible()
+                expect(page.locator("#ai-transcript-audio")).to_contain_text(
+                    "Hello, my name is Anna."
+                )
+            finally:
+                context.close()
+                browser.close()
+
     def test_login_submit_review_resubmit_and_accessibility(self):
         from playwright.sync_api import expect, sync_playwright
 
