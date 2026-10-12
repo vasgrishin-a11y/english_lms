@@ -147,14 +147,21 @@
                             <h3 class="card-title" id="ai-revision-title">{% icon "pencil" %}Проверить и доработать текущую версию</h3>
                             {% if meta.revision_count %}<span class="badge badge-outline">Правок: {{ meta.revision_count }}</span>{% endif %}
                         </div>
-                        <p class="small muted">Если нужно что-то изменить, опишите правку — ИИ обновит именно эту версию. До кнопки импорта в курс ничего не попадёт.</p>
+                        <p class="small muted">Если нужно что-то изменить, опишите правку и при необходимости приложите файлы — ИИ обновит именно эту версию. До кнопки импорта в курс ничего не попадёт.</p>
                         {% if mode == 'online' %}
-                            <form method="post" novalidate>
+                            <form method="post" enctype="multipart/form-data" novalidate>
                                 {% csrf_token %}
                                 <div class="form-field">
                                     <label for="id_revision_instruction">Что изменить в текущей версии</label>
                                     <textarea id="id_revision_instruction" name="revision_instruction" rows="3" maxlength="4000" placeholder="Например: добавь текст для чтения и приложи его отдельным файлом, убери повторы, сделай инструкцию понятнее для B1">{{ revision_instruction }}</textarea>
                                     <div class="help-text">ИИ вернёт материал целиком, сохранив структуру курса; предыдущая версия заменится только в этом предпросмотре.</div>
+                                </div>
+                                <div class="form-field">
+                                    <label for="id_revision_upload">Файлы к этой правке</label>
+                                    <input type="file" id="id_revision_upload" name="revision_upload" multiple
+                                           accept="{{ upload_accept }}" data-dropzone="1" data-max-mb="{{ max_upload_mb }}"
+                                           data-dropzone-hint="Перетащите файлы сюда или вставьте их по одному Ctrl+V">
+                                    <div class="help-text">То же, что и при первом разборе: документы (Word, Excel, PDF, текст) читаются офлайн, фото уходит vision-модели — одно за правку, каждый файл до {{ max_upload_mb }} МБ. Без описания ИИ просто добавит материал из файлов в текущую версию.</div>
                                 </div>
                                 <div class="form-actions">
                                     <button class="btn" type="submit" name="revise_material" value="1">{% icon "sparkles" %}{% t "Обновить текущую версию" %}</button>
@@ -184,7 +191,7 @@
                     <li>Задание рассчитано на заранее неизвестного ученика: ИИ использует только уровень, тему, навык и другие параметры из запроса, не имя или историю попыток.</li>
                     {% if mode == 'online' %}<li>Если попросить, ИИ создаст к заданию отдельный текстовый материал: он будет приложен как скачиваемый TXT-файл. Исходный загруженный файл автоматически не копируется.</li>{% else %}<li>Офлайн-разбор не создаёт вложения: отдельные TXT-файлы для задания доступны с подключённой моделью.</li>{% endif %}
                     <li>Если ответ зависит от материала, он должен быть в условии или среди реальных вложений — ИИ не оставляет ссылок на отсутствующий текст.</li>
-                    <li>Локальная vision-модель понимает фото страницы; Word, Excel и PDF читаются офлайн.</li>
+                    <li>Локальная vision-модель понимает фото страницы; Word, Excel и PDF читаются офлайн. Файлы можно приложить и к правке текущей версии — не только при первом разборе.</li>
                     <li>Импорт создаёт только черновики — ученики ничего не видят до публикации и назначения.</li>
                     <li>Черновики дальше правятся вручную: как обычные задания курса. Главы можно переименовать на карте курса.</li>
                 </ol>

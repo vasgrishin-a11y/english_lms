@@ -164,34 +164,42 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
                 page.wait_for_url("**/teacher/" if username == "browser_teacher" else "**/my/")
 
             def check_language(page):
-                """Переключатель RU|ENG переводит меню и действия, выбор помнит cookie."""
+                """Переключатель RU|ENG переводит меню и действия, выбор помнит cookie.
+
+                «Консоль» скрыта из меню, поэтому первым пунктом идут «Классы».
+                """
                 page.goto(self.live_server_url + "/teacher/")
                 expect(page.locator(".topbar-side .lang-switch-option.is-active")).to_have_text(
                     "RU"
                 )
                 expect(
-                    page.locator(".app-nav-label", has_text=re.compile("^Консоль$"))
-                ).to_have_count(1)
-                page.get_by_role("link", name="ENG", exact=True).click()
-                page.wait_for_load_state("load")
-                expect(
-                    page.locator(".app-nav-label", has_text=re.compile("^Console$"))
+                    page.locator(".app-nav-label", has_text=re.compile("^Классы$"))
                 ).to_have_count(1)
                 expect(
                     page.locator(".app-nav-label", has_text=re.compile("^Консоль$"))
                 ).to_have_count(0)
+                self.assertEqual(
+                    page.locator(".app-nav-label").first.text_content().strip(), "Классы"
+                )
+                page.get_by_role("link", name="ENG", exact=True).click()
+                page.wait_for_load_state("load")
+                expect(
+                    page.locator(".app-nav-label", has_text=re.compile("^Course$"))
+                ).to_have_count(1)
+                self.assertEqual(
+                    page.locator(".app-nav-label").first.text_content().strip(), "Course"
+                )
                 expect(page.locator(".topbar-side .lang-switch-option.is-active")).to_have_text(
                     "ENG"
                 )
                 page.goto(self.live_server_url + "/teacher/")
-                expect(
-                    page.locator(".app-nav-label", has_text=re.compile("^Console$"))
-                ).to_have_count(1)
+                expect(page.locator(".app-nav-label").first).to_have_text("Course")
                 page.get_by_role("link", name="RU", exact=True).click()
                 page.wait_for_load_state("load")
+                expect(page.locator(".app-nav-label").first).to_have_text("Классы")
                 expect(
                     page.locator(".app-nav-label", has_text=re.compile("^Консоль$"))
-                ).to_have_count(1)
+                ).to_have_count(0)
 
             try:
                 page.goto(self.live_server_url + "/accounts/login/")

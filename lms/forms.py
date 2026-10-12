@@ -1437,7 +1437,7 @@ class AIMaterialForm(forms.Form):
         required=False,
         widget=MultipleFileInput(
             attrs={
-                "accept": ",".join(sorted(ai.UPLOAD_EXTENSIONS)),
+                "accept": ai.upload_accept(),
                 "data-ai-upload": "1",
                 "data-dropzone": "1",
                 "data-max-mb": str(ai.max_upload_bytes() // (1024 * 1024)),
@@ -1543,20 +1543,13 @@ class AIMaterialForm(forms.Form):
         uploads = self.cleaned_data.get("upload") or []
         if not isinstance(uploads, (list, tuple)):
             uploads = [uploads]
-        limit = ai.max_upload_bytes()
+        # Та же проверка формата и размера, что и у файлов, приложенных к правке
+        # текущей версии: лимиты помощника не зависят от способа отправки.
         for upload in uploads:
-            extension = ai.extension_of(upload.name)
-            if extension not in ai.UPLOAD_EXTENSIONS:
-                raise forms.ValidationError(
-                    f"Формат файла «{upload.name}» не поддерживается: загрузите фото, Word, "
-                    "Excel, PDF, видео или текстовый файл."
-                )
-            if upload.size > limit:
-                raise forms.ValidationError(
-                    "Файл «{name}» больше {mb} МБ — разделите материал на части.".format(
-                        name=upload.name, mb=limit // (1024 * 1024)
-                    )
-                )
+            try:
+                ai.validate_upload(upload)
+            except ai.AiError as exc:
+                raise forms.ValidationError(str(exc)) from exc
         return uploads
 
     def clean(self):
