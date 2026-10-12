@@ -45,9 +45,13 @@
         </div>
         <ul class="app-nav-list">
             {% if is_teacher %}
-                <li><a class="app-nav-link {% if workspace == 'home' %}is-active{% endif %}" href="{% url 'teacher_home' %}"{% if workspace == 'home' %} aria-current="page"{% endif %} title="Консоль преподавателя">{% icon "home" %}<span class="app-nav-label">{% t "Консоль" %}</span></a></li>
-                <li><a class="app-nav-link {% if workspace == 'review' %}is-active turquoise{% endif %}" href="{% url 'teacher_review_queue' %}"{% if workspace == 'review' %} aria-current="page"{% endif %} title="{% t 'Проверка' %}">{% icon "check-circle" %}<span class="app-nav-label">{% t "Проверка" %}</span>{% if pending_count %}<span class="app-nav-count tnum">{{ pending_count }}</span>{% endif %}</a></li>
+                {# Первым — «Классы», затем «Проверка»: это ежедневные разделы преподавателя. #}
                 <li><a class="app-nav-link {% if workspace == 'curriculum' %}is-active{% endif %}" href="{% url 'teacher_curriculum' %}"{% if workspace == 'curriculum' %} aria-current="page"{% endif %} title="{% t 'Классы' %}">{% icon "layers" %}<span class="app-nav-label">{% t "Классы" %}</span></a></li>
+                <li><a class="app-nav-link {% if workspace == 'review' %}is-active turquoise{% endif %}" href="{% url 'teacher_review_queue' %}"{% if workspace == 'review' %} aria-current="page"{% endif %} title="{% t 'Проверка' %}">{% icon "check-circle" %}<span class="app-nav-label">{% t "Проверка" %}</span>{% if pending_count %}<span class="app-nav-count tnum">{{ pending_count }}</span>{% endif %}</a></li>
+                {# «Консоль» (/teacher/) скрыта из меню, но остаётся в коде: страница открывается по прямой ссылке и из хлебных крошек. Порядок для преподавателя: «Классы» → «Проверка» → остальное. #}
+                {% comment %}
+                <li><a class="app-nav-link {% if workspace == 'home' %}is-active{% endif %}" href="{% url 'teacher_home' %}"{% if workspace == 'home' %} aria-current="page"{% endif %} title="Консоль преподавателя">{% icon "home" %}<span class="app-nav-label">{% t "Консоль" %}</span></a></li>
+                {% endcomment %}
                 <li><a class="app-nav-link {% if workspace == 'ai' %}is-active{% endif %}" href="{% url 'teacher_ai' %}"{% if workspace == 'ai' %} aria-current="page"{% endif %} title="{% t 'ИИ-помощник' %}">{% icon "sparkles" %}<span class="app-nav-label">{% t "ИИ-помощник" %}</span></a></li>
                 <li><a class="app-nav-link {% if workspace == 'archive' %}is-active{% endif %}" href="{% url 'teacher_archive' %}"{% if workspace == 'archive' %} aria-current="page"{% endif %} title="{% t 'Архив' %}">{% icon "archive" %}<span class="app-nav-label">{% t "Архив" %}</span></a></li>
                 <li><a class="app-nav-link {% if workspace == 'students' %}is-active{% endif %}" href="{% url 'teacher_students' %}"{% if workspace == 'students' %} aria-current="page"{% endif %} title="{% t 'Ученики' %}">{% icon "users" %}<span class="app-nav-label">{% t "Ученики" %}</span></a></li>
@@ -113,14 +117,17 @@
 <nav class="mobile-nav" aria-label="{% t 'Навигация на маленьком экране' %}">
     <ul>
         {% if is_teacher %}
-            <li><a href="{% url 'teacher_home' %}"{% if workspace == 'home' %} aria-current="page"{% endif %}>{% icon "home" %}{% t "Консоль" %}</a></li>
-            <li><a href="{% url 'teacher_review_queue' %}"{% if workspace == 'review' %} aria-current="page"{% endif %}>{% icon "check-circle" %}{% t "Проверка" %}</a></li>
+            {# Порядок тот же, что и в боковом меню; «Консоль» скрыта — код пункта сохранён ниже. #}
             <li><a href="{% url 'teacher_curriculum' %}"{% if workspace == 'curriculum' %} aria-current="page"{% endif %}>{% icon "layers" %}{% t "Классы" %}</a></li>
+            <li><a href="{% url 'teacher_review_queue' %}"{% if workspace == 'review' %} aria-current="page"{% endif %}>{% icon "check-circle" %}{% t "Проверка" %}</a></li>
             <li><a href="{% url 'teacher_ai' %}"{% if workspace == 'ai' %} aria-current="page"{% endif %}>{% icon "sparkles" %}ИИ</a></li>
             <li><a href="{% url 'teacher_archive' %}"{% if workspace == 'archive' %} aria-current="page"{% endif %}>{% icon "archive" %}{% t "Архив" %}</a></li>
             <li><a href="{% url 'teacher_students' %}"{% if workspace == 'students' %} aria-current="page"{% endif %}>{% icon "users" %}{% t "Ученики" %}</a></li>
             <li><a href="{% url 'teacher_groups' %}"{% if workspace == 'groups' %} aria-current="page"{% endif %}>{% icon "users" %}{% t "Группы" %}</a></li>
             <li><a href="{% url 'teacher_analytics' %}"{% if workspace == 'analytics' %} aria-current="page"{% endif %}>{% icon "chart" %}{% t "Аналитика" %}</a></li>
+            {% comment %}
+            <li><a href="{% url 'teacher_home' %}"{% if workspace == 'home' %} aria-current="page"{% endif %}>{% icon "home" %}{% t "Консоль" %}</a></li>
+            {% endcomment %}
         {% else %}
             <li><a href="{% url 'student_home' %}"{% if workspace == 'home' %} aria-current="page"{% endif %}>{% icon "home" %}{% t "Главная" %}</a></li>
             <li><a href="{% url 'student_assignments' %}"{% if workspace == 'curriculum' %} aria-current="page"{% endif %}>{% icon "layers" %}{% t "Курс" %}</a></li>

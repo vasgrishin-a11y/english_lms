@@ -361,6 +361,32 @@ def max_upload_bytes():
     return int(_setting("LMS_AI_MAX_FILE_BYTES", 10 * 1024 * 1024))
 
 
+def upload_accept():
+    """Значение атрибута ``accept`` для полей файлов помощника."""
+    return ",".join(sorted(UPLOAD_EXTENSIONS))
+
+
+def validate_upload(upload):
+    """Проверить один файл помощника: расширение и размер.
+
+    Общая проверка для первого разбора и для файлов, приложенных к правке
+    текущей версии: какой бы формой файл ни отправляли, лимиты одни и те же.
+    Ошибка всегда ``AiError`` — вызывающий решает, показать её в форме или
+    сообщением на странице.
+    """
+    name = getattr(upload, "name", "") or "файл"
+    if extension_of(name) not in UPLOAD_EXTENSIONS:
+        raise AiError(
+            f"Формат файла «{name}» не поддерживается: загрузите фото, Word, "
+            "Excel, PDF, видео или текстовый файл."
+        )
+    limit = max_upload_bytes()
+    if (getattr(upload, "size", 0) or 0) > limit:
+        raise AiError(
+            f"Файл «{name}» больше {limit // (1024 * 1024)} МБ — разделите материал на части."
+        )
+
+
 def _limit(name, default):
     return int(_setting(name, default))
 
@@ -1146,22 +1172,32 @@ def build_prompt(text, *, prompt="", target="mixed", filename="", kind="text", s
     return "\n\n".join(parts)
 
 
-def build_material_revision_prompt(material, instruction, structure=None):
-    """Промпт правки текущего предпросмотра до импорта в курс."""
+def build_material_revision_prompt(material, instruction, structure=None, attachments_text=""):
+    """Промпт правки текущего предпросмотра до импорта в курс.
+
+    ``attachments_text`` — текст файлов, которые преподаватель приложил прямо
+    к правке: он идёт источником рядом с пожеланием, чтобы модель опиралась на
+    реальные материалы, а не додумывала их.
+    """
     current = json.dumps(material, ensure_ascii=False, indent=1)
-    return "\n\n".join(
-        [
-            AI_AUTHORING_CONTEXT,
-            structure_instruction(structure),
-            "Ты редактируешь текущий предпросмотр материала ИИ до его импорта в LMS. "
-            "Верни полную новую версию материала в той же структуре: не описывай отличия "
-            "и не удаляй элементы, которые не затронуты пожеланием преподавателя. Сохрани "
-            "уже существующие attachments без изменений; новые добавляй только по прямой просьбе.",
-            f"Пожелания преподавателя к текущей версии: {instruction.strip()}",
-            "Текущая версия материала (JSON):\n" + current,
-            PROMPT_SCHEMA,
-        ]
-    )
+    parts = [
+        AI_AUTHORING_CONTEXT,
+        structure_instruction(structure),
+        "Ты редактируешь текущий предпросмотр материала ИИ до его импорта в LMS. "
+        "Верни полную новую версию материала в той же структуре: не описывай отличия "
+        "и не удаляй элементы, которые не затронуты пожеланием преподавателя. Сохрани "
+        "уже существующие attachments без изменений; новые добавляй только по прямой просьбе.",
+        f"Пожелания преподавателя к текущей версии: {instruction.strip()}",
+    ]
+    if attachments_text.strip():
+        parts.append(
+            "Материал из файлов, приложенных преподавателем к этой правке (используй "
+            "его как источник, ничего не выдумывая, и не ссылайся на файлы, которых "
+            "ученик не увидит):\n" + attachments_text.strip()
+        )
+    parts.append("Текущая версия материала (JSON):\n" + current)
+    parts.append(PROMPT_SCHEMA)
+    return "\n\n".join(parts)
 
 
 def _image_part(blob, mime):
@@ -1727,8 +1763,65 @@ def build_material(
     return material, meta
 
 
-def revise_material(material, instruction, *, structure=None):
-    """Обновить предпросмотр материала, не создавая записи в базе данных."""
+def revision_uploads(uploads, spec):
+    """Разобрать файлы, приложенные преподавателем к правке текущей версии.
+
+    Первый файл, который модель читает сама (фото для vision-модели), уходит
+    отдельным вложением — как и при первом разборе материала. Остальные файлы
+    превращаются в текст промпта. Нечитаемый, но разрешённый файл не роняет
+    правку: о нём честно сообщаем предупреждением.
+
+    Возвращает ``(blob, filename, media_kind, attachments_text, notes)``.
+    """
+    blob, filename, media_kind = b"", "", "image"
+    parts, notes = [], []
+    readable = provider_uploads(spec)
+    for upload in uploads:
+        # Формат и размер — общий лимит с первым разбором: неподходящий файл
+        # лучше отвергнуть до обращения к модели, чем молча пропустить.
+        validate_upload(upload)
+        name = getattr(upload, "name", "") or "файл"
+        kind = upload_kind(name)
+        data = upload.read()
+        if not blob and kind in readable:
+            blob, filename = data, name
+            media_kind = "audio" if kind == "audio" else "image"
+            continue
+        try:
+            text = extract_text(name, data)
+        except AiError as exc:
+            notes.append(f"Файл «{name}» пропущен: {exc}")
+            continue
+        if text:
+            parts.append(f"Материал из файла {name}:\n{text}")
+        elif kind in readable:
+            # Модель понимает такой файл, но вложение в запросе только одно.
+            notes.append(
+                f"К модели можно приложить только один файл за правку: «{name}» в этот "
+                "запрос не попало — повторите правку с ним."
+            )
+        elif kind in {"image", "video", "audio"}:
+            notes.append(
+                unsupported_upload_note(name, spec)
+                or f"Файл «{name}» не читается — вставьте материал текстом."
+            )
+        else:
+            notes.append(f"В файле «{name}» не нашлось текста — возможно, он пустой или повреждён.")
+    return blob, filename, media_kind, "\n\n".join(parts)[: limits()["text_chars"]], notes
+
+
+#: Правка без описания, но с файлами: преподаватель хочет, чтобы помощник учёл
+#: приложенное. Пустая инструкция такую просьбу не выражает, поэтому подставляем
+#: явную — модель точно знает, что делать.
+DEFAULT_REVISION_INSTRUCTION = "Учти приложенные материалы в текущей версии."
+
+
+def revise_material(material, instruction, *, structure=None, uploads=None):
+    """Обновить предпросмотр материала, не создавая записи в базе данных.
+
+    ``uploads`` — файлы, приложенные прямо к правке: их можно добавить и
+    после первого разбора, а не только в форме нового материала.
+    """
     mode = ai_mode()
     if mode == "off":
         raise AiError("ИИ-помощник выключен администратором (LMS_AI_ENABLED=0).")
@@ -1738,14 +1831,25 @@ def revise_material(material, instruction, *, structure=None):
             "(LMS_AI_LOCAL=1) или задайте ключ LMS_AI_API_KEY и попробуйте снова."
         )
     instruction = (instruction or "").strip()[:4000]
-    if not instruction:
+    uploads = [item for item in (uploads or []) if item is not None]
+    if not instruction and not uploads:
         raise AiError("Опишите, что изменить в текущей версии материала.")
     if not isinstance(material, dict) or not material.get("blocks"):
         raise AiError("Текущая версия материала не найдена — соберите материал заново.")
+    typed_instruction = instruction
+    if not instruction:
+        instruction = DEFAULT_REVISION_INSTRUCTION
 
     spec = provider_spec()
+    blob, filename, media_kind, attachments_text, notes = revision_uploads(uploads, spec)
     payload = _provider_material(
-        spec, build_material_revision_prompt(material, instruction, structure=structure)
+        spec,
+        build_material_revision_prompt(
+            material, instruction, structure=structure, attachments_text=attachments_text
+        ),
+        filename=filename,
+        blob=blob,
+        media_kind=media_kind,
     )
     revised = normalise(payload, source=material.get("title", "Материал ИИ-помощника"))
     revised = apply_structure(revised, structure)
@@ -1754,7 +1858,10 @@ def revise_material(material, instruction, *, structure=None):
         "provider": spec["key"],
         "provider_label": spec["label"],
         "result": "online",
-        "revision_instruction": instruction,
+        # В поле «Что изменить» возвращаем только слова преподавателя: текст из
+        # файлов остаётся в промпте и не подменяет собой его собственный запрос.
+        "revision_instruction": typed_instruction,
+        "notes": notes,
     }
     return revised, meta
 
@@ -2529,6 +2636,9 @@ __all__ = [
     "provider_uploads",
     "revise_assignment",
     "revise_material",
+    "revision_uploads",
     "unsupported_upload_note",
+    "upload_accept",
     "upload_kind",
+    "validate_upload",
 ]

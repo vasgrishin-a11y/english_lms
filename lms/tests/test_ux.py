@@ -1,6 +1,7 @@
 """Доработки интерфейса: навыки, форма, поиск, меню, дашборд, язык, сцена."""
 
 import re
+from pathlib import Path
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
@@ -199,30 +200,80 @@ class SuggestSearchTests(LMSCase):
         self.assertIn('method="get"', html.lower())
 
 
+BASE_TEMPLATE = Path(__file__).resolve().parents[1] / "templates" / "lms" / "base.html"
+
+
+def rail_labels(html):
+    """Подписи бокового меню преподавателя в том порядке, в каком их видит глаз."""
+    return re.findall(r'<span class="app-nav-label">([^<]*)</span>', html)
+
+
+class TeacherMenuTests(LMSCase):
+    """Меню преподавателя: «Классы» и «Проверка» первыми, «Консоль» скрыта."""
+
+    def test_menu_starts_with_curriculum_and_review(self):
+        labels = rail_labels(self.teacher_client.get("/teacher/").content.decode())
+        self.assertEqual(
+            labels,
+            [
+                "Классы",
+                "Проверка",
+                "ИИ-помощник",
+                "Архив",
+                "Ученики",
+                "Группы",
+                "Аналитика",
+                "Настройки",
+            ],
+        )
+
+    def test_console_is_hidden_from_the_menu_but_kept_in_code(self):
+        page = self.teacher_client.get("/teacher/students/").content.decode()
+        rail = page.split('id="app-nav"')[1].split("</nav>")[0]
+        self.assertNotIn("Консоль", rail)
+        self.assertNotIn('href="/teacher/"', rail)
+        template = BASE_TEMPLATE.read_text(encoding="utf-8")
+        # Пункт не удалён из кода, а скрыт: его можно вернуть одной правкой.
+        self.assertIn("{% url 'teacher_home' %}", template)
+        self.assertIn("{% comment %}", template)
+
+    def test_console_page_still_opens_directly(self):
+        page = self.teacher_client.get("/teacher/")
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "Консоль преподавателя")
+
+    def test_mobile_menu_has_no_console_and_keeps_order(self):
+        html = self.teacher_client.get("/teacher/students/").content.decode()
+        mobile = html.split('class="mobile-nav"')[1]
+        self.assertLess(mobile.index(">Классы<"), mobile.index(">Проверка<"))
+        self.assertNotIn(">Консоль<", mobile)
+
+
 class InterfaceLanguageTests(LMSCase):
     """Переключатель RU|ENG: меню и действия переводятся, курс — нет."""
 
     def test_russian_is_default(self):
         html = self.teacher_client.get("/teacher/").content.decode()
         self.assertIn('<html lang="ru"', html)
-        self.assertIn("Консоль", html)
+        self.assertIn("Классы", rail_labels(html))
         self.assertIn("lang-switch", html)
         self.assertIn('class="lang-switch-option is-active"', html)
 
     def test_english_mode_translates_menu_and_actions(self):
         html = self.teacher_client.get("/teacher/?lang=eng").content.decode()
         self.assertIn('<html lang="en"', html)
-        self.assertIn(">Console<", html)
-        self.assertIn(">Course<", html)
+        self.assertEqual(rail_labels(html)[:2], ["Course", "Review"])
         self.assertIn(">Analytics<", html)
         self.assertNotIn(">Консоль<", html)
 
     def test_choice_is_remembered_in_cookie(self):
         response = self.teacher_client.get("/teacher/?lang=eng")
         self.assertEqual(response.cookies["lms_lang"].value, "eng")
-        self.assertIn(">Console<", self.teacher_client.get("/teacher/").content.decode())
+        html = self.teacher_client.get("/teacher/").content.decode()
+        self.assertEqual(rail_labels(html)[:2], ["Course", "Review"])
         self.teacher_client.get("/teacher/?lang=ru")
-        self.assertIn(">Консоль<", self.teacher_client.get("/teacher/").content.decode())
+        html = self.teacher_client.get("/teacher/").content.decode()
+        self.assertEqual(rail_labels(html)[:2], ["Классы", "Проверка"])
 
     def test_learning_content_stays_english(self):
         html = self.student_client.get(
@@ -234,7 +285,7 @@ class InterfaceLanguageTests(LMSCase):
     def test_unknown_language_falls_back_to_russian(self):
         html = self.teacher_client.get("/teacher/?lang=de").content.decode()
         self.assertIn('<html lang="ru"', html)
-        self.assertIn(">Консоль<", html)
+        self.assertEqual(rail_labels(html)[:2], ["Классы", "Проверка"])
 
     def test_language_parameter_does_not_redirect(self):
         response = self.teacher_client.get("/teacher/?lang=eng")
