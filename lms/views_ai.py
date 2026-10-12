@@ -14,7 +14,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 from . import ai
 from .decorators import teacher_required
 from .forms import AIMaterialForm
-from .models import Assignment, Chapter, Submission, Topic
+from .models import Assignment, Chapter, QuestionResponse, Submission, Topic
 
 logger = logging.getLogger("lms.ai")
 
@@ -405,4 +405,39 @@ def review_ai_grade_audio(request, pk):
     except ai.AiError as exc:
         return JsonResponse({"ok": False, "error": str(exc)}, status=400)
     logger.info("ai_grade_audio submission=%s teacher=%s", submission.pk, request.user.pk)
+    return JsonResponse({"ok": True, **result})
+
+
+@teacher_required
+@require_POST
+def review_ai_grade_item(request, pk, item_pk):
+    """ИИ проверяет ответ ученика на один ручной пункт: свободный текст или голос.
+
+    Пункт ищется внутри самой попытки, поэтому чужой идентификатор отдаёт 404,
+    а балл считается в шкале пункта, а не всей попытки.
+    """
+    submission = get_object_or_404(
+        Submission.objects.select_related("assignment__topic__block", "assignment__topic__chapter"),
+        pk=pk,
+    )
+    if not _is_latest_attempt(submission):
+        return JsonResponse(
+            {"ok": False, "error": "Это не последняя попытка — откройте актуальную."}, status=409
+        )
+    response = get_object_or_404(
+        QuestionResponse.objects.select_related(
+            "question__assignment__topic__block", "question__assignment__topic__chapter"
+        ),
+        pk=item_pk,
+        submission=submission,
+        student_id=submission.student_id,
+        assignment_id=submission.assignment_id,
+        question__assignment_id=submission.assignment_id,
+        question__isnull=False,
+    )
+    try:
+        result = ai.grade_item_answer(response)
+    except ai.AiError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+    logger.info("ai_grade_item response=%s teacher=%s", response.pk, request.user.pk)
     return JsonResponse({"ok": True, **result})

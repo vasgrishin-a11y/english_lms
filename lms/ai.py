@@ -1273,15 +1273,17 @@ def _http_json(request, *, provider="", timeout=None):
                 "TLS-сертификат модели не удалось проверить: для своего шлюза задайте "
                 "LMS_AI_CA_BUNDLE или отключите проверку через LMS_AI_VERIFY_SSL=0."
             ) from exc
+        # Без фразы про офлайн-разбор: этот же транспорт используют проверка
+        # ответов и пунктов, где офлайн-оценки не существует. Разбор материала
+        # добавляет свою подсказку сам (см. build_material).
         raise AiError(
             f"Нет связи с моделью по адресу {ai_endpoint() or 'не задан'}. "
-            "Запущен ли Ollama или LM Studio и тот ли адрес в LMS_AI_ENDPOINT? "
-            "Материал разобран офлайн."
+            "Запущен ли Ollama или LM Studio и тот ли адрес в LMS_AI_ENDPOINT?"
         ) from exc
     except (TimeoutError, OSError) as exc:
         raise AiError(
             "Модель не ответила за отведённое время — увеличьте LMS_AI_TIMEOUT "
-            "или возьмите модель поменьше. Материал разобран офлайн."
+            "или возьмите модель поменьше."
         ) from exc
     try:
         return json.loads(raw.decode("utf-8"))
@@ -2382,6 +2384,27 @@ AUDIO_GRADING_SCHEMA = """Верни строго JSON без пояснений
 Правила: "grade" — целое число от 0 до {max_points} включительно. "comment" — по-русски, на «вы»,
 без markdown."""
 
+#: Пункты теста проверяются по одному: балл считается в шкале пункта, а не всей
+#: попытки, а подсказки-выделения не нужны — текст пункта короткий.
+ITEM_GRADING_SCHEMA = """Верни строго JSON без пояснений в формате:
+{{"grade": 0, "comment": "Комментарий ученику по этому пункту: что засчитано и что исправить",
+  "criteria_note": "Коротко: почему за этот пункт выставлен именно такой балл"}}
+
+Правила:
+- "grade" — целое число от 0 до {max_points} включительно: это балл только за один пункт.
+- Оценивай только ответ на этот пункт и не пересказывай всё задание целиком.
+- "comment" пиши по-русски, обращайся к ученику на «вы», без markdown и списков."""
+
+ITEM_AUDIO_GRADING_SCHEMA = """Верни строго JSON без пояснений в формате:
+{{"grade": 0, "comment": "Комментарий ученику по этому пункту: что засчитано и что исправить",
+  "criteria_note": "Коротко: почему за этот пункт выставлен именно такой балл",
+  "transcript": "текстовая расшифровка того, что сказал ученик"}}
+
+Правила:
+- "grade" — целое число от 0 до {max_points} включительно: это балл только за один пункт.
+- Оценивай только ответ на этот пункт и не пересказывай всё задание целиком.
+- "comment" пиши по-русски, обращайся к ученику на «вы», без markdown и списков."""
+
 
 def _exam_hint(assignment):
     """Название экзамена (ОГЭ/ЕГЭ), если оно угадывается из курса или задания."""
@@ -2471,6 +2494,51 @@ def build_audio_grading_prompt(submission):
     return "\n\n".join(parts)
 
 
+def _item_grading_head(response):
+    """Общая часть промпта пункта: задание, критерии и формулировка самого пункта."""
+    question = response.question
+    assignment = question.assignment
+    max_points = question.points
+    parts = [
+        GRADING_CONTEXT,
+        _grading_criteria_note(assignment, max_points),
+        f"Курс/тема: {_course_label(assignment)}.",
+        f"Название задания: {assignment.title}",
+        "Условие задания:\n" + (assignment.description or "").strip()[:4000],
+        f"Пункт теста: {question.text}".strip()[:4000],
+        f"Максимум баллов за этот пункт: {max_points}.",
+    ]
+    if (question.explanation or "").strip():
+        parts.append(
+            "Пояснение или ориентир преподавателя:\n" + question.explanation.strip()[:3000]
+        )
+    return parts, max_points
+
+
+def build_item_grading_prompt(response):
+    """Промпт проверки свободного ответа на один пункт теста."""
+    parts, max_points = _item_grading_head(response)
+    parts += [
+        "Ответ ученика на этот пункт (оценивай только этот текст, дословно, без сокращений):\n"
+        + (response.text_answer or "").strip()[:8000],
+        ITEM_GRADING_SCHEMA.format(max_points=max_points),
+    ]
+    return "\n\n".join(parts)
+
+
+def build_item_audio_grading_prompt(response):
+    """Промпт проверки голосового ответа на один пункт теста."""
+    parts, max_points = _item_grading_head(response)
+    parts.append(
+        "Прослушай приложенную запись ответа ученика на этот пункт, расшифруй её и оцени "
+        "говорение (произношение, беглость, словарный запас, грамматику) по критериям выше."
+    )
+    if (response.text_answer or "").strip():
+        parts.append("Ученик приложил ещё и текст: " + response.text_answer.strip()[:4000])
+    parts.append(ITEM_AUDIO_GRADING_SCHEMA.format(max_points=max_points))
+    return "\n\n".join(parts)
+
+
 def _grade_from_payload(payload, max_points):
     try:
         grade = payload.get("grade")
@@ -2504,13 +2572,8 @@ def normalise_text_grading(payload, *, submission, spec):
     }
 
 
-def grade_text_answer(submission):
-    """Попросить модель проверить свободный текстовый ответ ученика.
-
-    Возвращает готовые для интерфейса поля: балл, комментарий, пояснение
-    критериев и список подсказок-выделений (цитата + комментарий), уже
-    привязанных к точным смещениям в тексте ответа.
-    """
+def _require_grading_mode():
+    """Проверка ответов возможна только с работающей моделью: офлайн её не умеет."""
     mode = ai_mode()
     if mode == "off":
         raise AiError("ИИ-помощник выключен администратором (LMS_AI_ENABLED=0).")
@@ -2519,6 +2582,34 @@ def grade_text_answer(submission):
             "Проверка ИИ требует работающей модели: офлайн-разбор не умеет оценивать ответы. "
             "Подключите локальную модель (LMS_AI_LOCAL=1) или задайте ключ LMS_AI_API_KEY."
         )
+
+
+def _read_answer_audio(upload):
+    """Прочитать аудиофайл ответа для отправки модели: имя и содержимое."""
+    filename = upload.name
+    try:
+        blob = upload.read()
+    finally:
+        try:
+            upload.close()
+        except (OSError, ValueError):  # pragma: no cover - защитное закрытие файла
+            pass
+    if len(blob) > max_upload_bytes():
+        raise AiError(
+            f"Аудиофайл больше {max_upload_bytes() // (1024 * 1024)} МБ — модель не сможет "
+            "его обработать. Проверьте запись вручную."
+        )
+    return filename, blob
+
+
+def grade_text_answer(submission):
+    """Попросить модель проверить свободный текстовый ответ ученика.
+
+    Возвращает готовые для интерфейса поля: балл, комментарий, пояснение
+    критериев и список подсказок-выделений (цитата + комментарий), уже
+    привязанных к точным смещениям в тексте ответа.
+    """
+    _require_grading_mode()
     text = (submission.text_answer or "").strip()
     if not text:
         raise AiError("В ответе ученика нет текста для проверки.")
@@ -2533,32 +2624,13 @@ def grade_audio_answer(submission):
     Не все модели понимают звук: если провайдер откажет, ошибка объясняет,
     что нужна аудио-модель, и предлагает проверить запись вручную.
     """
-    mode = ai_mode()
-    if mode == "off":
-        raise AiError("ИИ-помощник выключен администратором (LMS_AI_ENABLED=0).")
-    if mode != "online":
-        raise AiError(
-            "Проверка ИИ требует работающей модели: офлайн-разбор не умеет оценивать ответы. "
-            "Подключите локальную модель (LMS_AI_LOCAL=1) или задайте ключ LMS_AI_API_KEY."
-        )
+    _require_grading_mode()
     upload = submission.file_answer
     if not upload:
         raise AiError("В этой попытке нет аудиофайла для проверки.")
-    filename = upload.name
-    if upload_kind(filename) != "audio":
+    if upload_kind(upload.name) != "audio":
         raise AiError("Прикреплённый файл не похож на аудио — проверьте ответ вручную.")
-    try:
-        blob = upload.read()
-    finally:
-        try:
-            upload.close()
-        except (OSError, ValueError):  # pragma: no cover - защитное закрытие файла
-            pass
-    if len(blob) > max_upload_bytes():
-        raise AiError(
-            f"Аудиофайл больше {max_upload_bytes() // (1024 * 1024)} МБ — модель не сможет "
-            "его обработать. Проверьте запись вручную."
-        )
+    filename, blob = _read_answer_audio(upload)
     spec = provider_spec()
     try:
         payload = _provider_material(
@@ -2595,6 +2667,66 @@ def grade_audio_answer(submission):
     }
 
 
+def grade_item_answer(response):
+    """Попросить модель проверить ответ ученика на один ручной пункт теста.
+
+    Пункты со свободным и голосовым ответом проверяет преподаватель, и раньше ИИ
+    помогал только с общим ответом попытки. Балл здесь считается в шкале пункта
+    (``question.points``), а не всей попытки; результат не сохраняется сам —
+    преподаватель правит поле пункта и сохраняет проверку обычной кнопкой.
+    """
+    _require_grading_mode()
+    question = response.question
+    if question is None:
+        raise AiError("Этот пункт больше недоступен для проверки — проверьте работу вручную.")
+    if not question.is_manual:
+        raise AiError("ИИ проверяет только пункты со свободным или голосовым ответом.")
+    text = (response.text_answer or "").strip()
+    upload = response.file_answer or None
+    if upload and upload_kind(upload.name) != "audio":
+        raise AiError("К пункту приложен не аудиофайл — проверьте ответ вручную.")
+    if not upload and not text:
+        raise AiError("Ученик не ответил на этот пункт — проверять нечего.")
+    spec = provider_spec()
+    if upload:
+        filename, blob = _read_answer_audio(upload)
+        try:
+            payload = _provider_material(
+                spec,
+                build_item_audio_grading_prompt(response),
+                filename=filename,
+                blob=blob,
+                media_kind="audio",
+            )
+        except AiError as exc:
+            raise AiError(
+                f"{spec['label']} не смог обработать аудио ({exc}). Нужна модель с поддержкой "
+                "звука (например, аудио-модель через свой OpenAI-совместимый шлюз) — пока "
+                "проверьте запись вручную."
+            ) from exc
+    else:
+        payload = _provider_material(spec, build_item_grading_prompt(response))
+    if not isinstance(payload, dict):
+        raise AiError("Модель вернула не JSON — попробуйте ещё раз.")
+    max_points = question.points
+    grade = _grade_from_payload(payload, max_points)
+    comment = _clean_text(payload.get("comment"), 4000)
+    criteria_note = _clean_text(payload.get("criteria_note"), 1000)
+    transcript = _clean_text(payload.get("transcript"), 8000)
+    if grade is None and not comment:
+        raise AiError("Модель не вернула оценку или комментарий — попробуйте ещё раз.")
+    return {
+        "grade": grade,
+        "max_points": max_points,
+        "comment": comment,
+        "criteria_note": criteria_note,
+        "transcript": transcript,
+        "exam": _exam_hint(question.assignment),
+        "provider": spec["key"],
+        "provider_label": spec["label"],
+    }
+
+
 __all__ = [
     "AiError",
     "AI_CEFR_LEVELS",
@@ -2618,9 +2750,12 @@ __all__ = [
     "build_revision_prompt",
     "build_text_grading_prompt",
     "build_audio_grading_prompt",
+    "build_item_audio_grading_prompt",
+    "build_item_grading_prompt",
     "extension_of",
     "extract_text",
     "grade_audio_answer",
+    "grade_item_answer",
     "grade_text_answer",
     "import_material",
     "limits",
