@@ -598,6 +598,195 @@ class OnlineModeTests(LMSCase):
         self.teacher_client.post(reverse("teacher_ai_import"))
         self.assertTrue(Assignment.objects.filter(title="Airport quiz revised").exists())
 
+    def build_preview(self):
+        """Первый разбор материала — как его делает преподаватель до правок."""
+        return self.teacher_client.post(
+            reverse("teacher_ai"),
+            {"target": "mixed", "prompt": "Сделай блок B1", "structure_confirmed": "on"},
+        )
+
+    def revise(self, **data):
+        payload = {"revise_material": "1", "revision_instruction": ""}
+        payload.update(data)
+        return self.teacher_client.post(reverse("teacher_ai"), payload)
+
+    @override_settings(
+        LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="ollama", LMS_AI_LOCAL=True
+    )
+    def test_revision_form_offers_files_after_the_first_pass(self):
+        """Поле файлов живёт в окне правки, а не только в первом разборе."""
+        with patch("lms.ai._provider_material", return_value=self.AI_PAYLOAD):
+            preview = self.build_preview()
+        revision_panel = preview.content.decode().split('id="ai-revision-title"')[1]
+        self.assertIn('enctype="multipart/form-data"', revision_panel)
+        self.assertIn('name="revision_upload"', revision_panel)
+        self.assertIn('data-dropzone="1"', revision_panel)
+        self.assertIn('type="file"', revision_panel)
+        self.assertIn("multiple", revision_panel)
+
+    @override_settings(
+        LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="ollama", LMS_AI_LOCAL=True
+    )
+    def test_revision_accepts_files_after_the_first_pass(self):
+        """Файл можно приложить и ко второй правке, а не только к первому разбору."""
+        with patch(
+            "lms.ai._provider_material", side_effect=[self.AI_PAYLOAD, self.AI_PAYLOAD]
+        ) as provider:
+            preview = self.build_preview()
+            response = self.revise(
+                revision_instruction="Добавь слова из файла",
+                revision_upload=SimpleUploadedFile(
+                    "words.txt", "departure, arrival, boarding pass".encode("utf-8")
+                ),
+            )
+
+        self.assertContains(preview, "Airport quiz")
+        self.assertEqual(provider.call_count, 2)
+        prompt = provider.call_args_list[-1].args[1]
+        self.assertIn("Добавь слова из файла", prompt)
+        self.assertIn("Материал из файла words.txt", prompt)
+        self.assertIn("departure, arrival, boarding pass", prompt)
+        self.assertContains(response, "с учётом приложенных файлов")
+        self.assertContains(response, "Airport quiz")
+        # Текст загруженного файла не подменяет поле «Что изменить».
+        self.assertContains(response, 'name="revision_instruction"')
+        self.assertNotContains(response, "departure, arrival, boarding pass")
+        # В курс по-прежнему ничего не попало: правка живёт только в предпросмотре.
+        self.assertFalse(Assignment.objects.filter(title="Airport quiz").exists())
+
+    @override_settings(
+        LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="ollama", LMS_AI_LOCAL=True
+    )
+    def test_revision_photo_goes_to_the_vision_model_as_an_attachment(self):
+        photo = b"\xff\xd8\xff\xe0" + b"page-of-the-book" * 4
+        with patch(
+            "lms.ai._provider_material", side_effect=[self.AI_PAYLOAD, self.AI_PAYLOAD]
+        ) as provider:
+            self.build_preview()
+            self.revise(
+                revision_instruction="Добавь упражнения с фото",
+                revision_upload=SimpleUploadedFile("page.jpg", photo, "image/jpeg"),
+            )
+
+        call = provider.call_args_list[-1]
+        self.assertEqual(call.kwargs["filename"], "page.jpg")
+        self.assertEqual(call.kwargs["blob"], photo)
+        self.assertEqual(call.kwargs["media_kind"], "image")
+        self.assertIn("Добавь упражнения с фото", call.args[1])
+
+    @override_settings(
+        LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="ollama", LMS_AI_LOCAL=True
+    )
+    def test_revision_gives_the_model_a_document_as_text_and_a_photo_as_attachment(self):
+        with patch(
+            "lms.ai._provider_material", side_effect=[self.AI_PAYLOAD, self.AI_PAYLOAD]
+        ) as provider:
+            self.build_preview()
+            self.revise(
+                revision_instruction="Учти слова и фото",
+                revision_upload=[
+                    SimpleUploadedFile("words.txt", b"customs, gate"),
+                    SimpleUploadedFile("page.jpg", b"\xff\xd8\xff\xaa", "image/jpeg"),
+                ],
+            )
+
+        call = provider.call_args_list[-1]
+        self.assertEqual(call.kwargs["filename"], "page.jpg")
+        self.assertIn("Материал из файла words.txt", call.args[1])
+        self.assertIn("customs, gate", call.args[1])
+
+    @override_settings(
+        LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="ollama", LMS_AI_LOCAL=True
+    )
+    def test_revision_warns_about_a_second_photo_instead_of_silently_dropping_it(self):
+        with patch(
+            "lms.ai._provider_material", side_effect=[self.AI_PAYLOAD, self.AI_PAYLOAD]
+        ) as provider:
+            self.build_preview()
+            response = self.revise(
+                revision_instruction="Учти обе страницы",
+                revision_upload=[
+                    SimpleUploadedFile("page-a.jpg", b"\xff\xd8\xff\xaa", "image/jpeg"),
+                    SimpleUploadedFile("page-b.jpg", b"\xff\xd8\xff\xbb", "image/jpeg"),
+                ],
+            )
+
+        # Вложение в запросе одно — оставшееся фото не теряется молча.
+        self.assertEqual(provider.call_args_list[-1].kwargs["filename"], "page-a.jpg")
+        self.assertContains(response, "page-b.jpg")
+        self.assertContains(response, "только один файл за правку")
+
+    @override_settings(
+        LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="ollama", LMS_AI_LOCAL=True
+    )
+    def test_revision_accepts_files_without_an_instruction(self):
+        """Приложенный файл без описания — понятная просьба: «учти это»."""
+        with patch(
+            "lms.ai._provider_material", side_effect=[self.AI_PAYLOAD, self.AI_PAYLOAD]
+        ) as provider:
+            self.build_preview()
+            response = self.revise(
+                revision_upload=SimpleUploadedFile("extra.txt", b"At the customs desk")
+            )
+
+        self.assertEqual(provider.call_count, 2)
+        prompt = provider.call_args_list[-1].args[1]
+        self.assertIn(ai.DEFAULT_REVISION_INSTRUCTION, prompt)
+        self.assertIn("At the customs desk", prompt)
+        self.assertContains(response, "с учётом приложенных файлов")
+
+    @override_settings(
+        LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="ollama", LMS_AI_LOCAL=True
+    )
+    def test_revision_without_instruction_and_files_asks_for_one(self):
+        with patch(
+            "lms.ai._provider_material", side_effect=[self.AI_PAYLOAD, self.AI_PAYLOAD]
+        ) as provider:
+            self.build_preview()
+            response = self.revise()
+
+        self.assertEqual(provider.call_count, 1)  # к модели не ходили
+        self.assertContains(response, "Опишите, что изменить в текущей версии материала")
+        self.assertContains(response, "Airport quiz")
+
+    @override_settings(
+        LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="ollama", LMS_AI_LOCAL=True
+    )
+    def test_revision_rejects_unsupported_and_too_large_files(self):
+        with patch(
+            "lms.ai._provider_material", side_effect=[self.AI_PAYLOAD, self.AI_PAYLOAD]
+        ) as provider:
+            self.build_preview()
+            bad_format = self.revise(
+                revision_instruction="Учти файл",
+                revision_upload=SimpleUploadedFile("virus.exe", b"MZ"),
+            )
+            too_large = self.revise(
+                revision_instruction="Учти файл",
+                revision_upload=SimpleUploadedFile("huge.txt", b"x" * (11 * 1024 * 1024)),
+            )
+
+        self.assertEqual(provider.call_count, 1)  # ни один файл не ушёл модели
+        self.assertContains(bad_format, "не поддерживается")
+        self.assertContains(too_large, "разделите материал на части")
+
+    @override_settings(
+        LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="ollama", LMS_AI_LOCAL=True
+    )
+    def test_revision_reports_a_file_it_could_not_read(self):
+        with patch(
+            "lms.ai._provider_material", side_effect=[self.AI_PAYLOAD, self.AI_PAYLOAD]
+        ) as provider:
+            self.build_preview()
+            response = self.revise(
+                revision_instruction="Учти файл",
+                revision_upload=SimpleUploadedFile("broken.pdf", b"not really a pdf"),
+            )
+
+        self.assertEqual(provider.call_count, 2)  # правка всё равно состоялась
+        self.assertContains(response, "broken.pdf")
+        self.assertContains(response, "Airport quiz")
+
     @override_settings(
         LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="ollama", LMS_AI_LOCAL=True
     )

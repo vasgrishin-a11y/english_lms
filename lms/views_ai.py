@@ -67,6 +67,9 @@ def ai_assistant(request):
         if revising:
             instruction = request.POST.get("revision_instruction", "").strip()[:4000]
             revision_instruction = instruction
+            # Файлы можно приложить и к правке: первый читаемый моделью уйдёт
+            # вложением, остальные — текстом промпта (см. ai.revision_uploads).
+            revision_uploads = request.FILES.getlist("revision_upload")
             if mode != "online":
                 messages.error(
                     request,
@@ -75,20 +78,28 @@ def ai_assistant(request):
                 )
             elif not material:
                 messages.error(request, "Текущая версия не найдена — соберите материал заново.")
-            elif not instruction:
-                messages.error(request, "Опишите, что изменить в текущей версии материала.")
+            elif not instruction and not revision_uploads:
+                messages.error(
+                    request,
+                    "Опишите, что изменить в текущей версии материала, или приложите файл "
+                    "с материалом для этой правки.",
+                )
             else:
                 try:
                     revised, revision_meta = ai.revise_material(
-                        material, instruction, structure=meta.get("structure")
+                        material,
+                        instruction,
+                        structure=meta.get("structure"),
+                        uploads=revision_uploads,
                     )
                 except ai.AiError as exc:
                     messages.error(request, str(exc))
                 except Exception:
                     logger.exception(
-                        "ai_material_revision_failed teacher=%s provider=%s",
+                        "ai_material_revision_failed teacher=%s provider=%s uploads=%s",
                         request.user.pk,
                         ai.ai_provider(),
+                        len(revision_uploads),
                     )
                     messages.error(
                         request,
@@ -106,11 +117,21 @@ def ai_assistant(request):
                     meta["revision_instruction"] = instruction
                     request.session[SESSION_MATERIAL] = material
                     request.session[SESSION_META] = meta
-                    messages.success(
-                        request,
-                        "ИИ обновил текущую версию — проверьте подробный предпросмотр. "
-                        "В курс пока ничего не импортировано.",
-                    )
+                    if revision_uploads:
+                        messages.success(
+                            request,
+                            "ИИ обновил текущую версию с учётом приложенных файлов — "
+                            "проверьте подробный предпросмотр. "
+                            "В курс пока ничего не импортировано.",
+                        )
+                    else:
+                        messages.success(
+                            request,
+                            "ИИ обновил текущую версию — проверьте подробный предпросмотр. "
+                            "В курс пока ничего не импортировано.",
+                        )
+                    for note in revision_meta.get("notes") or []:
+                        messages.warning(request, note)
         elif mode == "off":
             messages.error(request, ai.ai_mode_label(mode))
             _clear_session(request)
@@ -191,6 +212,7 @@ def ai_assistant(request):
             "revision_instruction": revision_instruction,
             "limits": ai.limits(),
             "max_upload_mb": ai.max_upload_bytes() // (1024 * 1024),
+            "upload_accept": ai.upload_accept(),
             "structure_tree": {
                 "chapters": {
                     str(pk): block_id
