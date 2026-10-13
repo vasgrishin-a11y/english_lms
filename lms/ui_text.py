@@ -222,6 +222,10 @@ TEXTS_EN = {
     "Помню": "Remembered",
     "Не помню": "Forgotten",
     # Курс целиком и счётчики
+    "Файловое хранилище": "File storage",
+    "Файлы LMS": "LMS files",
+    "Диск сервера": "Server disk",
+    "По разделам": "By section",
     "Классы": "Course",
     "Курс целиком": "Whole course",
     "Классов": "Classes",

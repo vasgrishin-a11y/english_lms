@@ -47,6 +47,33 @@
                             {{ item.points_field.errors }}
                         </div>
                     {% endif %}
+                    {% if item.points_field %}
+                        {% if item.text_answer or item.file_answer %}
+                            <div data-ai-grade-item-block>
+                                <div class="row row-tight">
+                                    <button type="button" class="btn btn-secondary btn-sm" data-ai-grade-item
+                                            data-url="{% url 'teacher_review_ai_grade_item' submission.pk item.response.pk %}"
+                                            data-points-field="{{ item.points_field.id_for_label }}"
+                                            data-item-label="Пункт {{ item.number }}"
+                                            {% if item.file_answer %}data-transcript-for="ai-transcript-item-{{ item.response.pk }}"{% endif %}>
+                                        {% icon "sparkles" %}Проверить с ИИ
+                                    </button>
+                                    <span class="tiny muted">ИИ предложит балл и добавит комментарий в общую проверку — проверьте и поправьте.</span>
+                                </div>
+                                <p class="tiny recorder-error mb-0" data-ai-grade-item-error role="alert"></p>
+                                <div class="small" data-ai-grade-item-result aria-live="polite" hidden>
+                                    <p class="small mb-0" data-ai-grade-item-comment></p>
+                                    <p class="tiny muted mb-0" data-ai-grade-item-criteria></p>
+                                </div>
+                                {% if item.file_answer %}
+                                    <div id="ai-transcript-item-{{ item.response.pk }}" aria-live="polite" hidden>
+                                        <p class="tiny muted mb-0">Расшифровка записи (ИИ):</p>
+                                        <p class="small mb-0" data-ai-transcript-text></p>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        {% endif %}
+                    {% endif %}
                 {% else %}
                     {% if item.tries %}
                         <ol class="try-list" aria-label="Попытки ученика">

@@ -66,6 +66,68 @@
 
     <div class="split-side">
         <section class="card card-pad-sm">
+            <div class="card-head" style="margin-bottom:12px">
+                <h2 class="card-title">{% icon "database" %}{% t "Файловое хранилище" %}</h2>
+                <a class="btn btn-ghost btn-sm" href="{% url 'teacher_settings' %}?refresh=storage">{% icon "refresh" %}{% t "Обновить" %}</a>
+            </div>
+
+            <div class="skill-row">
+                <div class="row row-tight">
+                    <strong class="small">{% t "Файлы LMS" %}</strong>
+                    <span class="tiny muted tnum" style="margin-left:auto">{{ storage.size|filesizeformat }}</span>
+                </div>
+                {% if storage.quota_gauge %}
+                    <div class="progress progress-lg {{ storage.quota_gauge.bar_class }}" role="img" aria-label="Файлы LMS занимают {{ storage.quota_gauge.percent }} процентов лимита хранилища">
+                        <span style="width:{{ storage.quota_gauge.bar_percent }}%"></span>
+                    </div>
+                    <p class="tiny muted tnum skill-meta">
+                        {% if storage.over_quota %}Лимит превышен · {% endif %}{{ storage.quota_gauge.percent }}% от {{ storage.quota|filesizeformat }}{% if not storage.over_quota %} · свободно {{ storage.quota_free|filesizeformat }}{% endif %}
+                    </p>
+                {% else %}
+                    <p class="tiny muted skill-meta">Лимит не задан — место ограничено только диском.</p>
+                {% endif %}
+            </div>
+
+            {% if storage.disk_gauge %}
+                <div class="skill-row">
+                    <div class="row row-tight">
+                        <strong class="small">{% t "Диск сервера" %}</strong>
+                        <span class="tiny muted tnum" style="margin-left:auto">{{ storage.disk_used|filesizeformat }} из {{ storage.disk_total|filesizeformat }}</span>
+                    </div>
+                    <div class="progress {{ storage.disk_gauge.bar_class }}" role="img" aria-label="Диск с файлами заполнен на {{ storage.disk_gauge.percent }} процентов">
+                        <span style="width:{{ storage.disk_gauge.bar_percent }}%"></span>
+                    </div>
+                    <p class="tiny muted tnum skill-meta">Свободно {{ storage.disk_free|filesizeformat }}</p>
+                </div>
+            {% else %}
+                <p class="tiny muted">Каталог файлов недоступен — проверьте MEDIA_ROOT и права на него.</p>
+            {% endif %}
+
+            <p class="tiny muted tnum" style="margin-bottom:8px">Файлов в базе: {{ storage.files }}</p>
+            {% if storage.missing %}
+                <p class="tiny" style="color:var(--danger-ink)">Не найдено на диске: {{ storage.missing }} — эти файлы отдают 404. Сверка: <code>manage.py check_media_files</code>.</p>
+            {% endif %}
+            {% if storage.legacy %}
+                <p class="tiny" style="color:var(--warning-ink)">Из прежнего каталога: {{ storage.legacy }}. Перенос: <code>manage.py migrate_media_folder</code>.</p>
+            {% endif %}
+            {% if storage.over_quota %}
+                <p class="tiny muted">Загрузки не блокируются: лимит справочный. Освободите место или поднимите <code>LMS_STORAGE_QUOTA_BYTES</code>.</p>
+            {% endif %}
+
+            <details>
+                <summary class="tiny muted" style="cursor:pointer">{% t "По разделам" %}</summary>
+                <ul class="col tiny muted list-plain" style="margin-top:8px">
+                    {% for source in storage.sources %}
+                        <li class="row row-tight">
+                            <span>{{ source.label }}</span>
+                            <span class="tnum" style="margin-left:auto">{{ source.size|filesizeformat }}</span>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </details>
+        </section>
+
+        <section class="card card-pad-sm">
             <div class="card-head" style="margin-bottom:12px"><h2 class="card-title">{% icon "grid" %}Интерфейс</h2></div>
             <form method="post">
                 {% csrf_token %}

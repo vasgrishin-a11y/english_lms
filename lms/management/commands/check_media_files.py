@@ -6,30 +6,12 @@
 интерфейсе остаётся, а превью и скачивание отдают 404.
 """
 
-import os
 from collections import Counter
 
 from django.conf import settings
-from django.core.files.storage import default_storage
 from django.core.management.base import BaseCommand
 
-from lms.models import (
-    Assignment,
-    AssignmentAttachment,
-    Feedback,
-    FeedbackAudioComment,
-    QuestionResponse,
-    Submission,
-)
-
-SOURCES = (
-    ("Материалы заданий", Assignment, "material_file"),
-    ("Вложения заданий", AssignmentAttachment, "file"),
-    ("Ответы учеников", Submission, "file_answer"),
-    ("Голосовые комментарии", Feedback, "audio_comment"),
-    ("Голосовые комментарии (доп.)", FeedbackAudioComment, "audio"),
-    ("Ответы по пунктам", QuestionResponse, "file_answer"),
-)
+from lms.storage_usage import SOURCES, locate
 
 
 class Command(BaseCommand):
@@ -59,7 +41,7 @@ class Command(BaseCommand):
             ]
             stats = Counter()
             for name in names:
-                where = self._locate(name)
+                where = locate(name)
                 stats[where] += 1
                 totals[where] += 1
                 if where == "missing":
@@ -94,13 +76,3 @@ class Command(BaseCommand):
             )
         if not totals["legacy"] and not totals["missing"]:
             self.stdout.write(self.style.SUCCESS("Все файлы на месте."))
-
-    @staticmethod
-    def _locate(name):
-        resolver = getattr(default_storage, "resolved_path", None)
-        if resolver is None:
-            return "primary" if default_storage.exists(name) else "missing"
-        primary = os.path.join(str(settings.MEDIA_ROOT), name)
-        if os.path.isfile(primary):
-            return "primary"
-        return "legacy" if resolver(name) else "missing"

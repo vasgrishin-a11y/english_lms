@@ -113,13 +113,21 @@
                 <p class="muted">Текстовый ответ не отправлен.</p>
             {% endif %}
             {% if is_latest and submission.file_answer and submission.file_answer.name|media_kind == 'audio' %}
-                <div class="row row-tight" style="margin-top:12px">
-                    <button type="button" class="btn btn-secondary btn-sm" data-ai-grade-audio
-                            data-url="{% url 'teacher_review_ai_grade_audio' submission.pk %}">
-                        {% icon "sparkles" %}Проверить аудио с ИИ
-                    </button>
+                <div data-ai-grade-item-block>
+                    <div class="row row-tight" style="margin-top:12px">
+                        <button type="button" class="btn btn-secondary btn-sm" data-ai-grade-audio
+                                data-url="{% url 'teacher_review_ai_grade_audio' submission.pk %}"
+                                data-transcript-for="ai-transcript-audio">
+                            {% icon "sparkles" %}Проверить аудио с ИИ
+                        </button>
+                        <span class="tiny muted">ИИ предложит балл и расшифровку — проверьте и поправьте.</span>
+                    </div>
+                    <p class="tiny recorder-error mb-0" data-ai-grade-audio-error role="alert"></p>
+                    <div id="ai-transcript-audio" aria-live="polite" hidden>
+                        <p class="tiny muted mb-0">Расшифровка записи (ИИ):</p>
+                        <p class="small mb-0" data-ai-transcript-text></p>
+                    </div>
                 </div>
-                <p class="tiny recorder-error mb-0" data-ai-grade-audio-error role="alert"></p>
             {% endif %}
             {% if submission.file_answer %}
                 <div class="media-frame" style="margin-top:12px">

@@ -94,6 +94,7 @@ from .models import (
 from .quiz_items import build_items, progress_of
 from .services import ConflictError, review_submission
 from .skills import skills_for_type, type_skill_payload
+from .storage_usage import collect as collect_storage_usage
 from .views import _add_validation_errors
 
 logger = logging.getLogger(__name__)
@@ -3017,6 +3018,9 @@ def console_settings(request):
         {
             "form": form,
             "snippets": _visible_snippets(request.user),
+            # ?refresh=storage — посчитать заново, не дожидаясь кэша: после
+            # большой загрузки преподаватель ждёт новое число сразу.
+            "storage": collect_storage_usage(force=request.GET.get("refresh") == "storage"),
             "workspace": "settings",
         },
     )

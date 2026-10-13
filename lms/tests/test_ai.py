@@ -1107,8 +1107,9 @@ class ProviderTransportTests(SimpleTestCase):
             patch("lms.ai.urllib.request.urlopen", transport),
             override_settings(LMS_AI_LOCAL=True),
         ):
-            with self.assertRaisesMessage(ai.AiError, "Запущен ли Ollama"):
+            with self.assertRaisesMessage(ai.AiError, "Запущен ли Ollama") as error:
                 ai._provider_material(ai.provider_spec(), "промпт")
+        self.assertNotIn("Материал разобран офлайн", str(error.exception))
 
     def test_unknown_model_suggests_ollama_list(self):
         error = urllib.error.HTTPError(

@@ -15,7 +15,16 @@ from django.urls import reverse
 from lms import ai
 from lms.forms import ReviewForm
 from lms.highlights import parse_submitted_highlights, render_highlighted_html
-from lms.models import Assignment, Feedback, FeedbackAudioComment, FeedbackHighlight
+from lms.models import (
+    Assignment,
+    Feedback,
+    FeedbackAudioComment,
+    FeedbackHighlight,
+    Question,
+    QuestionResponse,
+    QuizAttempt,
+    Submission,
+)
 from lms.templatetags.lms_tags import highlighted_answer, word_count
 
 from .base import LMSCase
@@ -499,3 +508,179 @@ class AiGradeAudioViewTests(LMSCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(response.json()["ok"])
         self.assertIn("аудиофайла", response.json()["error"])
+
+    def test_review_page_exposes_transcript_target_for_general_audio_answer(self):
+        assignment = self._audio_assignment()
+        attempt = self.submit(
+            assignment_id=assignment.pk, text_answer="", file_answer=_wav_file("answer.wav")
+        )
+        response = self.teacher_client.get(reverse("teacher_submission_review", args=[attempt.pk]))
+        self.assertContains(response, 'data-transcript-for="ai-transcript-audio"')
+        self.assertContains(response, 'id="ai-transcript-audio" aria-live="polite" hidden')
+        self.assertContains(response, "Расшифровка записи (ИИ)")
+
+
+@override_settings(
+    LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="ollama", LMS_AI_LOCAL=True
+)
+class AiGradeManualItemTests(LMSCase):
+    def setUp(self):
+        super().setUp()
+        self.quiz = Assignment.objects.create(
+            topic=self.topic,
+            title="Manual points",
+            description="Answer each question.",
+            assignment_type=Assignment.Type.QUIZ,
+            max_points=4,
+        )
+        self.question = Question.objects.create(
+            assignment=self.quiz,
+            kind=Question.Kind.TEXT,
+            text="Describe your last weekend.",
+            points=4,
+            order=1,
+        )
+        self.attempt = self._attempt_with_response(
+            question=self.question, text_answer="I visited my friends last weekend."
+        )
+        self.response = self.attempt.question_responses.get(question=self.question)
+
+    def _attempt_with_response(self, *, question, text_answer="", file_answer=None, version=1):
+        attempt = Submission.objects.create(
+            student=self.student,
+            assignment=self.quiz,
+            version=version,
+            text_answer="Ответы по пунктам теста.",
+            status=Submission.Status.SUBMITTED,
+        )
+        QuizAttempt.objects.create(
+            submission=attempt,
+            score=0,
+            max_score=self.quiz.max_points,
+            total_count=0,
+            answers={},
+        )
+        QuestionResponse.objects.create(
+            student=self.student,
+            assignment=self.quiz,
+            question=question,
+            submission=attempt,
+            round=version,
+            state=QuestionResponse.State.ANSWERED,
+            text_answer=text_answer,
+            file_answer=file_answer or "",
+        )
+        return attempt
+
+    def test_teacher_gets_ai_grade_for_text_item_in_item_scale(self):
+        payload = {
+            "grade": 3,
+            "comment": "Хорошо раскрыта тема.",
+            "criteria_note": "Баллы за содержание и грамматику.",
+        }
+        with patch("lms.ai._provider_material", return_value=payload) as provider:
+            response = self.teacher_client.post(
+                reverse("teacher_review_ai_grade_item", args=[self.attempt.pk, self.response.pk])
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["grade"], 3)
+        self.assertEqual(response.json()["max_points"], 4)
+        prompt = provider.call_args.args[1]
+        self.assertIn("Describe your last weekend", prompt)
+        self.assertIn("I visited my friends last weekend", prompt)
+        self.assertIn("Максимум баллов за этот пункт: 4", prompt)
+        self.response.refresh_from_db()
+        self.assertIsNone(self.response.teacher_points, "ИИ только предлагает — сам не сохраняет")
+        self.assertFalse(Feedback.objects.filter(submission=self.attempt).exists())
+
+    def test_teacher_page_shows_item_button_and_ai_feedback_region(self):
+        response = self.teacher_client.get(
+            reverse("teacher_submission_review", args=[self.attempt.pk])
+        )
+        self.assertNotContains(response, "data-answer-text")
+        self.assertContains(response, "data-ai-grade-item")
+        self.assertContains(response, f'data-points-field="id_item_{self.response.pk}"')
+        self.assertContains(response, "data-ai-grade-item-result")
+
+    def test_voice_item_returns_transcript_and_uses_audio_input(self):
+        self.question.kind = Question.Kind.VOICE
+        self.question.points = 5
+        self.question.save(update_fields=["kind", "points", "updated_at"])
+        self.quiz.max_points = 5
+        self.quiz.save(update_fields=["max_points", "updated_at"])
+        self.response.text_answer = "This is my spoken answer."
+        self.response.file_answer = _wav_file("item-answer.wav")
+        self.response.save()
+        payload = {
+            "grade": 4,
+            "comment": "Понятный ответ.",
+            "criteria_note": "Оценка за беглость и грамматику.",
+            "transcript": "This is my answer.",
+        }
+        with patch("lms.ai._provider_material", return_value=payload) as provider:
+            response = self.teacher_client.post(
+                reverse("teacher_review_ai_grade_item", args=[self.attempt.pk, self.response.pk])
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["transcript"], "This is my answer.")
+        self.assertEqual(provider.call_args.kwargs["media_kind"], "audio")
+        self.assertTrue(provider.call_args.kwargs["filename"].endswith(".wav"))
+        page = self.teacher_client.get(reverse("teacher_submission_review", args=[self.attempt.pk]))
+        self.assertContains(page, f'data-transcript-for="ai-transcript-item-{self.response.pk}"')
+
+    def test_item_endpoint_is_limited_to_latest_attempt(self):
+        older = self.attempt
+        latest = self._attempt_with_response(
+            question=self.question, text_answer="A newer answer.", version=2
+        )
+        latest_item = latest.question_responses.get(question=self.question)
+        response = self.teacher_client.post(
+            reverse("teacher_review_ai_grade_item", args=[older.pk, self.response.pk])
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("не последняя попытка", response.json()["error"])
+        page = self.teacher_client.get(reverse("teacher_submission_review", args=[older.pk]))
+        self.assertNotContains(page, "data-ai-grade-item")
+        latest_response = self.teacher_client.get(
+            reverse("teacher_submission_review", args=[latest.pk])
+        )
+        self.assertContains(
+            latest_response,
+            reverse("teacher_review_ai_grade_item", args=[latest.pk, latest_item.pk]),
+        )
+
+    def test_endpoint_does_not_accept_an_item_from_another_submission(self):
+        other_quiz = Assignment.objects.create(
+            topic=self.topic,
+            title="Another quiz",
+            assignment_type=Assignment.Type.QUIZ,
+            max_points=1,
+        )
+        other_question = Question.objects.create(
+            assignment=other_quiz, kind=Question.Kind.TEXT, text="Other question", points=1
+        )
+        other_attempt = Submission.objects.create(
+            student=self.student,
+            assignment=other_quiz,
+            version=1,
+            text_answer="Other answer.",
+            status=Submission.Status.SUBMITTED,
+        )
+        other_response = QuestionResponse.objects.create(
+            student=self.student,
+            assignment=other_quiz,
+            question=other_question,
+            submission=other_attempt,
+            state=QuestionResponse.State.ANSWERED,
+            text_answer="Other answer.",
+        )
+        response = self.teacher_client.post(
+            reverse("teacher_review_ai_grade_item", args=[self.attempt.pk, other_response.pk])
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_student_cannot_call_item_grade_endpoint(self):
+        response = self.student_client.post(
+            reverse("teacher_review_ai_grade_item", args=[self.attempt.pk, self.response.pk])
+        )
+        self.assertIn(response.status_code, (302, 403))

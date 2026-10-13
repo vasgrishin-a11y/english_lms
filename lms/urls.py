@@ -78,6 +78,11 @@ urlpatterns = [
         views_ai.review_ai_grade_audio,
         name="teacher_review_ai_grade_audio",
     ),
+    path(
+        "teacher/review/<int:pk>/ai-check/item/<int:item_pk>/",
+        views_ai.review_ai_grade_item,
+        name="teacher_review_ai_grade_item",
+    ),
     # Обратная совместимость: прежние адреса очереди и проверки
     path("teacher/submissions/", views_teacher.review_queue, name="teacher_submissions"),
     path(

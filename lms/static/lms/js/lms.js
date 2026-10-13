@@ -1132,12 +1132,12 @@
 
   function reviewAnnotations() {
     var container = document.querySelector("[data-answer-text]");
-    if (!container || container.dataset.annotationsReady === "1") return;
-    container.dataset.annotationsReady = "1";
+    if (container && container.dataset.annotationsReady === "1") return;
+    if (container) container.dataset.annotationsReady = "1";
 
-    var text = readJsonScript("answer-text-source") || "";
-    var initial = readJsonScript("answer-highlights-source") || [];
-    var editable = container.getAttribute("data-editable") === "1";
+    var text = container ? readJsonScript("answer-text-source") || "" : "";
+    var initial = container ? readJsonScript("answer-highlights-source") || [] : [];
+    var editable = !!container && container.getAttribute("data-editable") === "1";
     var nextId = 1;
     var highlights = initial.map(function (item) {
       return {
@@ -1154,6 +1154,7 @@
     var gradeField = document.getElementById("id_grade");
 
     function render() {
+      if (!container) return;
       container.innerHTML = renderHighlightedHtml(text, highlights);
     }
 
@@ -1310,16 +1311,45 @@
     }
     persist();
 
-    function fillFromAi(data, errorBox, highlightSource) {
+    function showAiTranscript(button, transcript) {
+      var targetId = button && button.getAttribute("data-transcript-for");
+      var target = targetId && document.getElementById(targetId);
+      if (!target) return;
+      var text = target.querySelector("[data-ai-transcript-text]");
+      var value = typeof transcript === "string" ? transcript.trim() : "";
+      if (!value) {
+        if (text) text.textContent = "";
+        target.hidden = true;
+        return;
+      }
+      target.hidden = false;
+      if (text) text.textContent = value;
+    }
+
+    function appendAiComment(data, prefix) {
+      if (!commentField) return false;
+      if (!data.comment && !data.criteria_note) return true;
+      var block = data.comment || "";
+      if (data.criteria_note) block += (block ? "\n\n" : "") + "(" + data.criteria_note + ")";
+      if (prefix) block = prefix + "\n" + block;
+      var separator = commentField.value ? "\n\n" : "";
+      var limit = commentField.maxLength > 0 ? commentField.maxLength : 10000;
+      if (commentField.value.length + separator.length + block.length > limit) return false;
+      commentField.value += separator + block;
+      commentField.dispatchEvent(new Event("input", { bubbles: true }));
+      return true;
+    }
+
+    function fillFromAi(data, errorBox, highlightSource, button) {
       if (gradeField && data.grade !== null && data.grade !== undefined && data.grade !== "") {
         gradeField.value = data.grade;
         gradeField.dispatchEvent(new Event("input", { bubbles: true }));
       }
-      if (commentField && data.comment) {
-        var block = data.comment + (data.criteria_note ? "\n\n(" + data.criteria_note + ")" : "");
-        commentField.value = commentField.value ? commentField.value + "\n\n" + block : block;
-        commentField.dispatchEvent(new Event("input", { bubbles: true }));
+      if (!appendAiComment(data, "") && errorBox) {
+        errorBox.textContent =
+          "Комментарий ИИ не помещается в общее поле проверки. Освободите место или скопируйте его вручную.";
       }
+      showAiTranscript(button, data.transcript);
       if (highlightSource && Array.isArray(data.highlights)) {
         data.highlights.forEach(function (item) {
           if (typeof item.start !== "number" || typeof item.end !== "number") return;
@@ -1337,9 +1367,8 @@
       }
     }
 
-    function wireAiButton(button, errorSelector, withHighlights) {
+    function requestAi(button, errorBox, onSuccess) {
       if (!button) return;
-      var errorBox = document.querySelector(errorSelector);
       button.addEventListener("click", function () {
         if (errorBox) errorBox.textContent = "";
         var original = button.innerHTML;
@@ -1360,7 +1389,7 @@
               if (errorBox) errorBox.textContent = (result.data && result.data.error) || "Не удалось проверить ответ.";
               return;
             }
-            fillFromAi(result.data, errorBox, withHighlights);
+            onSuccess(result.data);
           })
           .catch(function () {
             if (errorBox) errorBox.textContent = "Не удалось связаться с сервером.";
@@ -1372,8 +1401,44 @@
       });
     }
 
+    function wireAiButton(button, errorSelector, withHighlights) {
+      if (!button) return;
+      var errorBox = document.querySelector(errorSelector);
+      requestAi(button, errorBox, function (data) {
+        fillFromAi(data, errorBox, withHighlights, button);
+      });
+    }
+
     wireAiButton(document.querySelector("[data-ai-grade-text]"), "[data-ai-grade-error]", true);
     wireAiButton(document.querySelector("[data-ai-grade-audio]"), "[data-ai-grade-audio-error]", false);
+
+    document.querySelectorAll("[data-ai-grade-item]").forEach(function (button) {
+      var block = button.closest("[data-ai-grade-item-block]");
+      var errorBox = block && block.querySelector("[data-ai-grade-item-error]");
+      requestAi(button, errorBox, function (data) {
+        var pointsField = document.getElementById(button.getAttribute("data-points-field"));
+        if (pointsField && data.grade !== null && data.grade !== undefined && data.grade !== "") {
+          pointsField.value = data.grade;
+          pointsField.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+        if (
+          !appendAiComment(data, button.getAttribute("data-item-label") || "Пункт теста") &&
+          errorBox
+        ) {
+          errorBox.textContent =
+            "Комментарий ИИ показан ниже, но не помещается в общее поле проверки. Освободите место или скопируйте его вручную.";
+        }
+        var resultBox = block && block.querySelector("[data-ai-grade-item-result]");
+        if (resultBox) {
+          var comment = resultBox.querySelector("[data-ai-grade-item-comment]");
+          var criteria = resultBox.querySelector("[data-ai-grade-item-criteria]");
+          if (comment) comment.textContent = data.comment ? "Комментарий ИИ: " + data.comment : "";
+          if (criteria) criteria.textContent = data.criteria_note ? "Критерии: " + data.criteria_note : "";
+          resultBox.hidden = !(data.comment || data.criteria_note);
+        }
+        showAiTranscript(button, data.transcript);
+      });
+    });
   }
 
   /* ── Пошаговая проверка пунктов ────────────────────────────
