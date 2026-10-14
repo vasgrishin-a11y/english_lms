@@ -1152,6 +1152,217 @@ html[data-nav="collapsed"] .app-nav-link:has(.app-nav-count)::after {
     bottom: 6px;
 }
 
+/* ── Переход в режим одного класса: енот бежит к книгам ───────────
+   Те же спрайты и пастель, что в сцене шапки, но один короткий забег
+   вместо бесконечного цикла: полоска появляется под шапкой, енот
+   добегает до стопки книг, подпись вспыхивает — и всё исчезает.
+   Обратный переход — тот же забег в зеркальном отражении. */
+.raccoon-run {
+    --raccoon-run-dist: 190px;
+    position: fixed;
+    top: calc(var(--topbar-h) + 8px);
+    /* Центр рабочей области: боковое меню остаётся слева (--nav-w от .app). */
+    left: calc(50% + var(--nav-w, 232px) / 2);
+    z-index: var(--z-sticky);
+    width: min(680px, calc(100% - 24px));
+    height: 72px;
+    transform: translateX(-50%);
+    overflow: hidden;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--r-lg);
+    background: linear-gradient(180deg, #dcefe9 0%, #eef3e6 55%, #e9e2cf 100%);
+    box-shadow: var(--shadow-3);
+    pointer-events: none;
+}
+
+.raccoon-run__pet,
+.raccoon-run__books {
+    position: absolute;
+    bottom: 16px;
+    z-index: 2;
+}
+
+.raccoon-run__pet {
+    left: 18px;
+    width: 34px;
+    height: 34px;
+}
+
+.raccoon-run__books {
+    left: calc(18px + var(--raccoon-run-dist));
+    bottom: 14px;
+    width: 30px;
+    height: 30px;
+    opacity: 0;
+    transform: scale(0.6);
+}
+
+.raccoon-run__puff {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    z-index: 1;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.85);
+    opacity: 0;
+}
+
+.raccoon-run__caption {
+    position: absolute;
+    left: calc(18px + var(--raccoon-run-dist) + 42px);
+    right: 16px;
+    bottom: 24px;
+    overflow: hidden;
+    color: var(--accent-800);
+    font-size: var(--fs-13);
+    font-weight: 700;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    opacity: 0;
+    transform: translateY(6px);
+}
+
+/* Полоска всплывает, держится и уезжает — общий тайминг перехода. */
+.raccoon-run.is-enter,
+.raccoon-run.is-exit {
+    animation: raccoon-run-strip 1150ms var(--ease) forwards;
+}
+
+.raccoon-run.is-enter .raccoon-run__pet {
+    animation: raccoon-run-to-books 720ms var(--ease) forwards;
+}
+
+.raccoon-run.is-enter .raccoon-run__books {
+    animation: raccoon-run-books-pop 240ms var(--ease) 620ms forwards;
+}
+
+.raccoon-run.is-enter .raccoon-run__caption {
+    animation: raccoon-run-caption 300ms var(--ease) 700ms forwards;
+}
+
+.raccoon-run.is-enter .raccoon-run__puff {
+    animation: raccoon-run-puff 300ms ease-out 180ms 3;
+}
+
+/* Возврат: енот бежит обратно, мордочка влево. */
+.raccoon-run.is-exit .raccoon-run__pet {
+    animation: raccoon-run-back 680ms var(--ease) forwards;
+}
+
+.raccoon-run.is-exit .raccoon-run__caption {
+    animation: raccoon-run-caption 260ms var(--ease) 60ms forwards;
+}
+
+@keyframes raccoon-run-strip {
+    0% {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-10px);
+    }
+    12% {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+    84% {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+    100% {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-6px);
+    }
+}
+
+/* Шаги с подпрыгом: добегает до стопки книг. */
+@keyframes raccoon-run-to-books {
+    0% {
+        transform: translate(0, 0);
+    }
+    18% {
+        transform: translate(calc(var(--raccoon-run-dist) * 0.18), -8px);
+    }
+    36% {
+        transform: translate(calc(var(--raccoon-run-dist) * 0.36), 0);
+    }
+    54% {
+        transform: translate(calc(var(--raccoon-run-dist) * 0.54), -8px);
+    }
+    72% {
+        transform: translate(calc(var(--raccoon-run-dist) * 0.72), 0);
+    }
+    88% {
+        transform: translate(calc(var(--raccoon-run-dist) * 0.88), -6px);
+    }
+    100% {
+        transform: translate(var(--raccoon-run-dist), 0);
+    }
+}
+
+@keyframes raccoon-run-back {
+    0% {
+        transform: translate(var(--raccoon-run-dist), 0) scaleX(-1);
+    }
+    100% {
+        transform: translate(0, 0) scaleX(-1);
+    }
+}
+
+@keyframes raccoon-run-books-pop {
+    0% {
+        opacity: 0;
+        transform: scale(0.6);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes raccoon-run-caption {
+    0% {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes raccoon-run-puff {
+    0% {
+        opacity: 0.9;
+        transform: translate(0, 0) scale(0.4);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(-26px, -6px) scale(1.4);
+    }
+}
+
+@media (max-width: 960px) {
+    /* Бокового меню нет — полоска centred по всему окну. */
+    .raccoon-run {
+        left: 50%;
+    }
+}
+
+@media (max-width: 560px) {
+    .raccoon-run {
+        --raccoon-run-dist: 104px;
+        height: 68px;
+    }
+
+    .raccoon-run__caption {
+        top: 8px;
+        right: 16px;
+        bottom: auto;
+        left: 16px;
+        font-size: var(--fs-12);
+    }
+}
+
 @media (max-width: 1180px) {
     .raccoon-scene {
         max-width: 460px;

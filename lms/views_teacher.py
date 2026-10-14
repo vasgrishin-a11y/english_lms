@@ -2179,7 +2179,10 @@ def _render_topic_board(request, pk, edit_errors=None):
         "lms/teacher_topic_board.html",
         {
             "topic": topic,
-            "block": topic.block,
+            # Класс лежит в course_block, а не в block: внутри {% block content %}
+            # Django подменяет контекстную переменную block объектом блока шаблона
+            # (BlockNode), и {{ block.name }} превращался в «content».
+            "course_block": topic.block,
             "topic_audience": topic_audience,
             "assignments": assignments_filtered,
             "all_assignments": assignments,

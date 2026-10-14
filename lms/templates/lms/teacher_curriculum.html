@@ -1,5 +1,5 @@
 {% extends "lms/base.html" %}
-{% load lms_tags %}
+{% load static lms_tags %}
 
 {% block title %}Классы — English LMS{% endblock %}
 {% block workspace_class %}workspace-wide{% endblock %}
@@ -11,8 +11,12 @@
     <div>
         <h1 class="classes-title">Классы</h1>
         <p class="tiny muted" style="margin-top:4px">Учебные классы, структура глав, тем и заданий</p>
+        {# Режим одного класса: подсказка с именем выбранного класса вместо всех карточек. #}
+        <p class="tiny muted" role="status" data-class-focus-note hidden style="margin-top:4px">Показан только класс «<strong data-class-focus-name></strong>» — остальные классы скрыты</p>
     </div>
     <div class="classes-toolbar">
+        {# Выход из режима одного класса: снова все классы. Скрыта, пока режим не включён. #}
+        <button type="button" class="btn btn-secondary btn-sm" data-class-focus-exit hidden>{% icon "arrow-left" "icon icon-sm" %}Все классы</button>
         <a class="btn btn-secondary btn-sm" href="{% url 'teacher_curriculum_export' %}" title="{% t 'Выгрузить все материалы на компьютер' %}">{% icon "download" %}{% t "Выгрузить всё" %}</a>
         <a class="btn btn-secondary btn-sm" href="{% url 'teacher_curriculum_backup' %}" title="{% t 'Загрузить материалы из бэкапа' %}">{% icon "upload" %}{% t "Загрузить" %}</a>
         <a class="btn btn-secondary btn-sm" href="{% url 'teacher_library' %}">{% icon "database" %}{% t "Библиотека" %}</a>
@@ -28,6 +32,15 @@
     <a class="btn btn-ghost btn-sm" href="{% url 'teacher_curriculum' %}">{% icon "x" "icon icon-sm" %}{% t "Сбросить фильтр" %}</a>
 </div>
 {% endif %}
+
+{# Переход в режим одного класса и обратно: енот бежит к стопке книг.
+   Те же спрайты и пастель, что в сцене шапки, но один короткий забег. #}
+<div class="raccoon-run" data-raccoon-run hidden aria-hidden="true">
+    <span class="raccoon-run__puff" aria-hidden="true"></span>
+    <img class="raccoon-run__pet" src="{% static 'lms/img/raccoon-face.svg' %}" alt="" width="34" height="34">
+    <img class="raccoon-run__books" src="{% static 'lms/img/raccoon-books.svg' %}" alt="" width="30" height="30">
+    <span class="raccoon-run__caption" data-raccoon-run-caption></span>
+</div>
 
 <div class="filter-pills" style="margin-bottom:24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
     <div class="row row-tight" style="gap:8px;flex-wrap:wrap">
@@ -48,19 +61,17 @@
 </div>
 
 {% if blocks_data %}
-    <div class="class-grid" style="margin-bottom:36px">
+    {# Плитка-строка: обложка-полоска, название и счётчики в одну-две строки. #}
+    <div class="class-grid is-compact" style="margin-bottom:24px">
         {% for block_item in blocks_data %}
             {% with block=block_item.block %}
-            <a class="class-card" href="#block-{{ block.pk }}">
+            <a class="class-card" href="#block-{{ block.pk }}" data-class-card="{{ block.pk }}">
                 {% include "lms/parts/cover.html" with course=block %}
                 <div class="class-body">
                     <h2 class="class-title">{{ block.name }} {% include "lms/parts/publication_indicator.html" with state=block_item.publication_state %}</h2>
                     <div class="class-meta">
                         <span>{% if block.cefr_level %}{{ block.cefr_level }} · {% endif %}Класс</span>
-                    </div>
-                    <div class="class-foot">
-                        <span>{% icon "layers" "icon icon-sm" %}{{ block_item.assignments }}</span>
-                        <span class="tiny muted">{{ block_item.chapters|length }} {{ block_item.chapters|length|pluralize_ru:"глава,главы,глав" }} · {{ block_item.topics|length }} {{ block_item.topics|length|pluralize_ru:"тема,темы,тем" }}</span>
+                        <span>{{ block_item.chapters|length }} {{ block_item.chapters|length|pluralize_ru:"глава,главы,глав" }} · {{ block_item.topics|length }} {{ block_item.topics|length|pluralize_ru:"тема,темы,тем" }} · {{ block_item.assignments }} {{ block_item.assignments|pluralize_ru:"задание,задания,заданий" }}</span>
                     </div>
                 </div>
             </a>

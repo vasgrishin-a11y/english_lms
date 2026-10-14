@@ -8,7 +8,7 @@
 <nav aria-label="Хлебные крошки">
     <ol class="crumbs">
         <li><a href="{% url 'teacher_curriculum' %}">Классы</a></li>
-        <li><span class="sep">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_curriculum' %}#block-{{ block.pk }}">{{ block.name }}</a></li>
+        <li><span class="sep">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_curriculum' %}#block-{{ course_block.pk }}">{{ course_block.name }}</a></li>
         <li><span class="sep">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_curriculum' %}#chapter-{{ topic.chapter_id }}">{{ topic.chapter.title }}</a></li>
         <li><span class="sep">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">{{ topic.title }}</span></li>
     </ol>
@@ -24,9 +24,9 @@
         <section class="topic-tools__section" aria-labelledby="topic-tools-topic-title">
             <p class="rail-title" id="topic-tools-topic-title">Тема</p>
             <p class="small strong mb-0">{{ topic.title }}</p>
-            <p class="tiny muted mb-0">{{ block.name }}{% if block.cefr_level %} · {{ block.cefr_level }}{% endif %}</p>
+            <p class="tiny muted mb-0">{{ course_block.name }}{% if course_block.cefr_level %} · {{ course_block.cefr_level }}{% endif %}</p>
             <p class="tiny muted">{{ all_assignments|length }} {{ all_assignments|length|pluralize_ru:"задание,задания,заданий" }}</p>
-            <a class="btn btn-ghost btn-sm" href="{% url 'teacher_curriculum' %}#block-{{ block.pk }}">{% icon "arrow-left" %}Назад к Классам</a>
+            <a class="btn btn-ghost btn-sm" href="{% url 'teacher_curriculum' %}#block-{{ course_block.pk }}">{% icon "arrow-left" %}Назад к Классам</a>
         </section>
 
         <section class="topic-tools__section" aria-labelledby="topic-tools-skills-title">
