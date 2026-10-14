@@ -195,7 +195,7 @@ Dependabot настроен для pip, npm, Docker и GitHub Actions. Базо�
 
 **Dockerfile называется `Dockerfile`, без `.txt`:** обычный `docker build -t english-lms .` работает без `-f`.
 
-См. [DEPLOYMENT.md](docs/DEPLOYMENT.md): HTTPS, secrets, volumes, миграция, bootstrap, резервирование, restore и rollback. Перед переходом с исходной версии обязательны согласованный backup БД + media и `audit_legacy_data`. Миграция не занижает некорректные оценки автоматически и не может восстановить ответы, уже перезаписанные старой версией.
+См. [DEPLOYMENT.md](docs/DEPLOYMENT.md): HTTPS, secrets, volumes, автодеплой из GitHub по webhook и разбор его ошибок, миграция, bootstrap, резервирование, restore и rollback. Перед переходом с исходной версии обязательны согласованный backup БД + media и `audit_legacy_data`. Миграция не занижает некорректные оценки автоматически и не может восстановить ответы, уже перезаписанные старой версией.
 
 [Исходный аудит](docs/audit/2026-09-19.md) описывает коммит до исправлений. [Реестр исправлений](docs/REMEDIATION.md) сопоставляет замечания с изменениями и оставшимися инфраструктурными действиями.
 
