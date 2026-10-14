@@ -1,4 +1,3 @@
-```gitignore
 # Python cache
 __pycache__/
 *.pyc
@@ -35,6 +34,7 @@ Thumbs.db
 .coverage
 htmlcov/
 coverage/
+coverage.xml
 
 # Скриншоты упавших браузерных проверок (артефакт CI)
 test-results/
@@ -46,7 +46,7 @@ build/
 
 # Собранная статика Django (collectstatic) — артефакт сборки, не коммитим.
 staticfiles/
-```node_modules/
+node_modules/
 
 # Local dev DB created for live preview
 dev.sqlite3
