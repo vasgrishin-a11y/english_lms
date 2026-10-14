@@ -91,11 +91,11 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
 
         Режим одного класса включается кликом по карточке и выключается
         кнопкой «Все классы»; перезагрузка страницы возвращает все классы.
+        Второй класс создаётся в setUp теста: внутри sync_playwright()
+        обращения к ORM недоступны.
         """
         from playwright.sync_api import expect
 
-        # В тесте один класс — добавляем второй, иначе режим не проверить.
-        Block.objects.create(name="Second block", slug="second")
         page.goto(self.live_server_url + "/teacher/curriculum/")
         board = page.locator("[data-curriculum-board]")
         cards = page.locator(".class-card[data-class-card]")
@@ -132,6 +132,12 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
         page.reload()
         expect(page.locator("body[data-class-focus]")).to_have_count(0)
         expect(sections).to_have_count(2)
+
+        # Узкий экран: компактная плитка не даёт горизонтальной прокрутки.
+        page.set_viewport_size({"width": 320, "height": 800})
+        overflow = page.evaluate("document.documentElement.scrollWidth > innerWidth")
+        self.assertFalse(overflow, "curriculum-320")
+        page.set_viewport_size({"width": 1280, "height": 900})
 
     def check_dropzone(self, page):
         """Файл, выбранный в скрытом поле, показывается в дропзоне с размером."""
@@ -327,6 +333,9 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
         assignment = Assignment.objects.create(
             topic=topic, title="Browser assignment", description="Write a sentence."
         )
+        # Второй класс — для проверки режима одного класса: создаём до браузера,
+        # внутри sync_playwright() ORM недоступен (SynchronousOnlyOperation).
+        Block.objects.create(name="Second block", slug="second")
         axe_path = Path(__file__).resolve().parents[2] / "node_modules/axe-core/axe.min.js"
         self.assertTrue(axe_path.is_file(), "Run npm ci to install axe-core")
         with sync_playwright() as playwright:
