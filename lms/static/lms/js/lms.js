@@ -2895,7 +2895,7 @@
       );
     }
 
-    // Короткий забег енота: та же пастель и спрайты, что в сцене шапки.
+    // Неторопливый забег енота (~3,6 с): та же пастель и спрайты, что в сцене шапки.
     function playStrip(direction, text) {
       if (!strip || reducedMotion()) return;
       strip.classList.remove("is-enter", "is-exit");
@@ -2907,7 +2907,7 @@
       stripTimer = window.setTimeout(function () {
         strip.classList.remove("is-enter", "is-exit");
         strip.hidden = true;
-      }, 1250);
+      }, 3700);
     }
 
     function cardOf(pk) {
