@@ -2870,6 +2870,134 @@
     applyLevel(board, DEFAULT_LEVEL);
   }
 
+  /* ── Классы: режим одного класса ─────────────────────────────
+   * Клик по карточке класса оставляет в разделе только его: чужие карточки
+   * и секции карты скрываются, выбранный класс получает подсветку, под
+   * шапкой пробегает енот к стопке книг. Возврат — кнопкой «Все классы»,
+   * Esc или повторным кликом по той же карточке. Состояние живёт в памяти
+   * вкладки: перезагрузка страницы снова показывает все классы.
+   */
+  function classFocus() {
+    var body = document.body;
+    var board = document.querySelector("[data-curriculum-board]");
+    var grid = document.querySelector(".class-grid");
+    if (!board || !grid) return;
+    var exitButton = document.querySelector("[data-class-focus-exit]");
+    var note = document.querySelector("[data-class-focus-note]");
+    var nameSlot = document.querySelector("[data-class-focus-name]");
+    var strip = document.querySelector("[data-raccoon-run]");
+    var caption = document.querySelector("[data-raccoon-run-caption]");
+    var stripTimer = null;
+
+    function reducedMotion() {
+      return !!(
+        window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      );
+    }
+
+    // Короткий забег енота: та же пастель и спрайты, что в сцене шапки.
+    function playStrip(direction, text) {
+      if (!strip || reducedMotion()) return;
+      strip.classList.remove("is-enter", "is-exit");
+      strip.hidden = false;
+      if (caption) caption.textContent = text || "";
+      void strip.offsetWidth; // перезапуск анимации с начала
+      strip.classList.add(direction === "exit" ? "is-exit" : "is-enter");
+      window.clearTimeout(stripTimer);
+      stripTimer = window.setTimeout(function () {
+        strip.classList.remove("is-enter", "is-exit");
+        strip.hidden = true;
+      }, 1250);
+    }
+
+    function cardOf(pk) {
+      return grid.querySelector('.class-card[data-class-card="' + pk + '"]');
+    }
+
+    function sectionOf(pk) {
+      return board.querySelector('[data-block-drop][data-block-id="' + pk + '"]');
+    }
+
+    // Имя класса без служебных подписей: индикатор публикации читает скринридер,
+    // но в тексте подсказки и подписи енота ему не место.
+    function titleOf(card) {
+      var title = card.querySelector(".class-title");
+      if (!title) return "";
+      var clone = title.cloneNode(true);
+      Array.prototype.forEach.call(
+        clone.querySelectorAll(".sr-only, .publication-indicator"),
+        function (node) {
+          if (node.parentNode) node.parentNode.removeChild(node);
+        }
+      );
+      return clone.textContent.trim();
+    }
+
+    // Свёрнутый класс раскрываем: иначе в режиме класса виден только заголовок.
+    function revealSection(section) {
+      var group = section.querySelector('[data-curriculum-group="chapters"]');
+      if (!group || !group.hasAttribute("hidden")) return;
+      var toggle = section.querySelector('[data-collapse-toggle][aria-controls="' + group.id + '"]');
+      if (toggle) toggle.click();
+    }
+
+    function focusClass(pk) {
+      var card = cardOf(pk);
+      var section = sectionOf(pk);
+      if (!card || !section) return;
+      var title = titleOf(card);
+      body.setAttribute("data-class-focus", pk);
+      card.classList.add("is-focused");
+      card.setAttribute("aria-current", "true");
+      section.classList.add("is-focused");
+      if (exitButton) exitButton.hidden = false;
+      if (note) note.hidden = false;
+      if (nameSlot) nameSlot.textContent = title;
+      revealSection(section);
+      playStrip("enter", "Открываем класс «" + title + "»");
+      if (exitButton) exitButton.focus({ preventScroll: true });
+      if (section.scrollIntoView) {
+        section.scrollIntoView({
+          behavior: reducedMotion() ? "auto" : "smooth",
+          block: "start"
+        });
+      }
+    }
+
+    function blurClass() {
+      var card = grid.querySelector(".class-card.is-focused");
+      var section = board.querySelector("[data-block-drop].is-focused");
+      if (card) {
+        card.classList.remove("is-focused");
+        card.removeAttribute("aria-current");
+      }
+      if (section) section.classList.remove("is-focused");
+      body.removeAttribute("data-class-focus");
+      if (exitButton) exitButton.hidden = true;
+      if (note) note.hidden = true;
+      // Кнопка «Все классы» исчезает — фокус возвращаем на карточку класса.
+      if (card && (document.activeElement === exitButton || document.activeElement === null)) {
+        card.focus({ preventScroll: true });
+      }
+      playStrip("exit", "Возвращаем все классы");
+    }
+
+    grid.addEventListener("click", function (event) {
+      var card = event.target.closest ? event.target.closest(".class-card[data-class-card]") : null;
+      if (!card) return;
+      var pk = card.getAttribute("data-class-card");
+      event.preventDefault(); // прыжок по #block-N заменяет сам режим класса
+      if (body.getAttribute("data-class-focus") === pk) blurClass();
+      else focusClass(pk);
+    });
+
+    if (exitButton) exitButton.addEventListener("click", blurClass);
+
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape" && body.getAttribute("data-class-focus")) blurClass();
+    });
+  }
+
   function curriculumBoard() {
     var boardEl = document.querySelector("[data-curriculum-board]");
     if (!boardEl) return;
@@ -3457,6 +3585,7 @@
     descriptionEditors();
     curriculumCollapse();
     curriculumBoard();
+    classFocus();
     studentAssignmentPreview();
   });
 })();

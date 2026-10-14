@@ -2080,17 +2080,47 @@ table .grade-col {
 }
 
 /* ── Доска заданий по теме: панели и свернутый список ────── */
+/* «Панель темы» свёрнута в тонкую полоску-пилюлю с акцентной подсветкой:
+   полоска видна всегда, панель раскрывается одним кликом. Подсветка
+   мягко дышит, пока панель закрыта, и гаснет, когда её открыли. */
 .topic-tools {
     padding: 0;
     overflow: hidden;
+    border-color: var(--accent-200);
+    border-radius: var(--r-pill);
+    background: var(--accent-soft);
+    box-shadow: 0 0 0 3px var(--accent-50), var(--shadow-1);
+}
+
+.topic-tools:not([open]) {
+    animation: topic-tools-glow 2.6s ease-in-out infinite;
+}
+
+.topic-tools[open] {
+    border-radius: var(--r-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-1);
+    animation: none;
+}
+
+@keyframes topic-tools-glow {
+    0%,
+    100% {
+        border-color: var(--accent-200);
+        box-shadow: 0 0 0 3px var(--accent-50), var(--shadow-1);
+    }
+    50% {
+        border-color: var(--accent-300);
+        box-shadow: 0 0 0 5px var(--accent-100), var(--shadow-1);
+    }
 }
 
 .topic-tools__summary {
     display: flex;
     align-items: center;
     gap: var(--sp-3);
-    min-height: 52px;
-    padding: var(--sp-3) var(--sp-5);
+    min-height: 40px;
+    padding: var(--sp-2) var(--sp-5);
     list-style: none;
     cursor: pointer;
     color: var(--text);
@@ -2615,6 +2645,77 @@ table .grade-col {
     width: 28px;
     height: 28px;
     color: var(--turquoise-ink);
+}
+
+/* Плитка классов на странице «Классы»: обложка сжимается до тонкой полоски,
+   название и счётчики уходят в одну-две строки — карточки вдвое плотнее.
+   Модификатор только для этой страницы: на «Консоли», в библиотеке, на входе
+   и у ученика карточки остаются высокими. */
+.class-grid.is-compact {
+    gap: var(--sp-4);
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 232px), 1fr));
+}
+
+.class-grid.is-compact .class-cover {
+    aspect-ratio: auto;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-3) var(--sp-4);
+}
+
+.class-grid.is-compact .cover-scene {
+    flex: 0 0 auto;
+    font-size: 1.5rem;
+    transform: none;
+}
+
+.class-grid.is-compact .cover-plate {
+    position: static;
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: var(--sp-1) var(--sp-3);
+    background: rgba(255, 255, 255, 0.72);
+    box-shadow: none;
+}
+
+/* Имя класса живёт в теле карточки: на обложке оно дублировало бы заголовок. */
+.class-grid.is-compact .cover-name {
+    display: none;
+}
+
+.class-grid.is-compact .class-body {
+    gap: var(--sp-2);
+    padding: var(--sp-3) var(--sp-4);
+}
+
+.class-grid.is-compact .class-title {
+    font-size: var(--fs-14);
+    -webkit-line-clamp: 1;
+}
+
+.class-grid.is-compact .class-meta {
+    gap: var(--sp-2);
+    font-size: var(--fs-11);
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+/* Уровень класса не сжимается, счётчики режутся многоточием. */
+.class-grid.is-compact .class-meta > span {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.class-grid.is-compact .class-meta > span:first-child {
+    flex: 0 0 auto;
+}
+
+.class-grid.is-compact .class-card.is-create {
+    min-height: 132px;
 }
 
 /* ── Урок: секции с шагами занятия ───────────────────────── */
@@ -4500,6 +4601,24 @@ a.audience-badge:hover {
 [data-curriculum-group][hidden],
 [data-block-footer][hidden] {
     display: none !important;
+}
+
+/* ── Режим одного класса ─────────────────────────────────────
+   Клик по карточке класса оставляет в разделе только его: чужие
+   карточки и секции карты исчезают, выбранный получает подсветку.
+   Включает и выключает lms.js (кнопка «Все классы», Esc, повторный
+   клик по карточке); состояние живёт в памяти вкладки. */
+body[data-class-focus] .class-grid > .class-card:not(.is-focused) {
+    display: none;
+}
+
+body[data-class-focus] [data-curriculum-board] > [data-block-drop]:not(.is-focused) {
+    display: none;
+}
+
+body[data-class-focus] .class-card.is-focused {
+    border-color: var(--accent-400);
+    box-shadow: var(--ring), var(--shadow-2);
 }
 
 .curriculum-depth {

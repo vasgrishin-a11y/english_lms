@@ -86,6 +86,53 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
         ).click()
         expect(chapters).to_be_hidden()
 
+    def check_class_focus_mode(self, page):
+        """Клик по карточке класса оставляет в разделе только его.
+
+        Режим одного класса включается кликом по карточке и выключается
+        кнопкой «Все классы»; перезагрузка страницы возвращает все классы.
+        """
+        from playwright.sync_api import expect
+
+        # В тесте один класс — добавляем второй, иначе режим не проверить.
+        Block.objects.create(name="Second block", slug="second")
+        page.goto(self.live_server_url + "/teacher/curriculum/")
+        board = page.locator("[data-curriculum-board]")
+        cards = page.locator(".class-card[data-class-card]")
+        sections = board.locator("[data-block-drop]")
+        expect(cards).to_have_count(2)
+        expect(sections).to_have_count(2)
+
+        cards.nth(1).click()
+        expect(page.locator("body[data-class-focus]")).to_have_count(1)
+        expect(page.locator(".class-card.is-focused")).to_have_count(1)
+        expect(cards.nth(1)).to_be_visible()
+        expect(cards.nth(0)).to_be_hidden()
+        expect(sections.nth(0)).to_be_hidden()
+        expect(sections.nth(1)).to_be_visible()
+        expect(page.get_by_role("button", name="Все классы", exact=True)).to_be_visible()
+        expect(page.locator("[data-class-focus-note]")).to_contain_text("Second block")
+        expect(page.locator("[data-raccoon-run-caption]")).to_contain_text("класс")
+
+        # Кнопка «Все классы» возвращает общий режим.
+        page.get_by_role("button", name="Все классы", exact=True).click()
+        expect(page.locator("body[data-class-focus]")).to_have_count(0)
+        expect(cards.nth(0)).to_be_visible()
+        expect(sections.nth(0)).to_be_visible()
+
+        # Повторный клик по той же карточке тоже выходит из режима.
+        cards.nth(1).click()
+        expect(page.locator("body[data-class-focus]")).to_have_count(1)
+        cards.nth(1).click()
+        expect(page.locator("body[data-class-focus]")).to_have_count(0)
+
+        # Перезагрузка открывает все классы: режим живёт только в памяти вкладки.
+        cards.nth(0).click()
+        expect(page.locator("body[data-class-focus]")).to_have_count(1)
+        page.reload()
+        expect(page.locator("body[data-class-focus]")).to_have_count(0)
+        expect(sections).to_have_count(2)
+
     def check_dropzone(self, page):
         """Файл, выбранный в скрытом поле, показывается в дропзоне с размером."""
         from playwright.sync_api import expect
@@ -381,6 +428,7 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
                 check_page("curriculum")
                 self.check_cascade_delete_panel(page)
                 self.check_curriculum_depth(page)
+                self.check_class_focus_mode(page)
                 page.goto(self.live_server_url + "/teacher/analytics/")
                 check_page("analytics")
                 expect(page.get_by_role("link", name="Выгрузить XLSX", exact=False)).to_be_visible()
