@@ -113,6 +113,79 @@ class AudienceVisibilityTests(LMSCase):
         self.assertContains(self.student_client.get("/assignments/"), "Past tense")
         self.assertNotContains(other_client.get("/my/"), "Past tense")
 
+    def test_teacher_student_card_hides_class_of_another_group(self):
+        """В карточке ученика класс, назначенный другой группе, не показывается."""
+        self.block.groups.add(self.group_a)
+        other_block = Block.objects.create(name="Business English", slug="business")
+        other_block.groups.add(self.group_b)
+        other_topic = Topic.objects.create(block=other_block, title="Meetings", slug="meetings")
+        Assignment.objects.create(
+            topic=other_topic, title="Email to client", description="x", max_points=10
+        )
+
+        card = self.teacher_client.get(f"/teacher/students/{self.student.pk}/")
+        self.assertContains(card, "Past tense")
+        self.assertNotContains(card, "Business English")
+        self.assertNotContains(card, "Meetings")
+        self.assertEqual(card.context["totals"]["blocks"], 1)
+        self.assertEqual(card.context["totals"]["assignments"], 1)
+
+        other_card = self.teacher_client.get(f"/teacher/students/{self.other.pk}/")
+        self.assertContains(other_card, "Email to client")
+        self.assertNotContains(other_card, "Past tense")
+        self.assertEqual(other_card.context["totals"]["blocks"], 1)
+
+    def test_teacher_student_card_hides_chapter_excluded_for_student(self):
+        """Внутри доступного класса исключённая глава в карточке ученика не видна."""
+        self.block.groups.add(self.group_a)
+        other_chapter = Chapter.objects.create(
+            block=self.block, title="Чужая глава", slug="other-chapter"
+        )
+        other_chapter.excluded_groups.add(self.group_a)
+        other_topic = Topic.objects.create(
+            block=self.block, chapter=other_chapter, title="Letters", slug="letters"
+        )
+        Assignment.objects.create(
+            topic=other_topic, title="Letter to friend", description="x", max_points=10
+        )
+
+        card = self.teacher_client.get(f"/teacher/students/{self.student.pk}/")
+        self.assertContains(card, "Past tense")
+        self.assertNotContains(card, "Чужая глава")
+        self.assertNotContains(card, "Letter to friend")
+        self.assertNotContains(card, "Letters")
+        [block_item] = card.context["blocks_data"]
+        self.assertEqual([item["chapter"].title for item in block_item["chapters"]], ["Общее"])
+
+    def test_teacher_student_card_explains_empty_course_and_no_assignments(self):
+        """Пустая карточка различает «в курсе нет классов» и «нет назначений»."""
+        self.block.groups.add(self.group_b)
+        card = self.teacher_client.get(f"/teacher/students/{self.student.pk}/")
+        self.assertContains(card, "не назначено ни одного класса")
+        self.assertEqual(card.context["totals"]["assignments"], 0)
+        self.assertEqual(card.context["blocks_data"], [])
+
+        Block.objects.update(is_active=False)
+        empty = self.teacher_client.get(f"/teacher/students/{self.student.pk}/")
+        self.assertContains(empty, "В курсе пока нет классов.")
+
+    def test_teacher_student_card_and_student_map_show_same_classes(self):
+        """Карточка ученика и его карта курса перечисляют одни и те же классы."""
+        self.block.groups.add(self.group_a)
+        other_block = Block.objects.create(name="Business English", slug="business")
+        other_block.groups.add(self.group_b)
+        other_topic = Topic.objects.create(block=other_block, title="Meetings", slug="meetings")
+        Assignment.objects.create(
+            topic=other_topic, title="Email to client", description="x", max_points=10
+        )
+
+        card = self.teacher_client.get(f"/teacher/students/{self.student.pk}/")
+        course_map = self.student_client.get("/assignments/")
+        card_blocks = [item["block"].name for item in card.context["blocks_data"]]
+        map_blocks = [item["block"].name for item in course_map.context["blocks_data"]]
+        self.assertEqual(card_blocks, map_blocks)
+        self.assertEqual(card_blocks, [self.block.name])
+
     def test_effective_and_label(self):
         self.block.groups.add(self.group_a)
         self.topic.students.add(self.outsider)

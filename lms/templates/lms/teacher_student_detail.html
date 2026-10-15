@@ -177,7 +177,11 @@
                     </div>
                 {% endwith %}
             {% empty %}
-                <p class="muted small mb-0">В курсе пока нет классов.</p>
+                {% if course_has_blocks %}
+                    <p class="muted small mb-0">Ученику пока не назначено ни одного класса: классы курса принадлежат другим группам. Проверьте назначения в карте курса.</p>
+                {% else %}
+                    <p class="muted small mb-0">В курсе пока нет классов.</p>
+                {% endif %}
             {% endfor %}
         </section>
 
