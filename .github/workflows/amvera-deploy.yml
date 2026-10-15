@@ -1,0 +1,67 @@
+name: Deploy Amvera
+
+# Запасной канал деплоя: при каждом push в main отправляет состояние main
+# в выделенный Git Amvera (HEAD:master), не завися от вебхука Amvera.
+#
+# Зачем: вебхук Amvera — хрупкое место. При пересоздании связки/проекта
+# Payload URL в GitHub устаревает, доставки отвечают 404, сборка не
+# стартует, а merge в main это не блокирует (см. docs/DEPLOYMENT.md,
+# раздел «Автодеплой из GitHub (webhook Amvera)»). Этот workflow даёт
+# независимый путь: сайт обновляется при изменении main даже с мёртвым
+# вебхуком.
+#
+# Секреты репозитория (Settings -> Secrets and variables -> Actions):
+#   AMVERA_GIT_SSH_URL       — SSH-адрес проекта из вкладки «Репозиторий»,
+#                              напр. git@git.mia0.amvera.ru:user/project
+#   AMVERA_SSH_PRIVATE_KEY   — приватный ключ; публичный добавлен в
+#                              личном кабинете Amvera (Профиль -> SSH-ключи)
+#
+# Без обоих секретов шаг печатает уведомление и завершается успехом, так
+# что workflow можно держать в main до настройки. Если вебхук починен и
+# канал больше не нужен, отключите workflow во вкладке Actions — иначе
+# каждый push будет собирать проект дважды.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: amvera-deploy-${{ github.ref }}
+  # Не отменять: пусть каждый push доходит до Amvera своим чередом.
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Push main to Amvera Git
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          # Полная история: force-push в зеркало Amvera не должен оставлять
+          # shallow-репозиторий.
+          fetch-depth: 0
+      - name: Push HEAD to Amvera master
+        env:
+          AMVERA_GIT_SSH_URL: ${{ secrets.AMVERA_GIT_SSH_URL }}
+          AMVERA_SSH_PRIVATE_KEY: ${{ secrets.AMVERA_SSH_PRIVATE_KEY }}
+        run: |
+          if [ -z "$AMVERA_GIT_SSH_URL" ] || [ -z "$AMVERA_SSH_PRIVATE_KEY" ]; then
+            echo "::notice::Секреты AMVERA_GIT_SSH_URL и AMVERA_SSH_PRIVATE_KEY не заданы — деплой в Amvera пропущен (см. docs/DEPLOYMENT.md)."
+            exit 0
+          fi
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' "$AMVERA_SSH_PRIVATE_KEY" > "$HOME/.ssh/amvera_deploy_key"
+          chmod 600 "$HOME/.ssh/amvera_deploy_key"
+          host="${AMVERA_GIT_SSH_URL#*@}"
+          host="${host%%:*}"
+          ssh-keyscan -t ed25519,rsa "$host" >> "$HOME/.ssh/known_hosts" 2>/dev/null
+          # --force: репозиторий Amvera — зеркало развёртывания, источником
+          # правды остаётся GitHub; webhook-пулл Amvera ходит merge'ом
+          # (strategy theirs) и уводит master в сторону.
+          GIT_SSH_COMMAND="ssh -i $HOME/.ssh/amvera_deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
+            git push --force "$AMVERA_GIT_SSH_URL" "HEAD:master"

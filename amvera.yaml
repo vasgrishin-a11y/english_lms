@@ -1,0 +1,68 @@
+# Развёртывание в Amvera Cloud.
+# Схема: https://docs.amvera.ru/applications/configuration/docker.html
+#        https://docs.amvera.ru/applications/configuration/config-file.html
+#
+# ИМЯ ФАЙЛА. Платформа ищет конфигурацию в корне репозитория как amvera.yaml
+# (amvera.yml тоже допускается, но именно amvera.yaml указан в сценарии
+# запуска docs.amvera.ru/applications/run.html). Не держите оба имени сразу.
+#
+# ПОЧЕМУ ЭТОТ ФАЙЛ НУЖЕН. Без него Amvera находит корневой Dockerfile, но
+# подставляет значения по умолчанию, которые не совпадают с приложением:
+#   * containerPort по умолчанию 80, а gunicorn слушает ${PORT:-8000}.
+#     Трафик уходил на порт, где никто не слушает; сейчас это работает
+#     только потому, что Amvera читает EXPOSE 8000 из Dockerfile.
+#   * persistenceMount по умолчанию /data — и это значение оставлено
+#     намеренно (см. ниже).
+#
+# ПОЧЕМУ persistenceMount: /data. Amvera монтирует постоянное хранилище
+# «Data» в run.persistenceMount (по умолчанию /data) и создаёт каталог на
+# этапе развёртывания. Образ запускается под UID 10001 и не может создать
+# каталог в корне ФС: при несовпадении путей контейнер падает петлёй
+# «mkdir: cannot create directory '/data': Permission denied». Поэтому путь
+# здесь совпадает со значением по умолчанию платформы, Dockerfile создаёт
+# /data заранее (владелец lms) и выставляет DJANGO_MEDIA_ROOT=/data — файлы
+# заданий и работ учеников переживают пересборку и замену инстанса даже
+# если этот конфиг по какой-то причине не будет применён. Файлы из прежнего
+# каталога /app/var/media читаются как fallback (core/settings.py,
+# LMS_MEDIA_FALLBACK_ROOTS).
+#
+# СЕКРЕТЫ ЗДЕСЬ НЕ ХРАНЯТСЯ. Задайте переменные окружения в интерфейсе Amvera
+# (раздел «Конфигурация»/«Переменные окружения» приложения), минимум:
+#   DJANGO_SECRET_KEY         — secrets.token_urlsafe(64), >= 50 символов
+#   DJANGO_ALLOWED_HOSTS      — публичный домен без wildcard, напр. lms.example.ru
+#   DJANGO_CSRF_TRUSTED_ORIGINS — https://<тот же домен>
+#   DATABASE_URL              — внешний PostgreSQL, пароль URL-encoded,
+#                               sslmode=require/verify-full по требованию провайдера
+#   DJANGO_TRUST_PROXY_SSL_HEADER — True, если ingress перезаписывает
+#                               X-Forwarded-Proto; см. docs/DEPLOYMENT.md
+# DJANGO_MEDIA_ROOT в интерфейсе НЕ задавайте: значение по умолчанию в
+# образе (/data) уже совпадает с постоянным хранилищем.
+#
+# Первый запуск: DJANGO_RUN_MIGRATIONS=true (одна реплока) и
+# DJANGO_CREATE_SUPERUSER=true с DJANGO_SUPERUSER_USERNAME/PASSWORD. После
+# bootstrap удалите DJANGO_SUPERUSER_PASSWORD. Миграции в production должен
+# запускать один release job, а не каждая реплока.
+
+meta:
+  environment: docker
+  toolchain:
+    name: docker
+
+build:
+  # Без build.dockerfile платформа ищет Dockerfile сама в фиксированном
+  # порядке; указываем явно, чтобы при переименовании сборка не молчала.
+  dockerfile: Dockerfile
+
+run:
+  # Должно совпадать с портом из docker-entrypoint.sh (--bind 0.0.0.0:${PORT}).
+  # Amvera выставляет переменную PORT равной этому значению.
+  containerPort: 8000
+
+  # Постоянное приватное хранилище. Значение — дефолт платформы, каталог
+  # создаётся в Dockerfile под UID 10001; DJANGO_MEDIA_ROOT в образе равен
+  # тому же пути.
+  persistenceMount: /data
+
+# run.command / run.args намеренно не заданы: CMD в Dockerfile уже запускает
+# ./docker-entrypoint.sh, который проверяет media-каталог, миграции и
+# поднимает gunicorn. Переопределение command заменило бы этот шаг.
