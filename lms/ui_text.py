@@ -69,6 +69,8 @@ TEXTS_EN = {
     "Вернуться к курсу": "Back to course",
     "Вернуться ко входу": "Back to sign in",
     "Вернуться назад": "Go back",
+    "Вернуться к карточке ученика": "Back to the student card",
+    "Вернуться в очередь проверки": "Back to the review queue",
     # Действия.
     "Создать блок": "Create block",
     "Новый блок": "New block",

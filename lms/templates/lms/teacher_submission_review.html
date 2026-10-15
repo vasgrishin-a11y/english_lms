@@ -25,8 +25,8 @@
         </span>
     </span>
     <span class="row row-tight">
-        {% if back_url %}<a class="btn btn-secondary btn-sm" href="{{ back_url }}" title="Вернуться к карточке ученика">{% icon "arrow-left" %}{% t "Назад" %}</a>{% endif %}
-        <a class="btn btn-return btn-sm" href="{% url 'teacher_review_queue' %}{% querystring back=None %}">{% icon "arrow-left" %}{% t "Вернуться назад" %}</a>
+        {# Одна кнопка «Назад»: адрес возврата — карточка ученика (раздел «Ученики») или очередь проверки, откуда пришли. #}
+        <a class="btn {% if back.to_queue %}btn-return{% else %}btn-secondary{% endif %} btn-sm" href="{{ back.url }}" title="{% t back.title %}">{% icon "arrow-left" %}{% t "Назад" %}</a>
     </span>
 </div>
 

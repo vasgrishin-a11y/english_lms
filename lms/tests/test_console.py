@@ -474,6 +474,13 @@ class ReviewDetailTests(LMSCase):
 class ReviewBackButtonTests(LMSCase):
     """«Разбор» из карточки ученика: кнопка «Назад» возвращает к дереву прогресса."""
 
+    def review_nav(self, page):
+        """Верхняя панель разбора: в ней живёт единственная кнопка «Назад»."""
+        html = page.content.decode()
+        start = html.find('<div class="review-nav"')
+        end = html.find('<div class="split">', start)
+        return html[start:end] if start != -1 and end != -1 else ""
+
     def test_review_links_from_student_card_carry_back_marker(self):
         attempt = self.submit()
         page = self.teacher_client.get(f"/teacher/students/{self.student.pk}/")
@@ -493,6 +500,20 @@ class ReviewBackButtonTests(LMSCase):
             f'href="/teacher/students/{self.student.pk}/#progress-assignment-{self.assignment.pk}"',
         )
 
+    def test_review_from_student_card_has_single_back_button(self):
+        """Из «Учеников» в разбор ведёт одна кнопка «Назад» — обратно к ученику."""
+        attempt = self.submit()
+        page = self.teacher_client.get(
+            reverse("teacher_submission_review", args=[attempt.pk]) + "?back=student"
+        )
+        nav = self.review_nav(page)
+        self.assertEqual(nav.count(">Назад<"), 1)
+        self.assertNotContains(page, "Вернуться назад")
+        self.assertIn(
+            f'href="/teacher/students/{self.student.pk}/#progress-assignment-{self.assignment.pk}"',
+            nav,
+        )
+
     def test_review_opened_from_queue_keeps_only_queue_button(self):
         attempt = self.submit()
         second_task = Assignment.objects.create(
@@ -500,8 +521,10 @@ class ReviewBackButtonTests(LMSCase):
         )
         self.submit(assignment_id=second_task.pk)
         page = self.teacher_client.get(reverse("teacher_submission_review", args=[attempt.pk]))
+        nav = self.review_nav(page)
+        self.assertEqual(nav.count(">Назад<"), 1)
         self.assertNotContains(page, "Вернуться к карточке ученика")
-        self.assertContains(page, "Вернуться назад")
+        self.assertContains(page, "Вернуться в очередь проверки")
         self.assertContains(page, "btn-return")
         self.assertNotContains(page, "К очереди")
         self.assertNotContains(page, "data-nav-prev")
@@ -509,7 +532,7 @@ class ReviewBackButtonTests(LMSCase):
         self.assertNotContains(page, 'class="position"')
 
     def test_queue_links_drop_the_back_marker(self):
-        """«Вернуться назад» возвращает в очередь без метки: «Назад» не должен вести в чужую карточку."""
+        """Возврат в очередь не должен нести метку: «Назад» не ведёт в чужую карточку."""
         attempt = self.submit()
         page = self.teacher_client.get(
             reverse("teacher_submission_review", args=[attempt.pk]) + "?back=student&status=checked"
