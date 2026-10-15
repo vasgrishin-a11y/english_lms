@@ -3,7 +3,12 @@ set -eu
 umask 077
 
 # A private, persistent volume must be mounted here; see docs/DEPLOYMENT.md.
+# Amvera mounts its Data volume at /data (run.persistenceMount); the Dockerfile
+# pre-creates the directory for UID 10001, so this is a no-op there.
 mkdir -p "${DJANGO_MEDIA_ROOT:?DJANGO_MEDIA_ROOT must be set}"
+if [ ! -w "${DJANGO_MEDIA_ROOT}" ]; then
+  echo "docker-entrypoint.sh: WARNING: ${DJANGO_MEDIA_ROOT} is not writable for uid $(id -u); private uploads will fail" >&2
+fi
 
 if [ "${DJANGO_RUN_MIGRATIONS:-false}" = "true" ]; then
   python manage.py migrate --noinput
