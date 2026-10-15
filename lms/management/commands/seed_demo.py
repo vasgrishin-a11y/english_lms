@@ -197,8 +197,10 @@ class Command(BaseCommand):
         ]
         skills = {}
         for order, (name, kind) in enumerate(wanted, start=1):
+            # slug = kind, как в каталоге lms.skills: slugify() кириллицы даёт пустую
+            # строку, и все шесть навыков слипались в один «Грамматика».
             skill, _ = Skill.objects.get_or_create(
-                slug=slugify(name), defaults={"name": name, "kind": kind, "order": order}
+                slug=kind, defaults={"name": name, "kind": kind, "order": order}
             )
             skills[kind] = skill
         return skills

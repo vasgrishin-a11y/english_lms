@@ -1474,8 +1474,8 @@ class StudentProgressTreeTests(LMSCase):
         self.assertNotContains(page, "Правильный ответ:")
 
 
-class StudentSkillSummaryTests(LMSCase):
-    """Сводный анализ по навыкам: методика среднего % по работам."""
+class SkillPanelHelpers:
+    """Помощники тестов панели «Навыки» в карточке ученика."""
 
     def detail(self):
         return self.teacher_client.get(f"/teacher/students/{self.student.pk}/")
@@ -1510,6 +1510,10 @@ class StudentSkillSummaryTests(LMSCase):
 
     def skills_by_name(self, response):
         return {skill["name"]: skill for skill in response.context["skills"]}
+
+
+class StudentSkillSummaryTests(SkillPanelHelpers, LMSCase):
+    """Сводный анализ по навыкам: методика среднего % по работам."""
 
     def test_percent_is_mean_of_works_not_points(self):
         skill = Skill.objects.create(name="Grammar", slug="grammar")
@@ -1604,6 +1608,193 @@ class StudentSkillSummaryTests(LMSCase):
         cards.skills.set([skill])
         skills = self.skills_by_name(self.detail())
         self.assertEqual(skills["Reading"]["total"], 1)
+
+
+class StudentSkillWorksTests(SkillPanelHelpers, LMSCase):
+    """Навык раскрывается списком заданий, из которых складывается его оценка.
+
+    Задание из списка открывается так же, как из дерева прогресса в
+    «Учениках» (сданное — «Разбором», несданное — предпросмотром глазами
+    ученика), а «Назад» возвращает к той же строке раскрытого навыка.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.skill = Skill.objects.create(name="Grammar", slug="grammar")
+        self.card = reverse("teacher_student_detail", args=[self.student.pk])
+
+    def works(self, response, name="Grammar"):
+        return self.skills_by_name(response)[name]["assignments"]
+
+    def skill_row(self, assignment):
+        return f"{self.card}#skill-{self.skill.pk}-assignment-{assignment.pk}"
+
+    def panel(self, response):
+        """HTML раскрывающихся навыков: от первого навыка до конца карточки."""
+        html = response.content.decode()
+        start = html.find('<details class="skill-row"')
+        end = html.find("</section>", start)
+        self.assertNotEqual(start, -1)
+        return html[start:end]
+
+    def test_lists_every_assignment_of_the_skill_in_course_order(self):
+        # Создаём не по порядку: список идёт по курсу, а не по id.
+        missing = self.make_assignment("Missing", 100, order=13)
+        pending = self.make_assignment("Pending", 100, order=12)
+        graded = self.make_assignment("Graded", 10, order=11)
+        for assignment in (missing, pending, graded):
+            assignment.skills.set([self.skill])
+        self.submit_and_review(graded, 7)
+        submit_assignment(
+            student=self.student,
+            assignment_id=pending.pk,
+            expected_version=0,
+            text_answer="waiting",
+        )
+        page = self.detail()
+        row = self.skills_by_name(page)["Grammar"]
+        works = row["assignments"]
+        self.assertEqual([work["assignment"] for work in works], [graded, pending, missing])
+        self.assertEqual([work["state"] for work in works], ["graded", "pending", "missing"])
+        self.assertEqual(
+            (works[0]["grade"], works[0]["max_points"], works[0]["percent"]), (7, 10, 70)
+        )
+        self.assertEqual(works[1]["status"], Submission.Status.SUBMITTED)
+        self.assertIsNone(works[1]["grade"])
+        self.assertIsNone(works[2]["attempt_id"])
+        # Список и сводка считаются по одним и тем же работам.
+        self.assertEqual(
+            (row["percent"], row["graded"], row["pending"], row["total"]), (70, 1, 1, 3)
+        )
+        chapter = Chapter.objects.get(pk=self.topic.chapter_id)
+        self.assertEqual(works[0]["topic"], "Grammar")
+        self.assertEqual(works[0]["path"], f"English · {chapter.title} · Grammar")
+        panel = self.panel(page)
+        self.assertIn("7<small>/10</small>", panel)
+        self.assertIn('<span class="tiny muted tnum">70%</span>', panel)
+        self.assertIn('<span class="tiny muted">ждёт оценки</span>', panel)
+        self.assertIn('<span class="badge badge-outline">Не сдано</span>', panel)
+
+    def test_list_skips_trainers_materials_and_other_students_work(self):
+        self.assignment.skills.set([self.skill])
+        cards = self.card_assignment(topic=self.topic, title="Слова")
+        material = Assignment.objects.create(
+            topic=self.topic,
+            title="Урок",
+            description="x",
+            assignment_type=Assignment.Type.MATERIAL,
+            max_points=0,
+        )
+        hidden = self.make_assignment("Чужое", 100, order=20)
+        hidden.assigned_students.add(self.other)
+        for assignment in (cards, material, hidden):
+            assignment.skills.set([self.skill])
+        page = self.detail()
+        self.assertEqual([work["assignment"] for work in self.works(page)], [self.assignment])
+        self.assertNotContains(page, f"-assignment-{hidden.pk}")
+
+    def test_same_named_skills_share_one_row_and_one_vote(self):
+        twin = Skill.objects.create(name="Grammar", slug="grammar-2")
+        self.assignment.skills.set([self.skill, twin])
+        self.review(self.submit(), grade=60)
+        rows = [row for row in self.detail().context["skills"] if row["name"] == "Grammar"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["key"], min(self.skill.pk, twin.pk))
+        self.assertEqual((rows[0]["percent"], rows[0]["graded"], rows[0]["total"]), (60, 1, 1))
+        self.assertEqual([work["assignment"] for work in rows[0]["assignments"]], [self.assignment])
+
+    def test_links_open_assignments_like_the_progress_tree(self):
+        graded = self.make_assignment("Graded", 100, order=11)
+        missing = self.make_assignment("Missing", 100, order=12)
+        graded.skills.set([self.skill])
+        missing.skills.set([self.skill])
+        attempt = self.submit_and_review(graded, 90)
+        page = self.detail()
+        panel = self.panel(page)
+        key = self.skill.pk
+        self.assertIn(f'id="skill-{key}" data-skill-row', panel)
+        self.assertIn(f'id="skill-{key}-assignment-{graded.pk}"', panel)
+        self.assertIn(f'id="skill-{key}-assignment-{missing.pk}"', panel)
+        review = reverse("teacher_submission_review", args=[attempt.pk])
+        # Тот же «Разбор», что и у кнопки в дереве прогресса, — только с меткой навыка.
+        self.assertContains(page, f'href="{review}?back=student"')
+        self.assertIn(f'href="{review}?back=skill-{key}"', panel)
+        preview = reverse("teacher_student_assignment_preview", args=[self.student.pk, missing.pk])
+        self.assertIn(f'href="{preview}?back=skill-{key}"', panel)
+
+    def test_review_back_returns_to_the_skill_row(self):
+        self.assignment.skills.set([self.skill])
+        attempt = self.submit()
+        page = self.teacher_client.get(
+            reverse("teacher_submission_review", args=[attempt.pk]),
+            {"back": f"skill-{self.skill.pk}"},
+        )
+        self.assertContains(page, "Вернуться к карточке ученика")
+        self.assertContains(page, f'href="{self.skill_row(self.assignment)}"')
+        self.assertNotContains(page, "Вернуться в очередь проверки")
+
+    def test_malformed_skill_marker_falls_back_to_the_queue(self):
+        attempt = self.submit()
+        url = reverse("teacher_submission_review", args=[attempt.pk])
+        for marker in ("skill-", "skill-abc", "skill-1x", "skill-12345678901", "skill-1#top"):
+            with self.subTest(marker=marker):
+                page = self.teacher_client.get(url, {"back": marker})
+                self.assertContains(page, "Вернуться в очередь проверки")
+                self.assertNotContains(page, "#skill-")
+
+    def test_queue_links_drop_the_skill_marker(self):
+        attempt = self.submit()
+        page = self.teacher_client.get(
+            reverse("teacher_submission_review", args=[attempt.pk]),
+            {"back": f"skill-{self.skill.pk}", "status": "checked"},
+        )
+        self.assertContains(page, 'href="/teacher/review/?status=checked"')
+        self.assertNotContains(page, "/teacher/review/?back=skill")
+
+    def test_save_keeps_the_skill_marker(self):
+        attempt = self.submit()
+        response = self.teacher_client.post(
+            reverse("teacher_submission_review", args=[attempt.pk])
+            + f"?back=skill-{self.skill.pk}",
+            {
+                "expected_version": attempt.version,
+                "expected_review_revision": attempt.review_revision,
+                "grade": 80,
+                "comment": "Review",
+                "decision": "checked",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(f"back=skill-{self.skill.pk}", response.url)
+
+    def test_student_preview_returns_to_the_skill_row(self):
+        url = reverse(
+            "teacher_student_assignment_preview", args=[self.student.pk, self.assignment.pk]
+        )
+        page = self.teacher_client.get(url, {"back": f"skill-{self.skill.pk}"})
+        self.assertContains(page, f'href="{self.skill_row(self.assignment)}"')
+        page = self.teacher_client.get(url, {"back": "student"})
+        self.assertContains(page, f'href="{self.card}#progress-assignment-{self.assignment.pk}"')
+        for query in ({}, {"back": "skill-abc"}, {"back": "queue"}):
+            with self.subTest(query=query):
+                page = self.teacher_client.get(url, query)
+                self.assertContains(page, f'href="{self.card}"')
+                self.assertNotContains(page, f"{self.card}#")
+
+    def test_lists_cost_no_extra_queries(self):
+        """Списки строятся из тех же двух запросов, что и проценты, — без N+1."""
+        from lms.curriculum import course_tree
+        from lms.views_teacher import _skill_summary
+
+        writing = Skill.objects.create(name="Writing", slug="writing")
+        for order in range(11, 16):
+            assignment = self.make_assignment(f"Task {order}", 100, order=order)
+            assignment.skills.set([self.skill, writing])
+            self.submit_and_review(assignment, 50 + order)
+        blocks_data, _ = course_tree(student=self.student)
+        with self.assertNumQueries(2):
+            skills, _ = _skill_summary(self.student, blocks_data)
+        self.assertEqual([len(row["assignments"]) for row in skills], [5, 5])
 
 
 class AnalyticsTests(LMSCase):

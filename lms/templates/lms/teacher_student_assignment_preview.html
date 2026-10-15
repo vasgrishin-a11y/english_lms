@@ -19,7 +19,7 @@
         <p class="page-note mb-0">Ученик: <strong>{{ student|display_name }}</strong> @{{ student.username }} · Задание: {{ assignment.title }}</p>
     </div>
     <div class="row">
-        <a class="btn btn-secondary btn-sm" href="{% url 'teacher_student_detail' student.pk %}">{% icon "arrow-left" %} К ученику</a>
+        <a class="btn btn-secondary btn-sm" href="{{ back_url }}">{% icon "arrow-left" %} К ученику</a>
         <form method="post" action="{% url 'teacher_impersonate_start' student.pk %}" data-confirm="Открыть English LMS глазами ученика «{{ student|display_name }}»? Вернуться можно кнопкой в верхнем баннере.">
             {% csrf_token %}<button class="btn btn-primary btn-sm" type="submit">{% icon "eye" %} Открыть как ученик</button>
         </form>

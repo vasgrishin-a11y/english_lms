@@ -11,6 +11,7 @@
 
 import json
 import logging
+import re
 from datetime import date
 
 from django.conf import settings
@@ -647,18 +648,38 @@ def _review_redirect(request, pk):
     return redirect(f"{url}?{query}" if query else url)
 
 
+#: Метка возврата к списку заданий навыка в карточке ученика: ``?back=skill-<ключ навыка>``.
+SKILL_BACK_RE = re.compile(r"skill-(\d{1,10})")
+
+
+def _student_card_anchor(back, assignment_id):
+    """Якорь в карточке ученика по метке ``back`` или None, если метки нет.
+
+    ``student`` — строка задания в дереве прогресса, ``skill-<ключ>`` — то же
+    задание в раскрытом списке навыка (панель «Навыки»). Посторонние значения
+    игнорируются: в адрес попадают только цифры из метки.
+    """
+    if back == "student":
+        return f"progress-assignment-{assignment_id}"
+    match = SKILL_BACK_RE.fullmatch(back or "")
+    if match:
+        return f"skill-{match.group(1)}-assignment-{assignment_id}"
+    return None
+
+
 def _review_back(request, submission):
     """Кнопка «Назад» в разборе: единственный адрес возврата — туда, откуда пришли.
 
-    Карточка ученика помечает свои ссылки ``?back=student`` — тогда «Назад»
-    ведёт в раздел «Ученики», к карточке выбранного ученика (якорь раскрывает
-    путь к строке этого задания в дереве прогресса). Без метки возвращаем в
+    Карточка ученика помечает свои ссылки ``?back=student`` (дерево прогресса)
+    или ``?back=skill-<ключ>`` (список заданий навыка) — тогда «Назад» ведёт
+    в раздел «Ученики», к карточке выбранного ученика: якорь раскрывает путь к
+    строке этого задания в дереве или список навыка. Без метки возвращаем в
     очередь проверки с её фильтрами: метка ``back`` в очередь не попадает.
     """
-    if request.GET.get("back") == "student":
+    anchor = _student_card_anchor(request.GET.get("back"), submission.assignment_id)
+    if anchor:
         return {
-            "url": reverse("teacher_student_detail", args=[submission.student_id])
-            + f"#progress-assignment-{submission.assignment_id}",
+            "url": reverse("teacher_student_detail", args=[submission.student_id]) + f"#{anchor}",
             "title": "Вернуться к карточке ученика",
             "to_queue": False,
         }
@@ -2791,8 +2812,45 @@ SKILL_BANDS = (
 )
 
 
+def _skill_work(assignment, topic, path, attempt):
+    """Строка раскрывающегося списка навыка: задание и последняя попытка ученика.
+
+    ``state``: ``graded`` — есть оценка, работа входит в % навыка своим
+    ``score`` (точный %, ``percent`` — он же округлённым); ``pending`` —
+    сдано, но оценки нет (очередь проверки, свободная часть теста или
+    попытка без баллов), в % не входит; ``missing`` — не сдано.
+    ``topic`` — название темы под заданием, ``path`` — полный путь
+    «класс · глава · тема» для подсказки. ``attempt`` — строка
+    ``values()`` последней попытки или None.
+    """
+    work = {
+        "assignment": assignment,
+        "topic": topic,
+        "path": path,
+        "state": "missing",
+        "attempt_id": None,
+        "status": None,
+        "grade": None,
+        "max_points": assignment.max_points,
+        "score": None,
+        "percent": None,
+    }
+    if attempt is None:
+        return work
+    grade = attempt["feedback__grade"]
+    maximum = attempt["max_points_snapshot"]
+    work.update(attempt_id=attempt["pk"], status=attempt["status"], grade=grade, max_points=maximum)
+    if grade is None or not maximum:
+        work["state"] = "pending"
+        return work
+    work["state"] = "graded"
+    work["score"] = 100 * grade / maximum
+    work["percent"] = int(round(work["score"]))
+    return work
+
+
 def _skill_summary(student, blocks_data):
-    """Сводный анализ по навыкам: % освоения, охват и очередь проверки.
+    """Сводный анализ по навыкам: % освоения, охват, очередь проверки и задания.
 
     Единица измерения — последнее сданное задание, видимое ученику
     (тренажёр и материалы без сдачи исключены). Каждое оценённое задание
@@ -2800,58 +2858,76 @@ def _skill_summary(student, blocks_data):
     навыка — среднее по голосам, каждая работа весит одинаково, иначе
     одна большая работа перекроет всю картину. Сданное без оценки
     (очередь проверки, свободная часть теста) в % не входит и
-    показывается отдельно. Два запроса: навыки заданий и последние
-    попытки ученика.
+    показывается отдельно.
+
+    У каждого навыка — список ``assignments``: все его задания в порядке
+    курса (см. ``_skill_work``), из них и складывается оценка. ``key`` —
+    меньший id среди одноимённых навыков (сводка идёт по названию): по
+    нему ссылки списка помечают возврат ``?back=skill-<key>``. Два
+    запроса: навыки заданий и последние попытки ученика.
     """
-    visible_ids = [
-        entry["assignment"].pk
+    entries = [
+        (
+            entry["assignment"],
+            topic_item["topic"].title,
+            " · ".join(
+                (block_item["block"].name, chapter_item["chapter"].title, topic_item["topic"].title)
+            ),
+        )
         for block_item in blocks_data
         for chapter_item in block_item["chapters"]
         for topic_item in chapter_item["topics"]
         for entry in topic_item["assignments"]
         if entry["assignment"].assignment_type not in Assignment.NO_SUBMISSION_TYPES
     ]
+    visible_ids = [entry[0].pk for entry in entries]
     skill_names = {}
+    skill_keys = {}
     through = Assignment.skills.through
     for link in through.objects.filter(assignment_id__in=visible_ids).select_related("skill"):
-        skill_names.setdefault(link.assignment_id, []).append(link.skill.name)
-    buckets = {}
-    for assignment_id in visible_ids:
-        for name in skill_names.get(assignment_id, []):
-            bucket = buckets.setdefault(
-                name, {"total": 0, "graded": 0, "percent_sum": 0, "pending": 0}
-            )
-            bucket["total"] += 1
-    rows = (
-        Submission.objects.filter(student=student, assignment_id__in=visible_ids)
+        name = link.skill.name
+        names = skill_names.setdefault(link.assignment_id, [])
+        # Два одноимённых навыка у задания — всё равно один голос, а не два.
+        if name not in names:
+            names.append(name)
+        skill_keys[name] = min(skill_keys.get(name, link.skill_id), link.skill_id)
+    attempts = {
+        row["assignment_id"]: row
+        for row in Submission.objects.filter(student=student, assignment_id__in=visible_ids)
         .latest_attempts()
-        .values("assignment_id", "feedback__grade", "max_points_snapshot")
-    )
-    for row in rows:
-        names = skill_names.get(row["assignment_id"], [])
+        .values("pk", "assignment_id", "status", "feedback__grade", "max_points_snapshot")
+    }
+    buckets = {}
+    for assignment, topic, path in entries:
+        names = skill_names.get(assignment.pk)
         if not names:
             continue
-        grade = row["feedback__grade"]
-        maximum = row["max_points_snapshot"]
+        work = _skill_work(assignment, topic, path, attempts.get(assignment.pk))
         for name in names:
-            bucket = buckets[name]
-            if grade is None or not maximum:
-                bucket["pending"] += 1
-            else:
+            bucket = buckets.setdefault(
+                name, {"total": 0, "graded": 0, "percent_sum": 0, "pending": 0, "works": []}
+            )
+            bucket["total"] += 1
+            bucket["works"].append(work)
+            if work["state"] == "graded":
                 bucket["graded"] += 1
-                bucket["percent_sum"] += 100 * grade / maximum
+                bucket["percent_sum"] += work["score"]
+            elif work["state"] == "pending":
+                bucket["pending"] += 1
     skills = []
     for name, bucket in buckets.items():
         if not bucket["graded"]:
             skills.append(
                 {
                     "name": name,
+                    "key": skill_keys[name],
                     "percent": None,
                     "verdict": "Нет оценок",
                     "bar_class": "progress-sand",
                     "graded": 0,
                     "total": bucket["total"],
                     "pending": bucket["pending"],
+                    "assignments": bucket["works"],
                 }
             )
             continue
@@ -2862,12 +2938,14 @@ def _skill_summary(student, blocks_data):
         skills.append(
             {
                 "name": name,
+                "key": skill_keys[name],
                 "percent": percent,
                 "verdict": verdict,
                 "bar_class": bar_class,
                 "graded": bucket["graded"],
                 "total": bucket["total"],
                 "pending": bucket["pending"],
+                "assignments": bucket["works"],
             }
         )
     skills.sort(key=lambda item: (item["percent"] is None, item["percent"] or 0))
@@ -3000,6 +3078,9 @@ def student_assignment_preview(request, student_pk, assignment_pk):
     - полный — отдельная страница teacher_student_assignment_preview.html
     - фрагмент — если запрос HTMX (hx-get из карточки ученика), отдаём только
       содержимое lms/parts/student_assignment_preview_content.html для inline-раскрытия.
+
+    Метка ``back`` (как у разбора) ведёт кнопку «К ученику» к месту, откуда
+    пришли: например, к несданному заданию в списке навыка.
     """
     from .curriculum import visible_assignments
 
@@ -3016,6 +3097,8 @@ def student_assignment_preview(request, student_pk, assignment_pk):
     attachments = list(assignment.attachments.order_by("order", "pk"))
     cards = list(assignment.cards.order_by("order", "pk")) if assignment.is_flashcards else []
 
+    back_url = reverse("teacher_student_detail", args=[student.pk])
+    anchor = _student_card_anchor(request.GET.get("back"), assignment.pk)
     context = {
         "student": student,
         "assignment": assignment,
@@ -3023,6 +3106,7 @@ def student_assignment_preview(request, student_pk, assignment_pk):
         "attachments": attachments,
         "cards": cards,
         "is_visible": is_visible,
+        "back_url": f"{back_url}#{anchor}" if anchor else back_url,
         "workspace": "students",
     }
 

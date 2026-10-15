@@ -7,7 +7,7 @@ from unittest import skipUnless
 from django.contrib.auth import get_user_model
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 
-from lms.models import Assignment, Block, Profile, Submission, Topic
+from lms.models import Assignment, Block, Profile, Skill, Submission, Topic
 
 
 @skipUnless(
@@ -83,6 +83,30 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
             re.compile(rf"/teacher/students/{student.pk}/#progress-assignment-{assignment.pk}")
         )
         expect(page.locator(f"#progress-assignment-{assignment.pk}")).to_be_visible()
+
+    def check_skill_works(self, page, student, assignment):
+        """Навык в карточке ученика раскрывается списком заданий, из которых складывается оценка.
+
+        Задание из списка открывает тот же «Разбор», что и дерево прогресса,
+        а «Назад» возвращает к раскрытому навыку и строке этого задания.
+        """
+        from playwright.sync_api import expect
+
+        page.goto(self.live_server_url + f"/teacher/students/{student.pk}/")
+        skill = page.locator("[data-skill-row]").first
+        works = skill.locator(".skill-works")
+        expect(works).to_be_hidden()
+        skill.locator("summary").click()
+        expect(works).to_be_visible()
+        works.get_by_role("link", name=assignment.title, exact=True).click()
+        page.wait_for_url(re.compile(r"/teacher/review/\d+/\?back=skill-\d+$"))
+        page.get_by_role("link", name="Назад", exact=True).click()
+        page.wait_for_url(
+            re.compile(rf"/teacher/students/{student.pk}/#skill-\d+-assignment-{assignment.pk}$")
+        )
+        row = page.locator(f".skill-work[id$='-assignment-{assignment.pk}']")
+        expect(row).to_be_visible()
+        expect(row).to_be_in_viewport()
 
     def check_curriculum_depth(self, page):
         """Карта курса: по умолчанию классы и главы, темы — общей кнопкой или кликом по главе."""
@@ -357,6 +381,7 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
         assignment = Assignment.objects.create(
             topic=topic, title="Browser assignment", description="Write a sentence."
         )
+        assignment.skills.set([Skill.objects.create(name="Browser skill", slug="browser-skill")])
         # Второй класс — для проверки режима одного класса: создаём до браузера,
         # внутри sync_playwright() ORM недоступен (SynchronousOnlyOperation).
         Block.objects.create(name="Second block", slug="second")
@@ -458,6 +483,8 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
                 check_page("queue")
                 self.check_student_assignment_preview(page, student, assignment)
                 self.check_review_back_to_student(page, student, assignment)
+                self.check_skill_works(page, student, assignment)
+                check_page("student-card")
                 page.goto(self.live_server_url + "/teacher/curriculum/")
                 check_page("curriculum")
                 self.check_cascade_delete_panel(page)
