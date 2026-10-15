@@ -15,8 +15,6 @@
 </nav>
 
 <div class="review-nav" data-review
-     data-next="{% if nav.next %}{% url 'teacher_submission_review' nav.next %}{% querystring %}{% endif %}"
-     data-prev="{% if nav.prev %}{% url 'teacher_submission_review' nav.prev %}{% querystring %}{% endif %}"
      data-hotkeys="{{ ui_hotkeys|yesno:'1,0' }}"
      data-max-points="{{ submission.max_points_snapshot }}">
     <span class="row row-tight">
@@ -28,10 +26,7 @@
     </span>
     <span class="row row-tight">
         {% if back_url %}<a class="btn btn-secondary btn-sm" href="{{ back_url }}" title="Вернуться к карточке ученика">{% icon "arrow-left" %}{% t "Назад" %}</a>{% endif %}
-        {% if nav.prev %}<a class="btn btn-secondary btn-sm" href="{% url 'teacher_submission_review' nav.prev %}{% querystring %}" data-nav-prev>{% icon "chevron-left" %}K</a>{% endif %}
-        <span class="position">{% if nav.position %}{{ nav.position }}{% else %}—{% endif %}</span>
-        {% if nav.next %}<a class="btn btn-secondary btn-sm" href="{% url 'teacher_submission_review' nav.next %}{% querystring %}" data-nav-next>J {% icon "chevron-right" %}</a>{% endif %}
-        <a class="btn btn-ghost btn-sm" href="{% url 'teacher_review_queue' %}{% querystring back=None %}">{% icon "list" %}{% t "К очереди" %}</a>
+        <a class="btn btn-return btn-sm" href="{% url 'teacher_review_queue' %}{% querystring back=None %}">{% icon "arrow-left" %}{% t "Вернуться назад" %}</a>
     </span>
 </div>
 

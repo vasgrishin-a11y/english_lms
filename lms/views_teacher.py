@@ -395,16 +395,20 @@ def _queue_columns(sort, direction):
 
 
 def checked_tree(submissions):
-    """«Проверенные» как дерево курса: класс → глава → тема → задание → работы.
+    """«Проверенные» по ученикам: ученик → класс → глава → тема → работы.
 
-    Вместо плоской таблицы вперемешку — структура «Классы → Главы → Темы →
-    Задания», как в разделе «Классы»: по умолчанию открыты классы и главы,
-    списки проверенных работ преподаватель раскрывает сам. Ветви без проверенных
-    работ в дерево не попадают, порядок — постоянный порядок курса плюс
-    алфавит внутри задания. Собирается из уже отфильтрованной выборки за один
-    запрос, счётчики считаются по пути.
+    Верхняя иерархия — ученик, внутри него структура курса «Классы → Главы →
+    Темы → Задания»: по умолчанию открыты ученики и их классы, остальные уровни
+    преподаватель раскрывает сам. Ветви без проверенных работ в дерево не
+    попадают, порядок — алфавит учеников плюс постоянный порядок курса.
+    Собирается из уже отфильтрованной выборки за один запрос, счётчики
+    считаются по пути.
     """
     rows = submissions.order_by(
+        "student__last_name",
+        "student__first_name",
+        "student__username",
+        "student_id",
         "assignment__topic__block__order",
         "assignment__topic__block__name",
         "assignment__topic__chapter__order",
@@ -413,40 +417,41 @@ def checked_tree(submissions):
         "assignment__topic__title",
         "assignment__order",
         "assignment__title",
-        "student__last_name",
-        "student__first_name",
-        "student__username",
         "pk",
     )
     tree = []
-    blocks, chapters, topics, assignments = {}, {}, {}, {}
+    students, blocks, chapters, topics = {}, {}, {}, {}
     for work in rows:
+        student = work.student
         assignment = work.assignment
         topic = assignment.topic
         chapter = topic.chapter
         block = topic.block
-        block_node = blocks.get(block.pk)
+        student_node = students.get(student.pk)
+        if student_node is None:
+            student_node = {"student": student, "blocks": [], "checked": 0}
+            students[student.pk] = student_node
+            tree.append(student_node)
+        block_key = (student.pk, block.pk)
+        block_node = blocks.get(block_key)
         if block_node is None:
             block_node = {"block": block, "chapters": [], "checked": 0}
-            blocks[block.pk] = block_node
-            tree.append(block_node)
-        chapter_node = chapters.get(chapter.pk)
+            blocks[block_key] = block_node
+            student_node["blocks"].append(block_node)
+        chapter_key = (student.pk, chapter.pk)
+        chapter_node = chapters.get(chapter_key)
         if chapter_node is None:
             chapter_node = {"chapter": chapter, "topics": [], "checked": 0}
-            chapters[chapter.pk] = chapter_node
+            chapters[chapter_key] = chapter_node
             block_node["chapters"].append(chapter_node)
-        topic_node = topics.get(topic.pk)
+        topic_key = (student.pk, topic.pk)
+        topic_node = topics.get(topic_key)
         if topic_node is None:
-            topic_node = {"topic": topic, "assignments": [], "checked": 0}
-            topics[topic.pk] = topic_node
+            topic_node = {"topic": topic, "works": [], "checked": 0}
+            topics[topic_key] = topic_node
             chapter_node["topics"].append(topic_node)
-        assignment_node = assignments.get(assignment.pk)
-        if assignment_node is None:
-            assignment_node = {"assignment": assignment, "works": [], "checked": 0}
-            assignments[assignment.pk] = assignment_node
-            topic_node["assignments"].append(assignment_node)
-        assignment_node["works"].append(work)
-        for node in (block_node, chapter_node, topic_node, assignment_node):
+        topic_node["works"].append(work)
+        for node in (student_node, block_node, chapter_node, topic_node):
             node["checked"] += 1
     return tree
 
