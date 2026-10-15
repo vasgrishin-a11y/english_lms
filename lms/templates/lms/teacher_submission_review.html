@@ -7,7 +7,7 @@
 {% block content %}
 <nav aria-label="Хлебные крошки">
     <ol class="crumbs">
-        <li><a href="{% url 'teacher_review_queue' %}{% querystring %}">{% t "Проверка" %}</a></li>
+        <li><a href="{% url 'teacher_review_queue' %}{% querystring back=None %}">{% t "Проверка" %}</a></li>
         <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><a href="{% url 'teacher_student_detail' submission.student_id %}">{{ submission.student.get_full_name|default:submission.student.username }}</a></li>
         <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span>{{ submission.assignment.topic.title }}</span></li>
         <li><span class="sep" aria-hidden="true">{% icon "chevron-right" "icon icon-sm" %}</span><span aria-current="page">Попытка {{ submission.version }}</span></li>
@@ -27,10 +27,11 @@
         </span>
     </span>
     <span class="row row-tight">
+        {% if back_url %}<a class="btn btn-secondary btn-sm" href="{{ back_url }}" title="Вернуться к карточке ученика">{% icon "arrow-left" %}{% t "Назад" %}</a>{% endif %}
         {% if nav.prev %}<a class="btn btn-secondary btn-sm" href="{% url 'teacher_submission_review' nav.prev %}{% querystring %}" data-nav-prev>{% icon "chevron-left" %}K</a>{% endif %}
         <span class="position">{% if nav.position %}{{ nav.position }}{% else %}—{% endif %}</span>
         {% if nav.next %}<a class="btn btn-secondary btn-sm" href="{% url 'teacher_submission_review' nav.next %}{% querystring %}" data-nav-next>J {% icon "chevron-right" %}</a>{% endif %}
-        <a class="btn btn-ghost btn-sm" href="{% url 'teacher_review_queue' %}{% querystring %}">{% icon "list" %}{% t "К очереди" %}</a>
+        <a class="btn btn-ghost btn-sm" href="{% url 'teacher_review_queue' %}{% querystring back=None %}">{% icon "list" %}{% t "К очереди" %}</a>
     </span>
 </div>
 
@@ -257,7 +258,7 @@
                 <a class="btn btn-secondary btn-sm btn-block" href="{% url 'teacher_student_detail' submission.student_id %}">{% icon "user" %}{% t "Карточка ученика" %}</a>
             </div>
             <div class="row" style="margin-top:8px">
-                <a class="btn btn-ghost btn-sm btn-block" href="{% url 'teacher_review_queue' %}{% querystring assignment=submission.assignment_id %}">{% icon "filter" %}{% t "Работы этого задания" %}</a>
+                <a class="btn btn-ghost btn-sm btn-block" href="{% url 'teacher_review_queue' %}{% querystring assignment=submission.assignment_id back=None %}">{% icon "filter" %}{% t "Работы этого задания" %}</a>
             </div>
         </section>
     </div>
