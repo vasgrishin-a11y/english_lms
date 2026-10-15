@@ -231,18 +231,13 @@ def student_home(request):
 
 
 def _student_course_map(student, query=""):
-    """Полное дерево видимых заданий со счётчиками прогресса по каждой ветке."""
-    blocks_data, _tree_totals = course_tree(student=student, query=query)
-    blocks_data = [block for block in blocks_data if block["assignments"]]
-    for block in blocks_data:
-        chapters = []
-        for chapter in block["chapters"]:
-            chapter["topics"] = [topic for topic in chapter["topics"] if topic["assignments"]]
-            if chapter["topics"]:
-                chapters.append(chapter)
-        block["chapters"] = chapters
-        block["topics"] = [topic for chapter in chapters for topic in chapter["topics"]]
+    """Полное дерево видимых заданий со счётчиками прогресса по каждой ветке.
 
+    Ветки без доступных заданий отсекает ``course_tree`` (``prune_empty``):
+    классы, назначенные другим группам, ученик не видит ни здесь, ни в его
+    карточке у преподавателя.
+    """
+    blocks_data, _tree_totals = course_tree(student=student, query=query)
     assignments = []
     for block in blocks_data:
         for chapter in block["chapters"]:

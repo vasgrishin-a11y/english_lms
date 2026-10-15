@@ -259,6 +259,32 @@ def _topic_entry(topic, assignments, *, stats, student_view, query, parent_audie
     }
 
 
+def prune_empty(blocks_data):
+    """Убрать ветки, в которых ученику нечего делать.
+
+    Класс, глава или тема без доступного ученику задания — это не «нулевой
+    прогресс», а материал, которого у ученика нет: аудитория отсекает задания,
+    но сама структура курса остаётся полной. Карточка ученика у преподавателя
+    и карта курса самого ученика должны показывать один набор классов, поэтому
+    такие ветки выкидываем. Карта курса преподавателя (`teacher_view`) полная.
+    """
+    result = []
+    for block_item in blocks_data:
+        chapters = []
+        for chapter_item in block_item["chapters"]:
+            chapter_item["topics"] = [
+                topic_item for topic_item in chapter_item["topics"] if topic_item["assignments"]
+            ]
+            if chapter_item["topics"]:
+                chapters.append(chapter_item)
+        if not chapters:
+            continue
+        block_item["chapters"] = chapters
+        block_item["topics"] = [topic for chapter in chapters for topic in chapter["topics"]]
+        result.append(block_item)
+    return result
+
+
 def _chapter_entry(chapter, topic_items, chapter_audience=None):
     """Узел главы: темы и суммы по ним (для карты курса и прогресса ученика)."""
     total = sum(item["total"] for item in topic_items)
@@ -384,6 +410,10 @@ def _assemble(
                 "publication_state": block_publication[block.pk],
             }
         )
+    if student_view:
+        # Ветки без доступных ученику заданий наружу не отдаём: иначе в карточке
+        # ученика появлялись бы классы, назначенные другим группам.
+        result = prune_empty(result)
     totals = {
         "blocks": len(result),
         "chapters": sum(len(item["chapters"]) for item in result),

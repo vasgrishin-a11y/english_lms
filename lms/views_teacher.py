@@ -2855,6 +2855,10 @@ def student_detail(request, pk):
         User.objects.select_related("profile"), pk=pk, profile__role=Profile.Role.STUDENT
     )
     blocks_data, totals = course_tree(student=student)
+    # Пустое дерево значит разное: «в курсе нет классов» и «ученику ничего не
+    # назначено» (классы есть, но они у других групп). Подсказка в шаблоне
+    # зависит от этого различия, поэтому спрашиваем только в пустом случае.
+    course_has_blocks = bool(blocks_data) or Block.objects.filter(is_active=True).exists()
     _attach_progress_details(blocks_data)
     attempts = (
         Submission.objects.filter(student=student)
@@ -2873,6 +2877,7 @@ def student_detail(request, pk):
             "issued_password": issued_password,
             "password_changed_by_student": not student.profile.issued_password,
             "blocks_data": blocks_data,
+            "course_has_blocks": course_has_blocks,
             "totals": totals,
             "attempts": list(attempts),
             "skills": skills,
