@@ -16,8 +16,10 @@ from lms.models import (
     Feedback,
     Flashcard,
     Question,
+    Skill,
     Submission,
 )
+from lms.skills import DEFAULT_SKILLS, ensure_skill_catalog
 
 from .base import LMSCase
 from .test_files import text_file
@@ -174,6 +176,28 @@ class SeedDemoTests(LMSCase):
         # Черновик задания преподавателя не виден ученику.
         draft_task = Assignment.objects.get(title="IELTS Task 2: opinion essay")
         self.assertEqual(draft_task.status, "draft")
+
+    @override_settings(DEBUG=True)
+    def test_demo_skills_are_the_six_catalog_skills(self):
+        """Навыки демо — те же шесть, что в каталоге, и не слипаются в один.
+
+        Раньше slug строился через slugify() русского названия, получалась
+        пустая строка, и все задания доставались одной «Грамматике».
+        """
+        call_command("seed_demo", password=self.password, stdout=io.StringIO())
+        self.assertEqual(
+            sorted(Skill.objects.values_list("slug", "name")),
+            sorted((kind, name) for name, kind in DEFAULT_SKILLS),
+        )
+        speaking = Assignment.objects.get(title="Аудиоответ: моё путешествие")
+        self.assertEqual(
+            set(speaking.skills.values_list("kind", flat=True)), {"speaking", "listening"}
+        )
+        for skill in Skill.objects.all():
+            with self.subTest(skill=skill.name):
+                self.assertTrue(skill.assignments.exists())
+        ensure_skill_catalog()
+        self.assertEqual(Skill.objects.count(), len(DEFAULT_SKILLS))
 
     @override_settings(DEBUG=True)
     def test_second_run_does_not_duplicate_anything(self):

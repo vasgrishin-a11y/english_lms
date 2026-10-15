@@ -249,27 +249,57 @@
                 <p class="tiny muted" style="margin-bottom:12px">Сильнее: {{ skill_summary.strongest }} · Слабее: {{ skill_summary.weakest }}</p>
             {% endif %}
             {% for skill in skills %}
-                <div class="skill-row">
-                    <div class="row row-tight">
-                        <strong class="small">{{ skill.name }}</strong>
+                {% comment %}
+                    Навык раскрывается списком своих заданий — из них складывается оценка.
+                    Задание открывается так же, как из дерева прогресса: сданное — «Разбором»,
+                    несданное — предпросмотром глазами ученика; метка back=skill-N возвращает
+                    «Назад» к этой строке раскрытого навыка. Без JS — обычный <details>.
+                {% endcomment %}
+                <details class="skill-row" id="skill-{{ skill.key }}" data-skill-row>
+                    <summary class="skill-row__summary">
+                        <span class="skill-row__head">
+                            <strong class="small skill-row__name">{{ skill.name }}</strong>
+                            {% if skill.percent != None %}
+                                <span class="tiny muted tnum">{{ skill.percent }}% · {{ skill.verdict|lower }}</span>
+                            {% else %}
+                                <span class="tiny muted">нет оценок</span>
+                            {% endif %}
+                            {% icon "chevron-down" "icon icon-sm skill-row__chevron" %}
+                        </span>
                         {% if skill.percent != None %}
-                            <span class="tiny muted tnum" style="margin-left:auto">{{ skill.percent }}% · {{ skill.verdict|lower }}</span>
-                        {% else %}
-                            <span class="tiny muted" style="margin-left:auto">нет оценок</span>
+                            <span class="progress skill-row__bar {{ skill.bar_class }}" aria-hidden="true"><span style="width:{{ skill.percent }}%"></span></span>
                         {% endif %}
-                    </div>
-                    {% if skill.percent != None %}
-                        <div class="progress {{ skill.bar_class }}" role="img" aria-label="Навык {{ skill.name }}: {{ skill.percent }} процентов, {{ skill.verdict|lower }}">
-                            <span style="width:{{ skill.percent }}%"></span>
-                        </div>
-                    {% endif %}
-                    <p class="tiny muted tnum skill-meta">Оценено {{ skill.graded }} из {{ skill.total }}{% if skill.pending %} · ждёт оценки {{ skill.pending }}{% endif %}</p>
-                </div>
+                        <span class="tiny muted tnum skill-meta">Оценено {{ skill.graded }} из {{ skill.total }}{% if skill.pending %} · ждёт оценки {{ skill.pending }}{% endif %}</span>
+                    </summary>
+                    <ol class="skill-works" aria-label="Задания навыка «{{ skill.name }}»">
+                    {% for work in skill.assignments %}
+                        {% with assignment=work.assignment %}
+                        <li class="skill-work skill-work-{{ work.state }}" id="skill-{{ skill.key }}-assignment-{{ assignment.pk }}">
+                            <span class="skill-work__main">
+                                <a class="skill-work__link" href="{% if work.attempt_id %}{% url 'teacher_submission_review' work.attempt_id %}{% else %}{% url 'teacher_student_assignment_preview' student.pk assignment.pk %}{% endif %}?back=skill-{{ skill.key }}">{{ assignment.title }}</a>
+                                <span class="skill-work__topic tiny muted" title="{{ work.path }}">{{ work.topic }}</span>
+                            </span>
+                            <span class="skill-work__state">
+                                {% if work.state == 'graded' %}
+                                    <span class="grade-pill tnum {{ work.grade|grade_class:work.max_points }}">{{ work.grade }}<small>/{{ work.max_points }}</small></span>
+                                    <span class="tiny muted tnum">{{ work.percent }}%</span>
+                                {% elif work.state == 'pending' %}
+                                    <span class="badge badge-{{ work.status }}">{{ work.status|status_label }}</span>
+                                    <span class="tiny muted">ждёт оценки</span>
+                                {% else %}
+                                    <span class="badge badge-outline">Не сдано</span>
+                                {% endif %}
+                            </span>
+                        </li>
+                        {% endwith %}
+                    {% endfor %}
+                    </ol>
+                </details>
             {% empty %}
                 <p class="small muted mb-0">Нет оценок по навыкам. Привяжите навыки к заданиям — здесь появится срез Reading / Writing / Listening / Speaking.</p>
             {% endfor %}
             {% if skills %}
-                <p class="tiny muted mb-0" style="margin-top:12px">% — средний балл последних попыток по оценённым работам; каждая работа весит одинаково. Сданное без оценки в средний балл не входит.</p>
+                <p class="tiny muted mb-0" style="margin-top:12px">% — средний балл последних попыток по оценённым работам; каждая работа весит одинаково. Сданное без оценки в средний балл не входит. Нажмите на навык — откроются задания, из которых складывается оценка.</p>
             {% endif %}
         </section>
 

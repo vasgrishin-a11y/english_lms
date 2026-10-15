@@ -3624,6 +3624,39 @@
     });
   }
 
+  /* ── Навыки ученика: возврат к раскрытому навыку ────────────
+   * Навык в карточке ученика — обычный <details> со списком заданий.
+   * «Назад» из «Разбора» или предпросмотра приходит с якорем
+   * #skill-N-assignment-M: раскрываем этот навык и подводим к строке
+   * задания экран (боковая колонка прокручивается сама по себе).
+   */
+  function skillWorks() {
+    if (!document.querySelector("[data-skill-row]")) return;
+
+    function reveal() {
+      var hash = window.location.hash;
+      if (!hash || hash.length < 2) return;
+      var target = null;
+      try {
+        target = document.getElementById(decodeURIComponent(hash.slice(1)));
+      } catch (error) {
+        return;
+      }
+      var row = target && target.closest ? target.closest("[data-skill-row]") : null;
+      if (!row) return;
+      row.open = true;
+      if (target.scrollIntoView) target.scrollIntoView({ block: "center" });
+    }
+
+    reveal();
+    // До события load браузер сам держит якорь у верхнего края и перебивает
+    // центрирование — повторяем его, когда страница догрузилась.
+    if (document.readyState !== "complete") {
+      window.addEventListener("load", reveal, { once: true });
+    }
+    window.addEventListener("hashchange", reveal);
+  }
+
   function tableFilters() {
     // Фильтры таблицы применяются сразу при выборе значения; кнопка «Показать»
     // остаётся только как путь без JS, поэтому здесь её прячем.
@@ -3673,5 +3706,6 @@
     curriculumBoard();
     classFocus();
     studentAssignmentPreview();
+    skillWorks();
   });
 })();
