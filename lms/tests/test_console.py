@@ -23,6 +23,7 @@ from lms.models import (
     Assignment,
     Block,
     CardReview,
+    Chapter,
     Choice,
     CommentSnippet,
     Feedback,
@@ -468,6 +469,150 @@ class ReviewDetailTests(LMSCase):
         Choice.objects.create(question=question, text="yes", is_correct=True, order=1)
         Choice.objects.create(question=question, text="no", order=2)
         return quiz
+
+
+class ReviewBackButtonTests(LMSCase):
+    """«Разбор» из карточки ученика: кнопка «Назад» возвращает к дереву прогресса."""
+
+    def test_review_links_from_student_card_carry_back_marker(self):
+        attempt = self.submit()
+        page = self.teacher_client.get(f"/teacher/students/{self.student.pk}/")
+        self.assertContains(
+            page, reverse("teacher_submission_review", args=[attempt.pk]) + "?back=student"
+        )
+
+    def test_back_button_returns_to_the_assignment_row(self):
+        attempt = self.submit()
+        self.review(attempt, grade=90)
+        page = self.teacher_client.get(
+            reverse("teacher_submission_review", args=[attempt.pk]) + "?back=student"
+        )
+        self.assertContains(page, "Вернуться к карточке ученика")
+        self.assertContains(
+            page,
+            f'href="/teacher/students/{self.student.pk}/#progress-assignment-{self.assignment.pk}"',
+        )
+
+    def test_review_opened_from_queue_keeps_only_queue_button(self):
+        attempt = self.submit()
+        page = self.teacher_client.get(reverse("teacher_submission_review", args=[attempt.pk]))
+        self.assertNotContains(page, "Вернуться к карточке ученика")
+        self.assertContains(page, "К очереди")
+
+    def test_queue_links_drop_the_back_marker(self):
+        """«К очереди» возвращает в очередь без метки: «Назад» не должен вести в чужую карточку."""
+        attempt = self.submit()
+        page = self.teacher_client.get(
+            reverse("teacher_submission_review", args=[attempt.pk]) + "?back=student&status=checked"
+        )
+        self.assertContains(page, 'href="/teacher/review/?status=checked"')
+        self.assertNotContains(page, "/teacher/review/?back=student")
+
+    def test_save_preserves_back_marker_and_queue_filters(self):
+        attempt = self.submit()
+        response = self.teacher_client.post(
+            reverse("teacher_submission_review", args=[attempt.pk])
+            + "?back=student&status=checked",
+            {
+                "expected_version": attempt.version,
+                "expected_review_revision": attempt.review_revision,
+                "grade": 80,
+                "comment": "Review",
+                "decision": "checked",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("back=student", response.url)
+        self.assertIn("status=checked", response.url)
+
+
+class CheckedQueueTreeTests(LMSCase):
+    """«Проверенные» — дерево «классы → главы → темы → задания» вместо таблицы."""
+
+    def setUp(self):
+        super().setUp()
+        self.chapter = Chapter.objects.create(block=self.block, title="Tenses", slug="tenses")
+        self.topic.chapter = self.chapter
+        self.topic.save()
+        self.second_task = Assignment.objects.create(
+            topic=self.topic, title="Present perfect", description="Task", order=2
+        )
+        self.work = self.submit()
+        self.review(self.work, grade=85)
+        self.second_work = self.submit(assignment_id=self.second_task.pk, student=self.other)
+        self.review(self.second_work, grade=70)
+
+    def checked(self, **params):
+        return self.teacher_client.get("/teacher/review/", {"status": "checked", **params})
+
+    def works_in(self, tree):
+        return [
+            work
+            for block_item in tree
+            for chapter_item in block_item["chapters"]
+            for topic_item in chapter_item["topics"]
+            for assignment_item in topic_item["assignments"]
+            for work in assignment_item["works"]
+        ]
+
+    def test_tree_groups_checked_works_by_course_structure(self):
+        tree = self.checked().context["checked_tree"]
+        self.assertEqual([item["block"] for item in tree], [self.block])
+        block_item = tree[0]
+        self.assertEqual(block_item["checked"], 2)
+        self.assertEqual([item["chapter"] for item in block_item["chapters"]], [self.chapter])
+        chapter_item = block_item["chapters"][0]
+        self.assertEqual(chapter_item["checked"], 2)
+        self.assertEqual([item["topic"] for item in chapter_item["topics"]], [self.topic])
+        topic_item = chapter_item["topics"][0]
+        self.assertEqual(
+            [item["assignment"] for item in topic_item["assignments"]],
+            [self.assignment, self.second_task],
+        )
+        # Внутри задания работы — по алфавиту учеников, а не вперемешку.
+        self.assertEqual(
+            [work.pk for work in topic_item["assignments"][0]["works"]], [self.work.pk]
+        )
+        self.assertEqual(topic_item["assignments"][0]["checked"], 1)
+
+    def test_checked_tab_renders_tree_with_default_depth_two(self):
+        page = self.checked()
+        self.assertContains(page, 'data-curriculum-board data-default-depth="2"')
+        self.assertContains(page, 'data-depth-control="all"')
+        self.assertContains(page, 'data-depth-level="2" aria-pressed="true"')
+        self.assertContains(page, 'data-collapse-group="chapters"')
+        self.assertContains(page, 'data-collapse-group="topics" hidden')
+        self.assertContains(page, 'data-collapse-group="assignments" hidden')
+        self.assertContains(page, 'data-collapse-group="works" hidden')
+        self.assertContains(page, "Tenses")
+        self.assertContains(page, "Present perfect")
+        self.assertContains(page, "Проверено работ:")
+        self.assertContains(page, "85")
+        # Ссылки «Открыть» сохраняют параметры: «К очереди» вернётся на этот же список.
+        self.assertContains(
+            page, reverse("teacher_submission_review", args=[self.work.pk]) + "?status=checked"
+        )
+        # Плоской таблицы на вкладке «Проверенные» больше нет.
+        self.assertNotContains(page, 'class="table-scroll"')
+
+    def test_pending_tab_keeps_the_flat_table(self):
+        self.submit(assignment_id=self.second_task.pk)
+        page = self.teacher_client.get("/teacher/review/")
+        self.assertEqual(page.context["checked_tree"], [])
+        self.assertContains(page, 'class="table-scroll" role="region"')
+
+    def test_tree_respects_filters(self):
+        page = self.checked(student=self.other.pk)
+        self.assertEqual(
+            [work.pk for work in self.works_in(page.context["checked_tree"])],
+            [self.second_work.pk],
+        )
+
+    def test_tree_empty_state_when_filters_hide_everything(self):
+        alien = Block.objects.create(name="Alien", slug="alien")
+        page = self.checked(block=alien.pk)
+        self.assertEqual(page.context["checked_tree"], [])
+        self.assertContains(page, "Нет работ по выбранным фильтрам")
 
 
 class CurriculumTreeTests(LMSCase):
@@ -1201,11 +1346,19 @@ class StudentProgressTreeTests(LMSCase):
 
     def test_topics_collapse_assignments_with_statuses(self):
         page = self.detail()
-        self.assertContains(page, '<details class="topic-progress">')
+        # Свёртка как в «Классах»: по умолчанию открыты класс и главы,
+        # темы и задания преподаватель раскрывает сам.
+        self.assertContains(page, 'data-curriculum-board data-default-depth="2"')
+        self.assertContains(page, "data-collapse-block")
+        self.assertContains(page, 'data-collapse-group="chapters"')
+        self.assertContains(page, 'data-collapse-group="topics" hidden')
+        self.assertContains(page, 'data-collapse-group="assignments" hidden')
+        self.assertContains(page, 'data-depth-control="all"')
+        self.assertContains(page, 'data-depth-level="2" aria-pressed="true"')
+        self.assertContains(page, 'data-depth-level="4"')
         self.assertContains(page, self.topic.title)
         self.assertContains(page, "Past tense")
         self.assertContains(page, "Не сдано")
-        self.assertNotContains(page, "<details open")
 
     def test_text_attempt_shows_answer_grade_and_review_link(self):
         attempt = self.submit()
@@ -1215,6 +1368,10 @@ class StudentProgressTreeTests(LMSCase):
         self.assertContains(page, "Проверена")
         self.assertContains(page, reverse("teacher_submission_review", args=[attempt.pk]))
         self.assertContains(page, "Разбор")
+        # «Разбор» помечает возврат: с кнопкой «Назад» — в карточку ученика.
+        self.assertContains(
+            page, f"{reverse('teacher_submission_review', args=[attempt.pk])}?back=student"
+        )
 
     def test_no_submission_assignments_are_marked(self):
         self.card_assignment(topic=self.topic, title="Слова темы")

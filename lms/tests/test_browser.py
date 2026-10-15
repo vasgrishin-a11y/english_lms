@@ -44,8 +44,10 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
         from playwright.sync_api import expect
 
         page.goto(self.live_server_url + f"/teacher/students/{student.pk}/")
-        # Темы свёрнуты в <details> — раскрываем, иначе кнопку не видно и клик не пройдёт.
-        page.locator("details.topic-progress summary").first.click()
+        # Темы и задания свёрнуты — раскрываем всё, иначе кнопку не видно и клик не пройдёт.
+        page.locator('[data-depth-control="all"]').get_by_role(
+            "button", name="+ задания", exact=True
+        ).click()
         target = page.locator(f"#preview-{assignment.pk}-{student.pk}")
         show = page.get_by_role("button", name="Показать содержимое как видит ученик").first
         expect(show).to_be_visible()
@@ -59,6 +61,28 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
         expect(
             page.get_by_role("button", name="Показать содержимое как видит ученик").first
         ).to_be_visible()
+
+    def check_review_back_to_student(self, page, student, assignment):
+        """«Разбор» из карточки ученика открывает режим проверки, «Назад» возвращает.
+
+        Возврат ведёт к строке задания прямо в дереве прогресса: якорь сам
+        раскрывает путь класс → глава → тема, чтобы работа осталась на экране.
+        """
+        from playwright.sync_api import expect
+
+        page.goto(self.live_server_url + f"/teacher/students/{student.pk}/")
+        # По умолчанию открыты класс и главы — «Разбор» находится в глубине.
+        page.locator('[data-depth-control="all"]').get_by_role(
+            "button", name="+ задания", exact=True
+        ).click()
+        page.get_by_role("link", name="Разбор", exact=True).first.click()
+        page.wait_for_url(re.compile(r"/teacher/review/\d+/"))
+        expect(page.get_by_role("link", name="Назад", exact=True)).to_be_visible()
+        page.get_by_role("link", name="Назад", exact=True).click()
+        page.wait_for_url(
+            re.compile(rf"/teacher/students/{student.pk}/#progress-assignment-{assignment.pk}")
+        )
+        expect(page.locator(f"#progress-assignment-{assignment.pk}")).to_be_visible()
 
     def check_curriculum_depth(self, page):
         """Карта курса: по умолчанию классы и главы, темы — общей кнопкой или кликом по главе."""
@@ -433,6 +457,7 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
                 check_language(page)
                 check_page("queue")
                 self.check_student_assignment_preview(page, student, assignment)
+                self.check_review_back_to_student(page, student, assignment)
                 page.goto(self.live_server_url + "/teacher/curriculum/")
                 check_page("curriculum")
                 self.check_cascade_delete_panel(page)

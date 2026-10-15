@@ -394,6 +394,63 @@ def _queue_columns(sort, direction):
     return columns
 
 
+def checked_tree(submissions):
+    """«Проверенные» как дерево курса: класс → глава → тема → задание → работы.
+
+    Вместо плоской таблицы вперемешку — структура «Классы → Главы → Темы →
+    Задания», как в разделе «Классы»: по умолчанию открыты классы и главы,
+    списки проверенных работ преподаватель раскрывает сам. Ветви без проверенных
+    работ в дерево не попадают, порядок — постоянный порядок курса плюс
+    алфавит внутри задания. Собирается из уже отфильтрованной выборки за один
+    запрос, счётчики считаются по пути.
+    """
+    rows = submissions.order_by(
+        "assignment__topic__block__order",
+        "assignment__topic__block__name",
+        "assignment__topic__chapter__order",
+        "assignment__topic__chapter__title",
+        "assignment__topic__order",
+        "assignment__topic__title",
+        "assignment__order",
+        "assignment__title",
+        "student__last_name",
+        "student__first_name",
+        "student__username",
+        "pk",
+    )
+    tree = []
+    blocks, chapters, topics, assignments = {}, {}, {}, {}
+    for work in rows:
+        assignment = work.assignment
+        topic = assignment.topic
+        chapter = topic.chapter
+        block = topic.block
+        block_node = blocks.get(block.pk)
+        if block_node is None:
+            block_node = {"block": block, "chapters": [], "checked": 0}
+            blocks[block.pk] = block_node
+            tree.append(block_node)
+        chapter_node = chapters.get(chapter.pk)
+        if chapter_node is None:
+            chapter_node = {"chapter": chapter, "topics": [], "checked": 0}
+            chapters[chapter.pk] = chapter_node
+            block_node["chapters"].append(chapter_node)
+        topic_node = topics.get(topic.pk)
+        if topic_node is None:
+            topic_node = {"topic": topic, "assignments": [], "checked": 0}
+            topics[topic.pk] = topic_node
+            chapter_node["topics"].append(topic_node)
+        assignment_node = assignments.get(assignment.pk)
+        if assignment_node is None:
+            assignment_node = {"assignment": assignment, "works": [], "checked": 0}
+            assignments[assignment.pk] = assignment_node
+            topic_node["assignments"].append(assignment_node)
+        assignment_node["works"].append(work)
+        for node in (block_node, chapter_node, topic_node, assignment_node):
+            node["checked"] += 1
+    return tree
+
+
 @teacher_required
 @require_GET
 def review_queue(request):
@@ -409,6 +466,8 @@ def review_queue(request):
         {
             "submissions": page,
             "page_obj": page,
+            # «Проверенные» показываются деревом курса, а не таблицей вперемешку.
+            "checked_tree": checked_tree(submissions) if state["queue"] == "checked" else [],
             "queue": state["queue"],
             "sort": state["sort"],
             "dir": state["dir"],
@@ -496,8 +555,8 @@ def review_detail(request, pk):
             if request.POST.get("next") == "1":
                 nxt = _neighbour(request, submission, direction=1)
                 if nxt:
-                    return redirect("teacher_submission_review", pk=nxt.pk)
-            return redirect("teacher_submission_review", pk=submission.pk)
+                    return _review_redirect(request, nxt.pk)
+            return _review_redirect(request, submission.pk)
 
     queue_ids, position = _queue_positions(request, submission)
     return render(
@@ -522,6 +581,7 @@ def review_detail(request, pk):
                 "next": queue_ids[1] if queue_ids else None,
                 "position": position,
             },
+            "back_url": _review_back_url(request, submission),
             "questions": questions,
             "items": items,
             "items_progress": progress_of(items) if items else None,
@@ -568,6 +628,32 @@ def _neighbour(request, submission, direction):
         remaining = [pk for pk in ids if pk != submission.pk]
         neighbours = remaining[-1:] if direction < 0 else remaining[:1]
     return Submission.objects.filter(pk=neighbours[0]).first() if neighbours else None
+
+
+def _review_redirect(request, pk):
+    """Редирект на разбор с сохранением GET: фильтры очереди и кнопка «Назад».
+
+    Форма разбора отправляется на текущий адрес вместе с query string, и после
+    сохранения параметры не должны теряться: иначе «Назад» к карточке ученика
+    или выбранный фильтр «Проверенных» пропадали бы после каждой проверки.
+    """
+    url = reverse("teacher_submission_review", args=[pk])
+    query = request.GET.urlencode()
+    return redirect(f"{url}?{query}" if query else url)
+
+
+def _review_back_url(request, submission):
+    """Кнопка «Назад» в разборе: в какое «изначальное меню» возвращать.
+
+    Карточка ученика помечает свои ссылки ``?back=student`` — тогда «Назад»
+    ведёт к строке этого задания прямо в дереве прогресса (якорь раскрывает
+    путь к ней). Без метки остаётся обычная «К очереди».
+    """
+    if request.GET.get("back") != "student":
+        return None
+    return reverse("teacher_student_detail", args=[submission.student_id]) + (
+        f"#progress-assignment-{submission.assignment_id}"
+    )
 
 
 # ── Пространство «Курс» ────────────────────────────────────────────────────

@@ -4020,6 +4020,87 @@ tr.row-bad td:first-child {
     margin-top: var(--sp-2);
 }
 
+/* ── Дерево прогресса ученика и «Проверенные» ───────────────────
+   Узлы-кнопки как в карте курса: класс → глава → тема → задание,
+   в «Проверенных» под заданием — список проверенных работ. */
+.progress-tree {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    margin-top: var(--sp-2);
+}
+
+.progress-node {
+    min-width: 0;
+}
+
+.progress-node-head {
+    width: 100%;
+    align-items: flex-start;
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--r-md);
+}
+
+.progress-node-head:hover {
+    background: var(--surface-sunken);
+    color: inherit;
+}
+
+.progress-node-head .row-main {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    text-align: left;
+}
+
+.progress-node-head .row-title {
+    overflow-wrap: anywhere;
+}
+
+.progress-children {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    margin-top: var(--sp-1);
+    padding-left: var(--sp-3);
+    border-left: 1px solid var(--border-subtle);
+}
+
+.progress-works {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-1);
+    margin-top: var(--sp-1);
+}
+
+.progress-work {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--r-md);
+    background: var(--surface-sunken);
+    min-width: 0;
+}
+
+.progress-work .row-main {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+@media (max-width: 480px) {
+    .progress-node-head {
+        padding: var(--sp-2);
+    }
+
+    .progress-work {
+        padding: var(--sp-2);
+    }
+}
+
 .try-list {
     display: flex;
     flex-direction: column;
@@ -4595,10 +4676,11 @@ a.audience-badge:hover {
     font-size: var(--fs-14);
 }
 
-/* ── Свёртка карты курса: классы → главы → темы ─────────────────
+/* ── Свёртка иерархии: классы → главы → темы → задания ──────────
    Группы прячем атрибутом hidden, но .col задаёт display:flex —
    без !important свёртка не сработала бы. */
 [data-curriculum-group][hidden],
+[data-collapse-group][hidden],
 [data-block-footer][hidden] {
     display: none !important;
 }

@@ -45,35 +45,62 @@
 <div class="split">
     <div class="split-main">
         <section class="card">
-            <div class="card-head"><h2 class="card-title">{% icon "layers" %}Прогресс по классам</h2></div>
+            {# Свёртка как в «Классах»: класс → главы → темы → задания. Без JS всё раскрыто. #}
+            <noscript><style>[data-collapse-group][hidden]{display:flex !important}</style></noscript>
+            <div class="card-head">
+                <h2 class="card-title">{% icon "layers" %}Прогресс по классам</h2>
+                {% if blocks_data %}
+                <span class="curriculum-depth" role="group" aria-label="Глубина прогресса по классам" data-depth-control="all">
+                    <span class="tiny muted" style="margin-right:4px;margin-left:4px">Показывать:</span>
+                    <button type="button" class="curriculum-depth__option" data-depth-option data-depth-level="1" aria-pressed="false" title="Только классы">Классы</button>
+                    <button type="button" class="curriculum-depth__option" data-depth-option data-depth-level="2" aria-pressed="true" title="Классы и главы">+ главы</button>
+                    <button type="button" class="curriculum-depth__option" data-depth-option data-depth-level="3" aria-pressed="false" title="Классы, главы и темы">+ темы</button>
+                    <button type="button" class="curriculum-depth__option" data-depth-option data-depth-level="4" aria-pressed="false" title="Всё, включая задания">+ задания</button>
+                </span>
+                {% endif %}
+            </div>
+            <div class="progress-tree" data-curriculum-board data-default-depth="2">
             {% for block_item in blocks_data %}
                 {% with block=block_item.block %}
-                    <div class="panel" style="margin-bottom:8px">
+                    <div class="panel progress-node" data-collapse-block data-block-id="{{ block.pk }}" id="progress-block-{{ block.pk }}">
                         <div class="row row-tight">
                             <span class="block-badge">{{ forloop.counter }}</span>
-                            <strong>{{ block.name }}</strong>
+                            <h3 class="mb-0" style="font-size:var(--fs-15);min-width:0">
+                                <button type="button" class="curriculum-toggle" data-collapse-toggle aria-expanded="true" aria-controls="progress-block-{{ block.pk }}-chapters" title="Свернуть или развернуть класс">{{ block.name }}{% icon "chevron-down" "icon icon-sm curriculum-chevron" %}</button>
+                            </h3>
                             {% if block.cefr_level %}<span class="badge badge-accent">{{ block.cefr_level }}</span>{% endif %}
                             <span class="tiny muted tnum" style="margin-left:auto">{{ block_item.done }}/{{ block_item.total }} проверено · {{ block_item.progress }}%</span>
                         </div>
                         <div class="progress" role="img" aria-label="Класс {{ block.name }}: {{ block_item.progress }} процентов">
                             <span style="width:{{ block_item.progress }}%"></span>
                         </div>
+                        <div class="progress-children" id="progress-block-{{ block.pk }}-chapters" data-collapse-group="chapters">
                         {% for chapter_item in block_item.chapters %}
-                            <p class="tiny strong mb-0" style="margin-top:10px">{% icon "layers" "icon icon-sm" %} {{ chapter_item.chapter.title }} <span class="muted tnum">· {{ chapter_item.done }}/{{ chapter_item.total }}</span></p>
-                            {% for topic_item in chapter_item.topics %}
-                                <details class="topic-progress">
-                                    <summary class="topic-progress__head">
-                                        <span class="topic-chevron" aria-hidden="true">{% icon "chevron-down" "icon icon-sm" %}</span>
-                                        <span class="row-main">
-                                            <span class="row-title">{{ topic_item.topic.title }}</span>
-                                            <span class="row-meta">
-                                                <span class="tiny muted tnum">{{ topic_item.done }}/{{ topic_item.total }} · {{ topic_item.progress }}%</span>
-                                                {% if topic_item.waiting %}<span class="badge badge-submitted">ждут {{ topic_item.waiting }}</span>{% endif %}
-                                                {% if topic_item.revision %}<span class="badge badge-needs_revision">доработка {{ topic_item.revision }}</span>{% endif %}
+                            <div class="progress-node">
+                                <button type="button" class="curriculum-toggle progress-node-head" data-collapse-toggle aria-expanded="false" aria-controls="progress-chapter-{{ chapter_item.chapter.pk }}-topics" title="Свернуть или развернуть темы главы">
+                                    {% icon "layers" "icon icon-sm" %}
+                                    <span class="row-main">
+                                        <span class="row-title small strong">{{ chapter_item.chapter.title }}</span>
+                                        <span class="row-meta"><span class="tiny muted tnum">{{ chapter_item.done }}/{{ chapter_item.total }} проверено</span></span>
+                                    </span>
+                                    {% icon "chevron-down" "icon icon-sm curriculum-chevron" %}
+                                </button>
+                                <div class="progress-children" id="progress-chapter-{{ chapter_item.chapter.pk }}-topics" data-collapse-group="topics" hidden>
+                                {% for topic_item in chapter_item.topics %}
+                                    <div class="progress-node">
+                                        <button type="button" class="curriculum-toggle progress-node-head" data-collapse-toggle aria-expanded="false" aria-controls="progress-topic-{{ topic_item.topic.pk }}-assignments" title="Свернуть или развернуть задания темы">
+                                            {% icon "book" "icon icon-sm" %}
+                                            <span class="row-main">
+                                                <span class="row-title small strong">{{ topic_item.topic.title }}</span>
+                                                <span class="row-meta">
+                                                    <span class="tiny muted tnum">{{ topic_item.done }}/{{ topic_item.total }} · {{ topic_item.progress }}%</span>
+                                                    {% if topic_item.waiting %}<span class="badge badge-submitted">ждут {{ topic_item.waiting }}</span>{% endif %}
+                                                    {% if topic_item.revision %}<span class="badge badge-needs_revision">доработка {{ topic_item.revision }}</span>{% endif %}
+                                                </span>
                                             </span>
-                                        </span>
-                                    </summary>
-                                    <div class="topic-progress__body">
+                                            {% icon "chevron-down" "icon icon-sm curriculum-chevron" %}
+                                        </button>
+                                        <div class="progress-children" id="progress-topic-{{ topic_item.topic.pk }}-assignments" data-collapse-group="assignments" hidden>
                                         {% for entry in topic_item.assignments %}
                                             {% with assignment=entry.assignment state=entry.state attempt=entry.attempt %}
                                             <article class="assignment-progress" id="progress-assignment-{{ assignment.pk }}">
@@ -86,7 +113,7 @@
                                                             <span class="grade-pill tnum {{ state.grade|grade_class:state.max_points }}">{{ state.grade }}<small>/{{ state.max_points }}</small></span>
                                                         {% endif %}
                                                         <span class="tiny muted tnum">попытка {{ state.version }}{% if state.is_late %} · после дедлайна{% endif %}</span>
-                                                        {% if attempt %}<a class="btn btn-ghost btn-sm" href="{% url 'teacher_submission_review' attempt.pk %}">{% icon "eye" "icon icon-sm" %}Разбор</a>{% endif %}
+                                                        {% if attempt %}<a class="btn btn-ghost btn-sm" href="{% url 'teacher_submission_review' attempt.pk %}?back=student">{% icon "eye" "icon icon-sm" %}Разбор</a>{% endif %}
                                                     {% elif assignment.is_no_submission %}
                                                         <span class="tiny muted">{% if assignment.is_flashcards %}Тренажёр{% else %}Материалы{% endif %} · без сдачи</span>
                                                     {% else %}
@@ -166,14 +193,17 @@
                                         {% empty %}
                                             <p class="tiny muted mb-0">В теме нет заданий.</p>
                                         {% endfor %}
+                                        </div>
                                     </div>
-                                </details>
-                            {% empty %}
-                                <p class="tiny muted mb-0" style="margin-top:6px">В главе нет тем.</p>
-                            {% endfor %}
+                                {% empty %}
+                                    <p class="tiny muted mb-0" style="margin-top:6px">В главе нет тем.</p>
+                                {% endfor %}
+                                </div>
+                            </div>
                         {% empty %}
                             <p class="tiny muted mb-0" style="margin-top:6px">В классе нет глав.</p>
                         {% endfor %}
+                        </div>
                     </div>
                 {% endwith %}
             {% empty %}
@@ -183,6 +213,7 @@
                     <p class="muted small mb-0">В курсе пока нет классов.</p>
                 {% endif %}
             {% endfor %}
+            </div>
         </section>
 
         <section class="card">
@@ -190,7 +221,7 @@
             {% for attempt in attempts %}
                 <div class="row-item" style="margin-bottom:8px">
                     <span class="row-main">
-                        <a class="row-title" href="{% url 'teacher_submission_review' attempt.pk %}">{{ attempt.assignment.title }}</a>
+                        <a class="row-title" href="{% url 'teacher_submission_review' attempt.pk %}?back=student">{{ attempt.assignment.title }}</a>
                         <span class="row-meta">
                             <span>{{ attempt.assignment.topic.block.name }} · {{ attempt.assignment.topic.chapter.title }} · {{ attempt.assignment.topic.title }}</span>
                             <span>Попытка {{ attempt.version }} · {{ attempt.submitted_at|date:"d.m.Y H:i" }}</span>

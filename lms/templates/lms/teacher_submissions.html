@@ -59,6 +59,106 @@
     {% endif %}
 </form>
 
+{% if queue == 'checked' %}
+{# «Проверенные» — дерево по структуре курса: класс → главы → темы → задания
+   с проверенными работами. По умолчанию открыты классы и главы, списки работ
+   раскрывает преподаватель. Без JS дерево остаётся полностью раскрытым. #}
+<noscript><style>[data-collapse-group][hidden]{display:flex !important}</style></noscript>
+<div class="filter-pills" style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+    <span class="pill is-active turquoise">Проверено работ: <strong class="tnum">{{ page_obj.paginator.count }}</strong></span>
+    <span class="curriculum-depth" role="group" aria-label="Глубина списка проверенных" data-depth-control="all">
+        <span class="tiny muted" style="margin-right:4px;margin-left:4px">Показывать:</span>
+        <button type="button" class="curriculum-depth__option" data-depth-option data-depth-level="1" aria-pressed="false" title="Только классы">Классы</button>
+        <button type="button" class="curriculum-depth__option" data-depth-option data-depth-level="2" aria-pressed="true" title="Классы и главы">+ главы</button>
+        <button type="button" class="curriculum-depth__option" data-depth-option data-depth-level="3" aria-pressed="false" title="Классы, главы и темы">+ темы</button>
+        <button type="button" class="curriculum-depth__option" data-depth-option data-depth-level="4" aria-pressed="false" title="Всё, включая списки проверенных работ">+ задания</button>
+    </span>
+</div>
+{% if checked_tree %}
+<div class="progress-tree" data-curriculum-board data-default-depth="2" role="region" aria-label="Проверенные работы по структуре курса">
+    {% for block_item in checked_tree %}
+        <section class="card progress-node" data-collapse-block data-block-id="{{ block_item.block.pk }}" id="checked-block-{{ block_item.block.pk }}" style="padding:18px 22px">
+            <div class="row row-tight">
+                <span class="badge badge-turquoise" style="min-width:28px;justify-content:center">{{ forloop.counter }}</span>
+                <h3 class="mb-0" style="font-size:var(--fs-16);min-width:0">
+                    <button type="button" class="curriculum-toggle" data-collapse-toggle aria-expanded="true" aria-controls="checked-block-{{ block_item.block.pk }}-chapters" title="Свернуть или развернуть класс">{{ block_item.block.name }}{% icon "chevron-down" "icon icon-sm curriculum-chevron" %}</button>
+                </h3>
+                {% if block_item.block.cefr_level %}<span class="tag tag-cefr">{{ block_item.block.cefr_level }}</span>{% endif %}
+                <span class="tiny muted tnum" style="margin-left:auto">проверено {{ block_item.checked }} {{ block_item.checked|pluralize_ru:"работа,работы,работ" }}</span>
+            </div>
+            <div class="progress-children" id="checked-block-{{ block_item.block.pk }}-chapters" data-collapse-group="chapters">
+                {% for chapter_item in block_item.chapters %}
+                    <div class="progress-node">
+                        <button type="button" class="curriculum-toggle progress-node-head" data-collapse-toggle aria-expanded="false" aria-controls="checked-chapter-{{ chapter_item.chapter.pk }}-topics" title="Свернуть или развернуть темы главы">
+                            {% icon "layers" "icon icon-sm" %}
+                            <span class="row-main">
+                                <span class="row-title small strong">{{ chapter_item.chapter.title }}</span>
+                                <span class="row-meta"><span class="tiny muted tnum">проверено {{ chapter_item.checked }} {{ chapter_item.checked|pluralize_ru:"работа,работы,работ" }}</span></span>
+                            </span>
+                            {% icon "chevron-down" "icon icon-sm curriculum-chevron" %}
+                        </button>
+                        <div class="progress-children" id="checked-chapter-{{ chapter_item.chapter.pk }}-topics" data-collapse-group="topics" hidden>
+                            {% for topic_item in chapter_item.topics %}
+                                <div class="progress-node">
+                                    <button type="button" class="curriculum-toggle progress-node-head" data-collapse-toggle aria-expanded="false" aria-controls="checked-topic-{{ topic_item.topic.pk }}-assignments" title="Свернуть или развернуть задания темы">
+                                        {% icon "book" "icon icon-sm" %}
+                                        <span class="row-main">
+                                            <span class="row-title small strong">{{ topic_item.topic.title }}</span>
+                                            <span class="row-meta"><span class="tiny muted tnum">проверено {{ topic_item.checked }} {{ topic_item.checked|pluralize_ru:"работа,работы,работ" }}</span></span>
+                                        </span>
+                                        {% icon "chevron-down" "icon icon-sm curriculum-chevron" %}
+                                    </button>
+                                    <div class="progress-children" id="checked-topic-{{ topic_item.topic.pk }}-assignments" data-collapse-group="assignments" hidden>
+                                        {% for assignment_item in topic_item.assignments %}
+                                            <div class="progress-node">
+                                                <button type="button" class="curriculum-toggle progress-node-head" data-collapse-toggle aria-expanded="false" aria-controls="checked-assignment-{{ assignment_item.assignment.pk }}-works" title="Показать или скрыть список проверенных работ">
+                                                    {% icon "file-text" "icon icon-sm" %}
+                                                    <span class="row-main">
+                                                        <span class="row-title small strong">{{ assignment_item.assignment.title }}</span>
+                                                        <span class="row-meta">
+                                                            <span class="tag">{{ assignment_item.assignment.get_assignment_type_display }}</span>
+                                                            <span class="tiny muted tnum">проверено {{ assignment_item.checked }} {{ assignment_item.checked|pluralize_ru:"работа,работы,работ" }}</span>
+                                                        </span>
+                                                    </span>
+                                                    {% icon "chevron-down" "icon icon-sm curriculum-chevron" %}
+                                                </button>
+                                                <div class="progress-works" id="checked-assignment-{{ assignment_item.assignment.pk }}-works" data-collapse-group="works" hidden>
+                                                    {% for work in assignment_item.works %}
+                                                        <div class="progress-work">
+                                                            <span class="avatar" aria-hidden="true">{{ work.student|initials }}</span>
+                                                            <span class="row-main">
+                                                                <a class="row-title" href="{% url 'teacher_student_detail' work.student_id %}">{{ work.student|display_name }}</a>
+                                                                <span class="row-meta"><span class="tiny muted tnum">попытка {{ work.version }} · {{ work.submitted_at|date:"d.m.Y H:i" }}{% if work.is_late %} · после дедлайна{% endif %}</span></span>
+                                                            </span>
+                                                            {% if work.feedback and work.feedback.grade != None %}
+                                                                <span class="grade-pill tnum {{ work.feedback.grade|grade_class:work.max_points_snapshot }}">{{ work.feedback.grade }}<small>/{{ work.max_points_snapshot }}</small></span>
+                                                            {% else %}
+                                                                <span class="badge badge-outline">без балла</span>
+                                                            {% endif %}
+                                                            <a class="btn btn-sm" href="{% url 'teacher_submission_review' work.pk %}{% querystring %}">{% t "Открыть" %}</a>
+                                                        </div>
+                                                    {% endfor %}
+                                                </div>
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </section>
+    {% endfor %}
+</div>
+{% else %}
+    <div class="empty">
+        <div class="empty-icon">{% icon "check-circle" "icon icon-xl" %}</div>
+        <h3>Нет работ по выбранным фильтрам</h3>
+        <p>Сбросьте фильтры или выберите другой статус — либо проверьте черновики заданий в карте курса.</p>
+    </div>
+{% endif %}
+{% else %}
 <div class="table-scroll" role="region" aria-label="Таблица работ, прокручивается по горизонтали" tabindex="0">
 <table class="table-sortable">
     <caption>Работы учеников: {{ page_obj.paginator.count }} в выбранном фильтре</caption>
@@ -116,4 +216,5 @@
 </table>
 </div>
 {% include "lms/pagination.html" %}
+{% endif %}
 {% endblock %}

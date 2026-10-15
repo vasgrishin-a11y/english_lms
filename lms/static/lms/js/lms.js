@@ -2712,28 +2712,53 @@
   // Раскрыть скрытую группу под курсором при перетаскивании (ставит curriculumCollapse).
   var curriculumRevealGroups = null;
 
-  /* ── Карта курса: свёртка «классы → главы → темы» ────────────
-   * Три глубины: 1 — только классы, 2 — классы и главы (по умолчанию),
-   * 3 — классы, главы и темы. Общий переключатель задаёт глубину всему
-   * курсу, такой же мини-переключатель — каждому классу; заголовок класса
-   * и заголовок главы складываются и раскрываются по клику вручную.
+  /* ── Свёртка иерархии: «классы → главы → темы → задания» ─────
+   * Одна механика для карты курса, дерева прогресса ученика и списка
+   * «Проверенных»: доска [data-curriculum-board] с группами уровней
+   * (data-curriculum-group или data-collapse-group: chapters → topics →
+   * assignments → works) и узлами-классами (data-block-drop или
+   * data-collapse-block). Глубины: 1 — только классы, 2 — классы и главы
+   * (по умолчанию), 3 — + темы, 4 — + задания (в «Проверенных» на этом
+   * уровне раскрываются и списки проверенных работ). Общий переключатель
+   * задаёт глубину всей доске, такой же мини-переключатель — каждому
+   * классу карты курса; заголовки узлов складываются и раскрываются
+   * по клику вручную. Классы карты курса при этом живут в 3 уровнях:
+   * групп «assignments» у них нет, и уровень 4 им недостижим.
    */
   function curriculumCollapse() {
-    var board = document.querySelector("[data-curriculum-board]");
-    if (!board) return;
-    // По умолчанию видны классы и главы; при поиске — всё, чтобы совпадения были видны.
-    var DEFAULT_LEVEL = parseInt(board.getAttribute("data-default-depth"), 10) || 2;
+    var boards = Array.prototype.slice.call(document.querySelectorAll("[data-curriculum-board]"));
+    if (!boards.length) return;
 
     function isBlock(node) {
-      return !!node && !!node.getAttribute && node.getAttribute("data-block-drop") !== null;
+      return (
+        !!node &&
+        !!node.getAttribute &&
+        (node.getAttribute("data-block-drop") !== null ||
+          node.getAttribute("data-collapse-block") !== null)
+      );
     }
 
     function blocksIn(scope) {
-      return isBlock(scope) ? [scope] : Array.prototype.slice.call(scope.querySelectorAll("[data-block-drop]"));
+      return isBlock(scope)
+        ? [scope]
+        : Array.prototype.slice.call(
+            scope.querySelectorAll("[data-block-drop], [data-collapse-block]")
+          );
     }
 
     function groupsIn(scope, kind) {
-      return Array.prototype.slice.call(scope.querySelectorAll('[data-curriculum-group="' + kind + '"]'));
+      return Array.prototype.slice.call(
+        scope.querySelectorAll(
+          '[data-curriculum-group="' + kind + '"], [data-collapse-group="' + kind + '"]'
+        )
+      );
+    }
+
+    function groupKind(group) {
+      if (!group || !group.getAttribute) return "";
+      return (
+        group.getAttribute("data-curriculum-group") || group.getAttribute("data-collapse-group") || ""
+      );
     }
 
     function toggleFor(id) {
@@ -2756,8 +2781,8 @@
       var toggle = toggleFor(group.id);
       if (toggle) toggle.setAttribute("aria-expanded", open ? "true" : "false");
       // Кнопки «Глава/Тема» внизу класса живут и прячутся вместе с главами.
-      if (group.getAttribute("data-curriculum-group") === "chapters") {
-        var section = group.closest("[data-block-drop]");
+      if (groupKind(group) === "chapters") {
+        var section = group.closest("[data-block-drop], [data-collapse-block]");
         var footer = section && section.querySelector("[data-block-footer]");
         if (footer) {
           if (open) footer.removeAttribute("hidden");
@@ -2766,23 +2791,31 @@
       }
     }
 
-    // 1 — свёрнут весь класс, 2 — видны главы, 3 — видны и темы,
-    // 0 — смешанное состояние (главы раскрыты выборочно).
+    // 1 — свёрнут весь класс, 2 — видны главы, 3 — видны темы, 4 — задания,
+    // 0 — смешанное состояние (узлы раскрыты выборочно). Группы «works»
+    // (списки проверенных работ) на уровень не влияют: они раскрываются
+    // вручную или вместе с глубиной 4.
     function levelOf(section) {
       if (!isOpen(groupsIn(section, "chapters")[0])) return 1;
-      var topics = groupsIn(section, "topics");
-      if (!topics.length) return 2;
-      var opened = 0;
-      for (var i = 0; i < topics.length; i += 1) {
-        if (isOpen(topics[i])) opened += 1;
+      var current = 2;
+      var chain = ["topics", "assignments"];
+      for (var i = 0; i < chain.length; i += 1) {
+        var groups = groupsIn(section, chain[i]);
+        if (!groups.length) return current;
+        var opened = 0;
+        for (var j = 0; j < groups.length; j += 1) {
+          if (isOpen(groups[j])) opened += 1;
+        }
+        if (opened === 0) return current;
+        if (opened !== groups.length) return 0;
+        current += 1;
       }
-      if (opened === 0) return 2;
-      return opened === topics.length ? 3 : 0;
+      return current;
     }
 
-    function boardLevel() {
+    function boardLevel(board) {
       var sections = blocksIn(board);
-      if (!sections.length) return DEFAULT_LEVEL;
+      if (!sections.length) return 2;
       var level = levelOf(sections[0]);
       for (var i = 1; i < sections.length; i += 1) {
         if (levelOf(sections[i]) !== level) return 0;
@@ -2800,10 +2833,11 @@
     function refreshControls() {
       Array.prototype.forEach.call(document.querySelectorAll("[data-depth-control]"), function (control) {
         if (control.getAttribute("data-depth-control") === "all") {
-          markControl(control, boardLevel());
+          var owner = boardFor(control);
+          if (owner) markControl(control, boardLevel(owner));
           return;
         }
-        var section = control.closest ? control.closest("[data-block-drop]") : null;
+        var section = control.closest ? control.closest("[data-block-drop], [data-collapse-block]") : null;
         if (section) markControl(control, levelOf(section));
       });
     }
@@ -2814,12 +2848,19 @@
         groupsIn(section, "topics").forEach(function (group) {
           setGroup(group, level >= 3);
         });
+        // Задания и списки проверенных работ — глубина 4.
+        groupsIn(section, "assignments").forEach(function (group) {
+          setGroup(group, level >= 4);
+        });
+        groupsIn(section, "works").forEach(function (group) {
+          setGroup(group, level >= 4);
+        });
       });
       refreshControls();
     }
 
     function revealChaptersOf(node) {
-      var section = node && node.closest ? node.closest("[data-block-drop]") : null;
+      var section = node && node.closest ? node.closest("[data-block-drop], [data-collapse-block]") : null;
       if (!section) return;
       var chapters = groupsIn(section, "chapters")[0];
       if (chapters && !isOpen(chapters)) {
@@ -2839,16 +2880,24 @@
       }
     };
 
+    // Доска, которой принадлежит элемент: общий переключатель глубины живёт
+    // вне доски, поэтому для него подходит единственная доска страницы.
+    function boardFor(node) {
+      var board = node && node.closest ? node.closest("[data-curriculum-board]") : null;
+      return board || (boards.length === 1 ? boards[0] : null);
+    }
+
     document.addEventListener("click", function (event) {
       var target = event.target.closest ? event.target : null;
       if (!target) return;
       var option = target.closest("[data-depth-option]");
       if (option) {
         var control = option.closest("[data-depth-control]");
-        if (!control) return;
+        var board = control && boardFor(control);
+        if (!board) return;
         event.preventDefault();
-        var level = parseInt(option.getAttribute("data-depth-level"), 10) || DEFAULT_LEVEL;
-        var section = control.closest("[data-block-drop]");
+        var level = parseInt(option.getAttribute("data-depth-level"), 10) || 2;
+        var section = control.closest("[data-block-drop], [data-collapse-block]");
         if (control.getAttribute("data-depth-control") === "all" || !section) applyLevel(board, level);
         else applyLevel(section, level);
         return;
@@ -2856,7 +2905,7 @@
       var toggle = target.closest("[data-collapse-toggle]");
       if (toggle) {
         var group = document.getElementById(toggle.getAttribute("aria-controls") || "");
-        if (!group) return;
+        if (!group || !boardFor(group)) return;
         event.preventDefault();
         setGroup(group, !isOpen(group));
         refreshControls();
@@ -2867,7 +2916,43 @@
       if (jump) revealChaptersOf(document.getElementById((jump.getAttribute("href") || "").slice(1)));
     });
 
-    applyLevel(board, DEFAULT_LEVEL);
+    // Якорь в адресе (например, возврат из «Разбора» к строке задания):
+    // раскрываем путь к цели и подводим к ней экран.
+    function revealHashTarget(board) {
+      var hash = window.location.hash;
+      if (!hash || hash.length < 2) return;
+      var target = null;
+      try {
+        target = document.getElementById(decodeURIComponent(hash.slice(1)));
+      } catch (error) {
+        return;
+      }
+      if (!target || !board.contains(target)) return;
+      var changed = false;
+      var node = target.parentNode;
+      while (node && node !== board) {
+        if (
+          node.getAttribute &&
+          (node.getAttribute("data-curriculum-group") !== null ||
+            node.getAttribute("data-collapse-group") !== null) &&
+          !isOpen(node)
+        ) {
+          setGroup(node, true);
+          changed = true;
+        }
+        node = node.parentNode;
+      }
+      if (changed) refreshControls();
+      if (target.scrollIntoView) target.scrollIntoView({ block: "center" });
+    }
+
+    boards.forEach(function (board) {
+      // По умолчанию видны классы и главы; при поиске карты курса — всё,
+      // чтобы совпадения были видны.
+      var defaultLevel = parseInt(board.getAttribute("data-default-depth"), 10) || 2;
+      applyLevel(board, defaultLevel);
+      revealHashTarget(board);
+    });
   }
 
   /* ── Классы: режим одного класса ─────────────────────────────
