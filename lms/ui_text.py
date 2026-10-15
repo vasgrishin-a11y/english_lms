@@ -53,7 +53,6 @@ TEXTS_EN = {
     "К заданиям": "To assignments",
     "К курсу": "To course",
     "К очереди": "To review queue",
-    "Назад": "Back",
     "Библиотека": "Library",
     "Из библиотеки": "From library",
     "Журнал": "Gradebook",
