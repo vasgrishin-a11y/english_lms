@@ -264,6 +264,20 @@ class DesignAssetTests(SimpleTestCase):
         self.assertFalse((CSS_DIR.parents[2] / "webpack.config.js").exists())
         self.assertFalse((CSS_DIR.parents[2] / "vite.config.js").exists())
 
+    def test_template_comments_do_not_span_lines(self):
+        """Однострочный комментарий {% comment %}…{% endcomment %} вместо многострочного {# … #}.
+
+        Django выбрасывает {# … #} только вместе с закрывающим ``#}`` на той же
+        строке: продолжение многострочного комментария попадает в отрендеренный
+        HTML как обычный текст. Длинные пояснения пишем тегом {% comment %}.
+        """
+        offenders = []
+        for path in sorted(TEMPLATE_DIR.rglob("*.html")):
+            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+                if line.lstrip().startswith("{#") and "#}" not in line:
+                    offenders.append(f"{path.name}:{number}")
+        self.assertEqual(offenders, [], f"Многострочный {{# … #}} утечёт в HTML: {offenders}")
+
     def test_badge_variants_used_in_templates_exist_in_css(self):
         """Модификатор бейджа без правила — это «голый» текст без цвета и рамки.
 

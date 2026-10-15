@@ -586,7 +586,7 @@ def review_detail(request, pk):
                 "next": queue_ids[1] if queue_ids else None,
                 "position": position,
             },
-            "back_url": _review_back_url(request, submission),
+            "back": _review_back(request, submission),
             "questions": questions,
             "items": items,
             "items_progress": progress_of(items) if items else None,
@@ -647,18 +647,30 @@ def _review_redirect(request, pk):
     return redirect(f"{url}?{query}" if query else url)
 
 
-def _review_back_url(request, submission):
-    """Кнопка «Назад» в разборе: в какое «изначальное меню» возвращать.
+def _review_back(request, submission):
+    """Кнопка «Назад» в разборе: единственный адрес возврата — туда, откуда пришли.
 
     Карточка ученика помечает свои ссылки ``?back=student`` — тогда «Назад»
-    ведёт к строке этого задания прямо в дереве прогресса (якорь раскрывает
-    путь к ней). Без метки остаётся обычная «К очереди».
+    ведёт в раздел «Ученики», к карточке выбранного ученика (якорь раскрывает
+    путь к строке этого задания в дереве прогресса). Без метки возвращаем в
+    очередь проверки с её фильтрами: метка ``back`` в очередь не попадает.
     """
-    if request.GET.get("back") != "student":
-        return None
-    return reverse("teacher_student_detail", args=[submission.student_id]) + (
-        f"#progress-assignment-{submission.assignment_id}"
-    )
+    if request.GET.get("back") == "student":
+        return {
+            "url": reverse("teacher_student_detail", args=[submission.student_id])
+            + f"#progress-assignment-{submission.assignment_id}",
+            "title": "Вернуться к карточке ученика",
+            "to_queue": False,
+        }
+    query = request.GET.copy()
+    query.pop("back", None)
+    query.pop("page", None)
+    encoded = query.urlencode()
+    return {
+        "url": reverse("teacher_review_queue") + (f"?{encoded}" if encoded else ""),
+        "title": "Вернуться в очередь проверки",
+        "to_queue": True,
+    }
 
 
 # ── Пространство «Курс» ────────────────────────────────────────────────────
