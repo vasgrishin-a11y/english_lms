@@ -2791,15 +2791,20 @@
       }
     }
 
-    // 1 — свёрнут весь класс, 2 — видны главы, 3 — видны темы, 4 — задания,
-    // 0 — смешанное состояние (узлы раскрыты выборочно). Группы «works»
-    // (списки проверенных работ) на уровень не влияют: они раскрываются
-    // вручную или вместе с глубиной 4.
+    // В «Проверенных» верхний узел — ученик (цепочка blocks → chapters → topics → works,
+    // глубины 1..5); на карте курса и в карточке ученика верхний узел — класс
+    // (chapters → topics → assignments, глубины 1..4).
+    function chainOf(section) {
+      return groupsIn(section, "blocks").length
+        ? ["blocks", "chapters", "topics", "works"]
+        : ["chapters", "topics", "assignments"];
+    }
+
     function levelOf(section) {
-      if (!isOpen(groupsIn(section, "chapters")[0])) return 1;
+      var chain = chainOf(section);
+      if (!isOpen(groupsIn(section, chain[0])[0])) return 1;
       var current = 2;
-      var chain = ["topics", "assignments"];
-      for (var i = 0; i < chain.length; i += 1) {
+      for (var i = 1; i < chain.length; i += 1) {
         var groups = groupsIn(section, chain[i]);
         if (!groups.length) return current;
         var opened = 0;
@@ -2844,17 +2849,13 @@
 
     function applyLevel(scope, level) {
       blocksIn(scope).forEach(function (section) {
-        setGroup(groupsIn(section, "chapters")[0], level >= 2);
-        groupsIn(section, "topics").forEach(function (group) {
-          setGroup(group, level >= 3);
-        });
-        // Задания и списки проверенных работ — глубина 4.
-        groupsIn(section, "assignments").forEach(function (group) {
-          setGroup(group, level >= 4);
-        });
-        groupsIn(section, "works").forEach(function (group) {
-          setGroup(group, level >= 4);
-        });
+        var chain = chainOf(section);
+        for (var i = 0; i < chain.length; i += 1) {
+          var open = level >= i + 2;
+          groupsIn(section, chain[i]).forEach(function (group) {
+            setGroup(group, open);
+          });
+        }
       });
       refreshControls();
     }

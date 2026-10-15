@@ -105,6 +105,33 @@
     --btn-fg: var(--accent-900);
 }
 
+.btn-return {
+    --btn-bg: var(--turquoise-700);
+    --btn-fg: #ffffff;
+    --btn-border: var(--turquoise-500);
+    box-shadow: 0 0 0 3px var(--turquoise-100), var(--shadow-1);
+    animation: btn-return-pulse 2.2s ease-in-out infinite;
+}
+
+.btn-return:hover {
+    --btn-bg: var(--turquoise-800);
+    color: #ffffff;
+    box-shadow: 0 0 0 4px var(--turquoise-200), var(--shadow-2);
+    animation-play-state: paused;
+}
+
+@keyframes btn-return-pulse {
+    0%,
+    100% {
+        background: var(--turquoise-700);
+        box-shadow: 0 0 0 2px var(--turquoise-100), var(--shadow-1);
+    }
+    50% {
+        background: var(--turquoise-600);
+        box-shadow: 0 0 0 5px var(--turquoise-200), var(--shadow-2);
+    }
+}
+
 .btn-sm {
     min-height: 30px;
     padding: var(--sp-2) var(--sp-4);
