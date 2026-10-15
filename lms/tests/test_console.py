@@ -503,8 +503,7 @@ class ReviewBackButtonTests(LMSCase):
         """«К очереди» возвращает в очередь без метки: «Назад» не должен вести в чужую карточку."""
         attempt = self.submit()
         page = self.teacher_client.get(
-            reverse("teacher_submission_review", args=[attempt.pk])
-            + "?back=student&status=checked"
+            reverse("teacher_submission_review", args=[attempt.pk]) + "?back=student&status=checked"
         )
         self.assertContains(page, 'href="/teacher/review/?status=checked"')
         self.assertNotContains(page, "/teacher/review/?back=student")
@@ -1350,7 +1349,7 @@ class StudentProgressTreeTests(LMSCase):
         # Свёртка как в «Классах»: по умолчанию открыты класс и главы,
         # темы и задания преподаватель раскрывает сам.
         self.assertContains(page, 'data-curriculum-board data-default-depth="2"')
-        self.assertContains(page, 'data-collapse-block')
+        self.assertContains(page, "data-collapse-block")
         self.assertContains(page, 'data-collapse-group="chapters"')
         self.assertContains(page, 'data-collapse-group="topics" hidden')
         self.assertContains(page, 'data-collapse-group="assignments" hidden')
@@ -1370,7 +1369,9 @@ class StudentProgressTreeTests(LMSCase):
         self.assertContains(page, reverse("teacher_submission_review", args=[attempt.pk]))
         self.assertContains(page, "Разбор")
         # «Разбор» помечает возврат: с кнопкой «Назад» — в карточку ученика.
-        self.assertContains(page, f"{reverse('teacher_submission_review', args=[attempt.pk])}?back=student")
+        self.assertContains(
+            page, f"{reverse('teacher_submission_review', args=[attempt.pk])}?back=student"
+        )
 
     def test_no_submission_assignments_are_marked(self):
         self.card_assignment(topic=self.topic, title="Слова темы")

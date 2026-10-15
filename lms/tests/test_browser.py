@@ -76,7 +76,7 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
             "button", name="+ задания", exact=True
         ).click()
         page.get_by_role("link", name="Разбор", exact=True).first.click()
-        page.wait_for_url(re.compile(rf"/teacher/review/\d+/"))
+        page.wait_for_url(re.compile(r"/teacher/review/\d+/"))
         expect(page.get_by_role("link", name="Назад", exact=True)).to_be_visible()
         page.get_by_role("link", name="Назад", exact=True).click()
         page.wait_for_url(
