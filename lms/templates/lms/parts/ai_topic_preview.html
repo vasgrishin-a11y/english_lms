@@ -30,6 +30,14 @@
                             </ul>
                         </div>
                     {% endif %}
+                    {% if assignment.attach_files %}
+                        <div class="panel" style="padding:10px 12px">
+                            <p class="tiny strong mb-0">Файлы из запроса, которые будут приложены к заданию</p>
+                            <ul class="tiny muted" style="margin:6px 0 0;padding-left:18px">
+                                {% for name in assignment.attach_files %}<li>{{ name }}</li>{% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
                     {% if assignment.questions %}
                         <div>
                             <p class="tiny strong mb-0">Вопросы и ключи</p>

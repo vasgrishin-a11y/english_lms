@@ -42,6 +42,7 @@ import re
 import ssl
 import urllib.error
 import urllib.request
+import uuid
 import zipfile
 import zlib
 from dataclasses import dataclass, field
@@ -49,6 +50,7 @@ from io import BytesIO
 
 from django.conf import settings
 from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from django.db import transaction
 from django.utils.text import slugify
 
@@ -958,12 +960,31 @@ AI_AUTHORING_CONTEXT = """Ты — профессиональный препод
 - не создавай формулировки «прочитайте текст и ответьте на вопросы», «посмотрите картинку»
   или «изучите приложенный файл», если после такой инструкции нет самого текста, картинки
   или файла;
-- загруженный файл, переданный модели для разбора, является исходным материалом и не
-  становится вложением задания автоматически. Если преподаватель явно просит приложить
-  материал, создай отдельное текстовое вложение через поле attachments; LMS сохранит его
-  как доступный ученику UTF-8-файл .txt. Сам исходный бинарный файл автоматически не копируется.
-  Если прикладывать не просили, включи нужный полный текст в description или создай другое,
-  самодостаточное задание. Не оставляй скрытых ссылок на материал, которого ученик не увидит.
+- загруженные файлы запроса сами по себе не становятся вложением задания. Если преподаватель
+  прямо просит приложить исходный файл или скриншот («приложи этот скриншот к заданию»,
+  «приложи файл») — перечисли имя этого файла в поле attach_files: LMS сохранит исходный
+  файл вложением, доступным ученику. Если просит материал отдельным текстовым файлом —
+  создай текстовое вложение через поле attachments (LMS сохранит его UTF-8-файлом .txt).
+  Если прикладывать не просили — оба списка пустые, а нужный полный текст включи в
+  description или создай самодостаточное задание. Не оставляй скрытых ссылок на материал,
+  которого ученик не увидит.
+
+Держи правильный порядок внутри условия задания (description):
+- любое задание начинай с условия для ученика: первым делом идёт инструкция — что сделать
+  в задании (цель, шаги, формат и объём ответа, критерии успеха);
+- встроенный материал размещай только после этой инструкции, под явным заголовком
+  «Материал для выполнения», — материал не должен стоять перед условием;
+- не переноси инструкцию в конец описания: ученик должен сразу увидеть, что от него
+  требуется, а затем уже — текст, картинку или другие материалы для работы.
+
+Переноси номера из скриншотов и исходного материала без дублей:
+- LMS сама добавляет номера к пунктам теста («1. », «2. »), а варианты ответа показывает
+  списком, поэтому в text вопроса и в вариантах choices не должно быть своих номеров и
+  букв: «1. 1. Как дела?» — это ошибка; номер страницы убери, формулировку оставь;
+- в description нумерация исходного материала допустима, но только одинарная: никогда не
+  ставь номер перед уже пронумерованным пунктом и не повторяй его («1. 1.», «2. 2)»);
+- переноси со скриншота только читаемый текст: не додумывай обрезанные строки и не
+  копируй номера страниц, колонтитулы и мусор распознавания.
 
 В этой LMS учитель сначала получает содержание как черновик и сам проверяет его,
 а назначает его группе или отдельным ученикам позже. Не добавляй в текст задания
@@ -980,6 +1001,17 @@ AI_AUTHORING_CONTEXT = """Ты — профессиональный препод
   reading;
 - у quiz допустимы пункты mcq, multi, gap, match, order, sort, spell, text и voice;
 - Импорт создаёт только черновики: ничего не публикуй и не утверждай за преподавателя.
+
+Выбирай type задания по форме сдачи ответа, а не по оформлению текста:
+- quiz — пункты с однозначно проверяемыми ответами (автопроверка); вопросы теста — только сюда;
+- text — свободный письменный ответ; file — ученик загружает готовый документ;
+- audio — ученик отвечает голосовой записью; mixed — письменный ответ вместе с файлом
+  или записью;
+- flashcards — слова и фразы для запоминания; material — только текст для занятия,
+  сдавать нечего.
+Упражнения одной формы объединяй в одно задание; тест и письменную работу из одного
+материала оформляй разными заданиями — учителю не придётся разбирать смешанное задание
+по частям.
 """
 
 PROMPT_SCHEMA = """Верни строго JSON без пояснений в формате:
@@ -994,7 +1026,8 @@ PROMPT_SCHEMA = """Верни строго JSON без пояснений в ф�
           "questions": [{"kind": "mcq|multi|gap|match|order|sort|spell|text|voice", "text": "вопрос",
               "points": 1, "explanation": "",
               "choices": [{"text": "вариант", "correct": true, "match_text": ""}]}],
-          "attachments": [{"title": "Название материала", "content": "Текст отдельного материала для файла .txt"}]}],
+          "attachments": [{"title": "Название материала", "content": "Текст отдельного материала для файла .txt"}],
+          "attach_files": ["имя_файла_из_запроса"]}],
        "cards": [{"title": "Карточки: тема", "description": "",
           "cards": [{"front": "слово", "back": "перевод", "example": "пример"}],
           "attachments": [{"title": "Название материала", "content": "Текст отдельного материала для файла .txt"}]}]}]}],
@@ -1009,27 +1042,59 @@ PROMPT_SCHEMA = """Верни строго JSON без пояснений в ф�
   Не выдумывай факты, имена, личный контекст ученика или историю его обучения.
 - Пиши описание задания как готовую инструкцию для любого ученика указанного уровня:
   цель, что сделать, формат/объём ответа и критерии успеха. Не используй имя ученика.
+- Начинай description с этого условия: первыми идут инструкция для ученика (что сделать
+  в задании), и только затем материал, вопросы и пояснения. Не ставь условие в конец
+  описания — в начале любого задания ученик должен увидеть, что от него требуется.
+- В начале text вопроса и вариантов choices не должно быть своих номеров и букв
+  («1. 1. Как дела?», «2) …», «a) …»): LMS сама добавляет номера к пунктам теста, а
+  варианты показывает списком, и номер со страницы скриншота уже был в исходнике.
+  Номера исходника переноси только в description и только однократно — никогда не «1. 1.».
 - Проверяй самодостаточность задания: если для ответа нужно читать, смотреть, слушать или
   изучать материал, помести полный материал в description или явно используй реально доступное
-  ученику вложение. Нельзя оставлять инструкцию «прочитайте текст и ответьте на вопросы»,
-  если в задании нет этого текста или вложения. Исходный файл запроса не считается вложением
-  задания автоматически.
+  ученику вложение (текстовое attachments или исходный файл attach_files).
+  Нельзя оставлять инструкцию «прочитайте текст и ответьте на вопросы», если в задании нет
+  этого текста или вложения. Исходный файл запроса не считается вложением автоматически —
+  только через attach_files по явной просьбе преподавателя.
 - Для mcq и order укажи ровно один верный вариант; для multi — минимум два; для
   match и sort используй пары text ↔ match_text; для gap и spell приведи принимаемые
   ответы как верные варианты; для text и voice choices не нужны.
 - Если выбран quiz, вопросы должны проверять только материал задания. Если в исходном
   материале нет упражнений, можно составить проверочные вопросы только по фактам и
   языку этого материала. Не создавай персональную адаптацию.
-- questions и cards не добавляй без педагогической причины; для типов, которым они не
-  нужны, возвращай пустые списки. Для flashcards создай минимум две карточки.
+- questions возвращай только при type=quiz, cards — только при type=flashcards (минимум
+  две карточки); для остальных типов — пустые списки. Не переписывай вопросы теста в
+  description: там условие и материал, сами вопросы живут только в questions.
+- title — короткий и по существу (до 200 знаков): без номеров, без повтора названия темы
+  и без полного условия — условие живёт в description.
+- skills — 1–3 навыка, которые задание действительно тренирует; не перечисляй все
+  подряд.
 - attachments — отдельные текстовые материалы к заданию или набору карточек;
   добавляй их только если преподаватель явно попросил приложить/создать материал отдельным
   файлом. В каждом элементе верни title и полный content: LMS сохранит его для ученика как
   UTF-8 .txt-вложение. Не создавай внешние ссылки, base64, фиктивные файлы, картинки или аудио.
   Если вложение не просили — верни пустой список. Не дублируй вложение в description без нужды.
-- Не добавляй поля, которых нет в схеме. Лимиты проекта: не более 5 классов, 10 глав
-  на класс, 30 тем, 60 заданий, 20 вопросов и 300 карточек; до 3 вложений на объект,
+- attach_files — исходные файлы запроса, которые надо приложить к заданию как есть; работает
+  только для заданий. Перечисляй только имена из списка «Файлы запроса» и только когда
+  преподаватель прямо просит приложить эти файлы («приложи скриншот/файл к заданию»);
+  самовольно не прикладывай ничего и без просьбы возвращай пустой список. Приложенный файл
+  не заменяет условие: инструкцию и при необходимости ключевой текст всё равно пиши в
+  description, чтобы задание читалось само по себе.
+- Пиши инструкции для ученика на языке запроса преподавателя, а слова, примеры и ответы
+  оставляй на языке материала — не переводи английские формулировки без просьбы.
+- Помни лимиты полей: description — 4000 знаков, question.text — 2000, choice.text — 500.
+  При нехватке сокращай материал, но не условие: оно идёт первым и не должно обрезаться.
+- Если текст материала в запросе усечён по лимиту, не додумывай, чем он заканчивается, —
+  работай только с тем, что передано.
+- Не добавляй поля, которых нет в схеме. Лимиты проекта: не более 5 классов, 20 глав,
+  30 тем, 60 заданий, 20 вопросов в задании и 300 карточек; до 3 вложений на объект,
   не более 12 000 знаков в каждом и 20 000 знаков суммарно.
+- Перед тем как вернуть JSON, проверь себя: условие стоит в начале description; в
+  question.text и choices нет номеров и двойных «1. 1.»; любое «прочитайте/посмотрите»
+  подкреплено реально встроенным материалом; attach_files заполнен только по явной просьбе
+  и только именами из списка файлов запроса; для quiz пункты полные, у mcq/order ровно
+  один верный вариант, для остальных типов questions пустые; названия короткие, навыки
+  по делу, лишних полей и персонализации нет. Найденные ошибки исправь и только потом
+  отдавай JSON.
 """
 
 TARGET_PROMPTS = {
@@ -1136,7 +1201,9 @@ def structure_label(structure):
     return " → ".join(names)
 
 
-def build_prompt(text, *, prompt="", target="mixed", filename="", kind="text", structure=None):
+def build_prompt(
+    text, *, prompt="", target="mixed", filename="", kind="text", structure=None, files=()
+):
     parts = [
         AI_AUTHORING_CONTEXT,
         structure_instruction(structure),
@@ -1150,6 +1217,16 @@ def build_prompt(text, *, prompt="", target="mixed", filename="", kind="text", s
             "Он доступен модели как источник, но не считается автоматически вложенным "
             "в итоговое задание для ученика. Если преподаватель явно просит приложить "
             "материал, верни его отдельный полный текст в поле attachments."
+        )
+    upload_names = [str(name) for name in files if name]
+    if upload_names:
+        parts.append(
+            "Файлы запроса: " + ", ".join(upload_names) + ". Все они доступны модели — "
+            "изображения уходят картинками, документы текстом. Если преподаватель прямо "
+            "просит приложить один из этих файлов к заданию («приложи скриншот», "
+            "«приложи файл»), перечисли его имя в поле attach_files — LMS сохранит "
+            "исходный файл вложением, доступным ученику. Без явной просьбы attach_files "
+            "оставляй пустым."
         )
     if text.strip():
         parts.append(
@@ -1172,12 +1249,15 @@ def build_prompt(text, *, prompt="", target="mixed", filename="", kind="text", s
     return "\n\n".join(parts)
 
 
-def build_material_revision_prompt(material, instruction, structure=None, attachments_text=""):
+def build_material_revision_prompt(
+    material, instruction, structure=None, attachments_text="", attachable_files=()
+):
     """Промпт правки текущего предпросмотра до импорта в курс.
 
     ``attachments_text`` — текст файлов, которые преподаватель приложил прямо
     к правке: он идёт источником рядом с пожеланием, чтобы модель опиралась на
-    реальные материалы, а не додумывала их.
+    реальные материалы, а не додумывала их. ``attachable_files`` — имена файлов,
+    доступные для приложения к заданию (исходные байты сохранит LMS).
     """
     current = json.dumps(material, ensure_ascii=False, indent=1)
     parts = [
@@ -1194,6 +1274,14 @@ def build_material_revision_prompt(material, instruction, structure=None, attach
             "Материал из файлов, приложенных преподавателем к этой правке (используй "
             "его как источник, ничего не выдумывая, и не ссылайся на файлы, которых "
             "ученик не увидит):\n" + attachments_text.strip()
+        )
+    attachable = [str(name) for name in attachable_files if name]
+    if attachable:
+        parts.append(
+            "Файлы, доступные для приложения к заданию (поле attach_files): "
+            + ", ".join(attachable)
+            + ". Используй эти имена только если преподаватель прямо просит приложить "
+            "файл к заданию; без просьбы attach_files оставляй пустым."
         )
     parts.append("Текущая версия материала (JSON):\n" + current)
     parts.append(PROMPT_SCHEMA)
@@ -1335,8 +1423,27 @@ def _audio_format(filename):
     return ext if ext in {"wav", "mp3", "m4a", "ogg", "flac"} else "wav"
 
 
+def _media_part(filename, blob, media_kind):
+    """Одна медиа-часть запроса: картинка data-url или аудио input_audio."""
+    if media_kind == "audio":
+        data = base64.b64encode(blob).decode("ascii")
+        return {
+            "type": "input_audio",
+            "input_audio": {"data": data, "format": _audio_format(filename)},
+        }
+    data, mime = _image_part(blob, _image_mime(filename))
+    return {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{data}"}}
+
+
 def _provider_material(
-    spec, prompt_text, *, filename="", blob=b"", raw_text=False, media_kind="image"
+    spec,
+    prompt_text,
+    *,
+    filename="",
+    blob=b"",
+    raw_text=False,
+    media_kind="image",
+    extra_media=None,
 ):
     """Отправить материал локальной модели (Ollama, LM Studio, свой шлюз).
 
@@ -1344,6 +1451,8 @@ def _provider_material(
     data-url в content, как того ждут vision-модели; аудио — как
     ``input_audio`` (формат, который понимают шлюзы с аудио-моделями);
     остальные файлы (DOCX, XLSX, PDF, TXT) к этому моменту уже превращены в текст.
+    ``extra_media`` — дополнительные файлы того же запроса (например, второй
+    скриншот): каждый становится отдельной частью content рядом с текстом.
     """
     endpoint = ai_endpoint()
     if not endpoint:
@@ -1359,22 +1468,19 @@ def _provider_material(
             "Не выбрана модель: укажите LMS_AI_MODEL (для LM Studio — идентификатор "
             "загруженной модели, для Ollama — имя из `ollama list`)."
         )
-    content = prompt_text
-    if blob and media_kind == "audio":
-        data = base64.b64encode(blob).decode("ascii")
-        content = [
-            {"type": "text", "text": prompt_text},
-            {
-                "type": "input_audio",
-                "input_audio": {"data": data, "format": _audio_format(filename)},
-            },
-        ]
-    elif blob:
-        data, mime = _image_part(blob, _image_mime(filename))
-        content = [
-            {"type": "text", "text": prompt_text},
-            {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{data}"}},
-        ]
+    media = [(filename, blob, media_kind)] if blob else []
+    for item in extra_media or ():
+        try:
+            name, data, kind = item
+        except (TypeError, ValueError):  # неожиданная структура не должна ронять запрос
+            continue
+        if data:
+            media.append((str(name), data, kind or "image"))
+    if media:
+        content = [{"type": "text", "text": prompt_text}]
+        content.extend(_media_part(name, data, kind) for name, data, kind in media)
+    else:
+        content = prompt_text
     body = {
         "model": model,
         "messages": [{"role": "user", "content": content}],
@@ -1436,7 +1542,7 @@ def _normalise_attachments(value):
     return attachments
 
 
-def _normalise_topic(topic_data, caps, counters):
+def _normalise_topic(topic_data, caps, counters, attachable=frozenset()):
     """Тема из JSON → чистая тема с заданиями и карточками."""
     if not isinstance(topic_data, dict):
         return None
@@ -1451,7 +1557,7 @@ def _normalise_topic(topic_data, caps, counters):
     for item in _list_items(topic_data.get("assignments")):
         if not isinstance(item, dict) or counters["assignments"] >= caps["assignments"]:
             continue
-        assignment = _normalise_assignment(item, caps)
+        assignment = _normalise_assignment(item, caps, attachable)
         if assignment:
             topic["assignments"].append(assignment)
             counters["assignments"] += 1
@@ -1463,7 +1569,9 @@ def _normalise_topic(topic_data, caps, counters):
             if counters["cards"] + len(cards) >= caps["cards"] or not isinstance(card, dict):
                 break
             front = _clean(card.get("front"), 200)
-            back = _clean(card.get("back"), 500)
+            # Flashcard.back в модели — max_length=300: длинный перевод обрезаем здесь,
+            # иначе импорт упадёт на Postgres, где varchar(300) проверяется строго.
+            back = _clean(card.get("back"), 300)
             if not front or not back:
                 continue
             cards.append(
@@ -1489,14 +1597,20 @@ def _normalise_topic(topic_data, caps, counters):
     return None
 
 
-def normalise(payload, *, source=""):
+def normalise(payload, *, source="", attachable_files=(), source_files=None):
     """Привести ответ ИИ или офлайн-разбор к безопасной структуре курса.
 
     Поддерживает иерархию Класс → Глава → Тема → Задание.
     Для совместимости: если блок содержит topics без chapters — они попадут
     в главу «Общее» при импорте.
+
+    ``attachable_files`` — имена реально приложенных файлов запроса: в
+    ``attach_files`` заданий попадают только они, выдуманные моделью имена
+    отбрасываются. ``source_files`` — карта путей к временным копиям этих
+    файлов из предыдущей версии; из ответа модели путь не берётся никогда.
     """
     caps = limits()
+    attachable = {str(name) for name in attachable_files if name}
     if not isinstance(payload, dict):
         raise AiError("Материал не распознан: ожидался объект с блоками.")
     blocks = payload.get("blocks")
@@ -1530,7 +1644,7 @@ def normalise(payload, *, source=""):
                 "topics": [],
             }
             for topic_data in _list_items(chapter_data.get("topics")):
-                topic = _normalise_topic(topic_data, caps, counters)
+                topic = _normalise_topic(topic_data, caps, counters, attachable)
                 if topic:
                     chapter["topics"].append(topic)
             if chapter["topics"]:
@@ -1538,7 +1652,7 @@ def normalise(payload, *, source=""):
                 counters["chapters"] += 1
         # Темы без главы (legacy и офлайн-разбор)
         for topic_data in _list_items(block_data.get("topics")):
-            topic = _normalise_topic(topic_data, caps, counters)
+            topic = _normalise_topic(topic_data, caps, counters, attachable)
             if topic:
                 block["topics"].append(topic)
         if block["chapters"] or block["topics"]:
@@ -1546,10 +1660,20 @@ def normalise(payload, *, source=""):
     if not clean_blocks:
         raise AiError("В материале не нашлось ни заданий, ни карточек.")
     result["blocks"] = clean_blocks
+    # Пути временных копий: только из карты преподавателя и только на реально
+    # приложенные файлы — выдуманная моделью строка сюда попасть не может.
+    referenced = _referenced_source_files(result)
+    kept_sources = {
+        name: path
+        for name, path in (source_files or {}).items()
+        if name in referenced and isinstance(path, str)
+    }
+    if kept_sources:
+        result["source_files"] = kept_sources
     return result
 
 
-def _normalise_assignment(item, caps):
+def _normalise_assignment(item, caps, attachable=frozenset()):
     assignment_type = _clean(item.get("type"), 20).lower()
     if assignment_type not in AI_ASSIGNMENT_TYPES:
         assignment_type = Assignment.Type.TEXT
@@ -1623,6 +1747,11 @@ def _normalise_assignment(item, caps):
         max_points = int(item.get("max_points", 10))
     except (TypeError, ValueError):
         max_points = 10
+    attach_files = []
+    for name in _list_items(item.get("attach_files")):
+        clean_name = str(name).strip()
+        if clean_name and clean_name in attachable and clean_name not in attach_files:
+            attach_files.append(clean_name)
     return {
         "type": assignment_type,
         "title": title,
@@ -1631,6 +1760,7 @@ def _normalise_assignment(item, caps):
         "questions": questions,
         "skills": skills,
         "attachments": _normalise_attachments(item.get("attachments")),
+        "attach_files": attach_files,
     }
 
 
@@ -1652,7 +1782,8 @@ def material_summary(material):
         "quizzes": len([item for item in assignments if item["questions"]]),
         "card_sets": len(card_sets),
         "cards": sum(len(item["cards"]) for item in card_sets),
-        "attachments": sum(len(item.get("attachments", [])) for item in assignments + card_sets),
+        "attachments": sum(len(item.get("attachments", [])) for item in assignments + card_sets)
+        + sum(len(_list_items(item.get("attach_files"))) for item in assignments),
     }
 
 
@@ -1665,33 +1796,57 @@ def build_material(
     upload=None,
     filename="",
     structure=None,
+    uploads=None,
 ):
     """Собрать материал: онлайн через ИИ, при неудаче — офлайн-эвристики.
 
     Возвращает ``(material, meta)``: ``meta`` описывает режим, источник и
-    предупреждения для интерфейса.
+    предупреждения для интерфейса. ``uploads`` — все приложенные файлы: сколько
+    бы скриншотов ни прислал преподаватель, vision-модель получит их все одним
+    запросом; документы и PDF читаются офлайн текстом. Одиночный ``upload``
+    сохранён для обратной совместимости.
     """
     mode = ai_mode()
     if mode == "off":
         raise AiError("ИИ-помощник выключен администратором (LMS_AI_ENABLED=0).")
     text = (text or "").strip()[: limits()["text_chars"]]
-    blob = b""
+    files = [item for item in (list(uploads or [])) if item is not None]
     if upload is not None:
-        blob = upload.read()
-        filename = filename or getattr(upload, "name", "")
+        files.insert(0, upload)
+    filename = filename or (getattr(files[0], "name", "") if files else "")
     kind = upload_kind(filename) if filename else "text"
     notes = []
 
-    if blob and len(blob) > max_upload_bytes():
-        raise AiError(
-            f"Файл больше {max_upload_bytes() // (1024 * 1024)} МБ — загрузите часть материала."
-        )
-    if not text and blob:
+    blobs = []
+    for item in files:
+        name = getattr(item, "name", "") or "файл"
+        data = item.read()
+        if len(data) > max_upload_bytes():
+            raise AiError(
+                f"Файл больше {max_upload_bytes() // (1024 * 1024)} МБ — загрузите часть материала."
+            )
+        blobs.append((name, data))
+
+    # Документы и PDF разбираем офлайн текстом; изображения уходят модели как есть.
+    extracted = []
+    for name, data in blobs:
+        if upload_kind(name) not in {"text", "docx", "xlsx", "pdf"}:
+            continue
         try:
-            text = extract_text(filename, blob)
+            got = extract_text(name, data)
         except AiError as exc:
-            notes.append(str(exc))
-    if not text and not blob and not prompt.strip():
+            notes.append(f"Файл «{name}» не прочитан: {exc}")
+            continue
+        if got:
+            extracted.append((name, got))
+    if extracted:
+        if not text:
+            text = extracted[0][1]
+            extracted = extracted[1:]
+        for name, got in extracted:
+            text = f"{text}\n\nМатериал из файла {name}:\n{got}"
+        text = text[: limits()["text_chars"]]
+    if not text and not blobs and not prompt.strip():
         raise AiError("Приложите файл, вставьте текст или опишите, что нужно собрать.")
 
     meta = {
@@ -1706,11 +1861,18 @@ def build_material(
         spec = provider_spec()
         meta["provider"] = spec["key"]
         meta["provider_label"] = spec["label"]
-        attachable = bool(blob) and kind in provider_uploads(spec)
-        if blob and not attachable:
-            notes.append(unsupported_upload_note(filename, spec))
+        readable = provider_uploads(spec)
+        media = [(name, data) for name, data in blobs if upload_kind(name) in readable]
+        for name, _data in blobs:
+            if upload_kind(name) in readable:
+                continue
+            note = unsupported_upload_note(name, spec)
+            if note:
+                notes.append(note)
+        attachable = bool(media)
         if text or prompt.strip() or attachable:
             try:
+                extra_media = [(name, data, "image") for name, data in media[1:]]
                 payload = _provider_material(
                     spec,
                     build_prompt(
@@ -1720,12 +1882,19 @@ def build_material(
                         filename=filename,
                         kind=kind,
                         structure=structure,
+                        files=[name for name, _data in blobs],
                     ),
-                    filename=filename if attachable else "",
-                    blob=blob if attachable else b"",
+                    filename=media[0][0] if attachable else "",
+                    blob=media[0][1] if attachable else b"",
+                    **({"extra_media": extra_media} if extra_media else {}),
                 )
-                material = normalise(payload, source=filename or "Материал ИИ-помощника")
+                material = normalise(
+                    payload,
+                    source=filename or "Материал ИИ-помощника",
+                    attachable_files=[name for name, _data in blobs],
+                )
                 material = apply_structure(material, structure)
+                material = _store_attached_sources(material, blobs)
                 meta["result"] = "online"
                 return material, meta
             except AiError as exc:
@@ -1743,10 +1912,11 @@ def build_material(
                 "Онлайн-разбор недоступен: этот файл провайдер не читает, "
                 "а текста в нём нет — вставьте текст вручную."
             )
-    elif blob:
-        note = offline_notes(filename)
-        if note:
-            notes.append(note)
+    elif blobs:
+        for name, _data in blobs:
+            note = offline_notes(name)
+            if note:
+                notes.append(note)
 
     if not text:
         text = prompt.strip()
@@ -1768,15 +1938,16 @@ def build_material(
 def revision_uploads(uploads, spec):
     """Разобрать файлы, приложенные преподавателем к правке текущей версии.
 
-    Первый файл, который модель читает сама (фото для vision-модели), уходит
-    отдельным вложением — как и при первом разборе материала. Остальные файлы
-    превращаются в текст промпта. Нечитаемый, но разрешённый файл не роняет
-    правку: о нём честно сообщаем предупреждением.
+    Все файлы, которые модель читает сама (фото для vision-модели), уходят в один
+    запрос сразу списком; документы превращаются в текст промпта, а байты всех
+    файлов возвращаются отдельно — по ним сохраняются attach_files. Нечитаемый,
+    но разрешённый файл не роняет правку: о нём честно сообщаем предупреждением.
 
-    Возвращает ``(blob, filename, media_kind, attachments_text, notes)``.
+    Возвращает ``(media, files_data, attachments_text, notes)``: ``media`` —
+    ``(name, data, media_kind)`` для файлов, которые модель читает сама;
+    ``files_data`` — все ``(name, data)`` в порядке приложения.
     """
-    blob, filename, media_kind = b"", "", "image"
-    parts, notes = [], []
+    media, files_data, parts, notes = [], [], [], []
     readable = provider_uploads(spec)
     for upload in uploads:
         # Формат и размер — общий лимит с первым разбором: неподходящий файл
@@ -1785,9 +1956,9 @@ def revision_uploads(uploads, spec):
         name = getattr(upload, "name", "") or "файл"
         kind = upload_kind(name)
         data = upload.read()
-        if not blob and kind in readable:
-            blob, filename = data, name
-            media_kind = "audio" if kind == "audio" else "image"
+        files_data.append((name, data))
+        if kind in readable:
+            media.append((name, data, "audio" if kind == "audio" else "image"))
             continue
         try:
             text = extract_text(name, data)
@@ -1796,12 +1967,6 @@ def revision_uploads(uploads, spec):
             continue
         if text:
             parts.append(f"Материал из файла {name}:\n{text}")
-        elif kind in readable:
-            # Модель понимает такой файл, но вложение в запросе только одно.
-            notes.append(
-                f"К модели можно приложить только один файл за правку: «{name}» в этот "
-                "запрос не попало — повторите правку с ним."
-            )
         elif kind in {"image", "video", "audio"}:
             notes.append(
                 unsupported_upload_note(name, spec)
@@ -1809,7 +1974,7 @@ def revision_uploads(uploads, spec):
             )
         else:
             notes.append(f"В файле «{name}» не нашлось текста — возможно, он пустой или повреждён.")
-    return blob, filename, media_kind, "\n\n".join(parts)[: limits()["text_chars"]], notes
+    return media, files_data, "\n\n".join(parts)[: limits()["text_chars"]], notes
 
 
 #: Правка без описания, но с файлами: преподаватель хочет, чтобы помощник учёл
@@ -1843,18 +2008,43 @@ def revise_material(material, instruction, *, structure=None, uploads=None):
         instruction = DEFAULT_REVISION_INSTRUCTION
 
     spec = provider_spec()
-    blob, filename, media_kind, attachments_text, notes = revision_uploads(uploads, spec)
+    old_sources = dict(material.get("source_files") or {})
+    media, files_data, attachments_text, notes = revision_uploads(uploads, spec)
+    attachable_files = list(dict.fromkeys([*old_sources, *(name for name, _data in files_data)]))
+    extra_media = list(media[1:])
     payload = _provider_material(
         spec,
         build_material_revision_prompt(
-            material, instruction, structure=structure, attachments_text=attachments_text
+            material,
+            instruction,
+            structure=structure,
+            attachments_text=attachments_text,
+            attachable_files=attachable_files,
         ),
-        filename=filename,
-        blob=blob,
-        media_kind=media_kind,
+        filename=media[0][0] if media else "",
+        blob=media[0][1] if media else b"",
+        media_kind=media[0][2] if media else "image",
+        **({"extra_media": extra_media} if extra_media else {}),
     )
-    revised = normalise(payload, source=material.get("title", "Материал ИИ-помощника"))
+    revised = normalise(
+        payload,
+        source=material.get("title", "Материал ИИ-помощника"),
+        attachable_files=attachable_files,
+        source_files=old_sources,
+    )
     revised = apply_structure(revised, structure)
+    # Сохраняем вновь приложенные файлы и убираем старые копии, на которые
+    # модель после правки больше не ссылается.
+    stored = dict(revised.get("source_files") or {})
+    fresh = dict(files_data)
+    for name in sorted(_referenced_source_files(revised)):
+        if name not in stored and name in fresh:
+            stored[name] = store_source_file(name, fresh[name])
+    if stored:
+        revised["source_files"] = stored
+    dropped = {name: path for name, path in old_sources.items() if name not in stored}
+    if dropped:
+        release_source_files(dropped)
     meta = {
         "mode": mode,
         "provider": spec["key"],
@@ -1866,6 +2056,83 @@ def revise_material(material, instruction, *, structure=None, uploads=None):
         "notes": notes,
     }
     return revised, meta
+
+
+# ── Исходные файлы запроса как вложения задания ─────────────────────────────
+#: Временный каталог копий файлов запроса: в сессии хранится только путь,
+#: а на импорте копия превращается в настоящее вложение задания.
+AI_SOURCE_PREFIX = "ai_sources/"
+
+
+def store_source_file(name, data):
+    """Сохранить исходный файл запроса во временном хранилище LMS.
+
+    В материал попадает только путь (``source_files``), сами байты на диск
+    кладём мы: каталог наш, а имя файла берём из уже проверенной загрузки,
+    поэтому модель не может подсунуть произвольный путь.
+    """
+    safe_name = str(name).rsplit("/", 1)[-1] or "material"
+    extension = extension_of(safe_name) or ".bin"
+    return default_storage.save(
+        f"{AI_SOURCE_PREFIX}{uuid.uuid4().hex}{extension}", ContentFile(data)
+    )
+
+
+def release_source_files(source_files):
+    """Удалить временные копии исходных файлов (сброс, новая генерация, импорт).
+
+    Удаляются только пути в нашем каталоге: случайно переданная строка с путём
+    вложения или отзыва не приведёт к потере чужого файла.
+    """
+    if not isinstance(source_files, dict):
+        return
+    for path in source_files.values():
+        if not isinstance(path, str) or not path.startswith(AI_SOURCE_PREFIX):
+            continue
+        try:
+            default_storage.delete(path)
+        except (OSError, ValueError):  # файла может уже не быть — это не ошибка
+            logger.warning("ai_source_file_release_failed path=%s", path)
+
+
+def _iter_assignments(material):
+    """Все задания материала независимо от формата: главы есть или нет."""
+    for block in _list_items(material.get("blocks")):
+        if not isinstance(block, dict):
+            continue
+        topics = [topic for topic in _list_items(block.get("topics")) if isinstance(topic, dict)]
+        for chapter in _list_items(block.get("chapters")):
+            if not isinstance(chapter, dict):
+                continue
+            topics.extend(
+                topic for topic in _list_items(chapter.get("topics")) if isinstance(topic, dict)
+            )
+        for topic in topics:
+            for assignment in _list_items(topic.get("assignments")):
+                if isinstance(assignment, dict):
+                    yield assignment
+
+
+def _referenced_source_files(material):
+    """Имена файлов запроса, на которые ссылаются attach_files заданий."""
+    names = set()
+    for assignment in _iter_assignments(material):
+        for name in _list_items(assignment.get("attach_files")):
+            names.add(str(name))
+    return names
+
+
+def _store_attached_sources(material, blobs):
+    """Сохранить явно приложенные файлы запроса и записать их пути в материал."""
+    blobs_by_name = dict(blobs)
+    stored = {}
+    for name in sorted(_referenced_source_files(material)):
+        data = blobs_by_name.get(name)
+        if data:
+            stored[name] = store_source_file(name, data)
+    if stored:
+        material["source_files"] = stored
+    return material
 
 
 # ── Импорт черновиками ────────────────────────────────────────────────────
@@ -1894,6 +2161,7 @@ def import_material(material, *, target_topic=None, structure=None):
     from .models import Chapter
 
     structure = structure or {}
+    source_files = material.get("source_files") or {}
     selected_block = None
     selected_chapter = None
     block_level = structure.get("block") or {"mode": "auto"}
@@ -1947,7 +2215,9 @@ def import_material(material, *, target_topic=None, structure=None):
             for topic_data in block_data.get("topics", []) + [
                 t for ch in block_data.get("chapters", []) for t in ch.get("topics", [])
             ]:
-                created["assignments"] += _import_assignments(topic, topic_data, created)
+                created["assignments"] += _import_assignments(
+                    topic, topic_data, created, source_files
+                )
                 created["cards"] += _import_cards(topic, topic_data, created)
             continue
 
@@ -2007,7 +2277,9 @@ def import_material(material, *, target_topic=None, structure=None):
                         order=chapter.topics.count(),
                     )
                     created["topics"] += 1
-                created["assignments"] += _import_assignments(topic, topic_data, created)
+                created["assignments"] += _import_assignments(
+                    topic, topic_data, created, source_files
+                )
                 created["cards"] += _import_cards(topic, topic_data, created)
 
         # Темы без главы (legacy)
@@ -2025,7 +2297,7 @@ def import_material(material, *, target_topic=None, structure=None):
                     order=default_ch.topics.count(),
                 )
                 created["topics"] += 1
-            created["assignments"] += _import_assignments(topic, topic_data, created)
+            created["assignments"] += _import_assignments(topic, topic_data, created, source_files)
             created["cards"] += _import_cards(topic, topic_data, created)
 
     logger.info(
@@ -2062,7 +2334,48 @@ def _save_ai_attachments(assignment, materials):
     return len(attachments)
 
 
-def _import_assignments(topic, topic_data, created):
+def _save_source_attachments(assignment, names, source_files):
+    """Явно приложенные файлы запроса → реальные вложения задания.
+
+    Читаем временные копии из ``source_files`` (пути записал LMS, не модель),
+    сохраняем байты отдельной копией вложения. Если копия уже удалена или её
+    нет, пропускаем файл с предупреждением в журнале — импорт не должен
+    падать из-за одного потерянного файла.
+    """
+    source_files = source_files or {}
+    wanted = [str(name) for name in _list_items(names)]
+    if not wanted:
+        return 0
+    last_order = (
+        assignment.attachments.order_by("-order", "-pk").values_list("order", flat=True).first()
+        or 0
+    )
+    count = 0
+    for position, name in enumerate(wanted, start=1):
+        path = source_files.get(name)
+        if not isinstance(path, str) or not path.startswith(AI_SOURCE_PREFIX):
+            logger.warning("ai_source_file_unknown assignment=%s name=%s", assignment.pk, name)
+            continue
+        if not default_storage.exists(path):
+            logger.warning("ai_source_file_missing assignment=%s name=%s", assignment.pk, name)
+            continue
+        try:
+            with default_storage.open(path, "rb") as handle:
+                data = handle.read()
+        except OSError:
+            logger.warning("ai_source_file_unreadable assignment=%s name=%s", assignment.pk, name)
+            continue
+        attachment = AssignmentAttachment(
+            assignment=assignment,
+            title=name[:200],
+            order=last_order + position,
+        )
+        attachment.file.save(name, ContentFile(data), save=True)
+        count += 1
+    return count
+
+
+def _import_assignments(topic, topic_data, created, source_files=None):
     order = topic.assignments.count()
     count = 0
     for item in topic_data.get("assignments", []):
@@ -2091,6 +2404,9 @@ def _import_assignments(topic, topic_data, created):
         else:
             apply_default_skills(assignment)
         created["attachments"] += _save_ai_attachments(assignment, item.get("attachments"))
+        created["attachments"] += _save_source_attachments(
+            assignment, item.get("attach_files"), source_files
+        )
     return count
 
 
@@ -2142,7 +2458,13 @@ REVISION_SCHEMA = """Верни строго JSON без пояснений в �
 Правила: верни задание ЦЕЛИКОМ, уже с правкой — не описывай отличия. Сохраняй язык,
 уровень и тип исходного задания; не добавляй имя, профиль, прошлые ошибки или другую
 персонализацию ученика. Описание должно быть пригодно для любого ученика, которому
-позже назначат это задание. Если новая версия требует прочитать текст, посмотреть
+позже назначат это задание. Начинай description с условия для ученика: первыми идут
+инструкция (что сделать в задании: цель, шаги, формат и объём ответа, критерии), затем —
+материал под заголовком «Материал для выполнения»; не переноси инструкцию в конец
+описания. В начале text вопроса и вариантов не оставляй номеров и букв («1. 1.»,
+«2) …», «a) …»): LMS нумерует пункты сама, а номера страницы скриншота уже были
+в исходнике — держи нумерацию исходника только в description и однократно. Если новая
+версия требует прочитать текст, посмотреть
 картинку, прослушать аудио или открыть файл, полный материал должен быть в description
 либо среди реально доступных ученику вложений; не оставляй ссылку на скрытый или
 несуществующий материал. В attachments возвращай только новые текстовые материалы,
@@ -2290,7 +2612,7 @@ def normalise_revision(payload, *, assignment_type):
             if len(cards) >= limits()["cards"] or not isinstance(card, dict):
                 break
             front = _clean(card.get("front"), 200)
-            back = _clean(card.get("back"), 500)
+            back = _clean(card.get("back"), 300)  # лимит Flashcard.back в модели
             if not front or not back:
                 continue
             cards.append(
@@ -2769,9 +3091,11 @@ __all__ = [
     "provider_hint",
     "provider_spec",
     "provider_uploads",
+    "release_source_files",
     "revise_assignment",
     "revise_material",
     "revision_uploads",
+    "store_source_file",
     "unsupported_upload_note",
     "upload_accept",
     "upload_kind",

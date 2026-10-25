@@ -24,8 +24,11 @@ SESSION_REVISION = "ai_revision"
 
 
 def _clear_session(request):
-    request.session.pop(SESSION_MATERIAL, None)
+    old_material = request.session.pop(SESSION_MATERIAL, None)
     request.session.pop(SESSION_META, None)
+    if isinstance(old_material, dict):
+        # Предпросмотр больше не нужен — удаляем временные копии приложенных файлов.
+        ai.release_source_files(old_material.get("source_files"))
 
 
 @teacher_required
@@ -56,6 +59,7 @@ def ai_assistant(request):
         initial=initial,
     )
     material = request.session.get(SESSION_MATERIAL)
+    previous_material = material
     meta = request.session.get(SESSION_META) or {}
     revision_instruction = meta.get("revision_instruction", "")
 
@@ -67,8 +71,9 @@ def ai_assistant(request):
         if revising:
             instruction = request.POST.get("revision_instruction", "").strip()[:4000]
             revision_instruction = instruction
-            # Файлы можно приложить и к правке: первый читаемый моделью уйдёт
-            # вложением, остальные — текстом промпта (см. ai.revision_uploads).
+            # Файлы можно приложить и к правке: все читаемые моделью уходят
+            # одним запросом (включая второй и третий скриншот), документы
+            # превращаются в текст промпта (см. ai.revision_uploads).
             revision_uploads = request.FILES.getlist("revision_upload")
             if mode != "online":
                 messages.error(
@@ -142,23 +147,15 @@ def ai_assistant(request):
                 prompt = form.cleaned_data["prompt"]
                 if form.cleaned_data.get("text"):
                     prompt = (prompt + "\n\n" + form.cleaned_data["text"]).strip()
-                # Все выбранные файлы сохраняются в одном запросе: первый идёт
-                # как вложение провайдеру, остальные добавляются извлечённым текстом.
-                # Это не позволяет второму выбору затереть первый и работает также
-                # для PDF/DOCX/XLSX в офлайн-режиме.
-                for extra in uploads[1:]:
-                    try:
-                        extra_text = ai.extract_text(extra.name, extra.read())
-                    except ai.AiError as exc:
-                        prompt += f"\n\nМатериал из файла {extra.name}: {exc}"
-                    else:
-                        prompt += f"\n\nМатериал из файла {extra.name}:\n{extra_text}"
+                # Все выбранные файлы уходят в один запрос: изображения модель
+                # видит целиком (сколько бы скриншотов ни приложили), а документы
+                # и PDF внутри build_material превращаются в текст промпта.
                 material, meta = ai.build_material(
                     text="",
                     prompt=prompt,
                     target=form.cleaned_data.get("target") or "mixed",
-                    upload=uploads[0] if uploads else None,
                     structure=form.structure(),
+                    uploads=uploads,
                 )
             except ai.AiError as exc:
                 _clear_session(request)
@@ -181,6 +178,10 @@ def ai_assistant(request):
                 )
                 material, meta = None, {}
             else:
+                if isinstance(previous_material, dict):
+                    # Старый предпросмотр заменён — его временные копии файлов
+                    # больше не нужны (новый материал хранит свои пути сам).
+                    ai.release_source_files(previous_material.get("source_files"))
                 request.session[SESSION_MATERIAL] = material
                 request.session[SESSION_META] = meta
                 for note in meta.get("notes") or []:

@@ -11,6 +11,8 @@ import urllib.error
 import zipfile
 from unittest.mock import patch
 
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -261,6 +263,63 @@ class OfflineParsingTests(LMSCase):
         self.assertEqual(assignment["questions"], [])
         self.assertEqual(assignment["skills"], [])
 
+    def test_card_back_is_clamped_to_model_field_limit(self):
+        """Перевод длиннее 300 знаков обрезается: Flashcard.back в модели max_length=300."""
+        material = ai.normalise(
+            {
+                "blocks": [
+                    {
+                        "name": "Words",
+                        "topics": [
+                            {
+                                "title": "Unit",
+                                "cards": [
+                                    {
+                                        "title": "Карточки",
+                                        "cards": [
+                                            {"front": "gate", "back": "б" * 400, "example": ""},
+                                            {"front": "delay", "back": "задержка", "example": ""},
+                                        ],
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+        card = material["blocks"][0]["topics"][0]["cards"][0]["cards"][0]
+        self.assertEqual(len(card["back"]), 300)
+
+    def test_attach_files_are_kept_only_for_uploaded_names(self):
+        """Имя файла, которого не было среди загруженных, в attach_files не попадает."""
+        payload = {
+            "blocks": [
+                {
+                    "name": "Travel",
+                    "topics": [
+                        {
+                            "title": "Airport",
+                            "assignments": [
+                                {
+                                    "type": "text",
+                                    "title": "Read the card",
+                                    "description": "Прочитайте условие.",
+                                    "attach_files": ["page.jpg", "other.png"],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ]
+        }
+        dropped = ai.normalise(payload)
+        self.assertEqual(dropped["blocks"][0]["topics"][0]["assignments"][0]["attach_files"], [])
+        kept = ai.normalise(payload, attachable_files=["page.jpg"])
+        self.assertEqual(
+            kept["blocks"][0]["topics"][0]["assignments"][0]["attach_files"], ["page.jpg"]
+        )
+
     def test_unexpected_document_parser_error_becomes_ai_error(self):
         with patch("lms.ai._xlsx_text", side_effect=ValueError("bad cell index")):
             with self.assertRaisesMessage(ai.AiError, "Не удалось прочитать файл"):
@@ -316,6 +375,45 @@ class AssistantFormTests(LMSCase):
         response = self.post_form(upload=[first, second])
         self.assertFalse(response.context["form"].errors)
         self.assertEqual(len(response.context["form"].cleaned_data["upload"]), 2)
+        self.assertContains(response, "Что получилось")
+
+    @override_settings(LMS_AI_ENABLED=True, LMS_AI_LOCAL=True)
+    def test_several_photos_reach_the_model_in_one_request(self):
+        """Оба скриншота из формы видит модель — раньше второй превращался в пустой текст."""
+        captured = {}
+
+        def fake(spec, prompt_text, *, filename="", blob=b"", **kwargs):
+            captured.update(filename=filename, blob=blob, prompt=prompt_text, **kwargs)
+            return {
+                "title": "Материал",
+                "blocks": [
+                    {
+                        "name": "B",
+                        "topics": [
+                            {
+                                "title": "T",
+                                "assignments": [
+                                    {
+                                        "type": "text",
+                                        "title": "A",
+                                        "description": "Прочитайте материал ниже.",
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+
+        first = SimpleUploadedFile("page-a.jpg", b"\xff\xd8\xff\xaa", "image/jpeg")
+        second = SimpleUploadedFile("page-b.png", b"\x89PNG\r\n", "image/png")
+        with patch("lms.ai._provider_material", side_effect=fake):
+            response = self.post_form(prompt="Разбери обе страницы", upload=[first, second])
+        self.assertFalse(response.context["form"].errors)
+        self.assertEqual(captured["filename"], "page-a.jpg")
+        self.assertEqual(captured["blob"], b"\xff\xd8\xff\xaa")
+        self.assertEqual(captured["extra_media"][0][0], "page-b.png")
+        self.assertIn("Файлы запроса: page-a.jpg, page-b.png", captured["prompt"])
         self.assertContains(response, "Что получилось")
 
     def test_unexpected_builder_error_is_rendered_instead_of_500(self):
@@ -698,7 +796,10 @@ class OnlineModeTests(LMSCase):
     @override_settings(
         LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="ollama", LMS_AI_LOCAL=True
     )
-    def test_revision_warns_about_a_second_photo_instead_of_silently_dropping_it(self):
+    def test_revision_sends_several_photos_to_the_vision_model(self):
+        """Оба скриншота уходят в один запрос: второй не теряется и не требует повтора."""
+        photo_a = b"\xff\xd8\xff\xaa" + b"page-a"
+        photo_b = b"\xff\xd8\xff\xbb" + b"page-b"
         with patch(
             "lms.ai._provider_material", side_effect=[self.AI_PAYLOAD, self.AI_PAYLOAD]
         ) as provider:
@@ -706,15 +807,18 @@ class OnlineModeTests(LMSCase):
             response = self.revise(
                 revision_instruction="Учти обе страницы",
                 revision_upload=[
-                    SimpleUploadedFile("page-a.jpg", b"\xff\xd8\xff\xaa", "image/jpeg"),
-                    SimpleUploadedFile("page-b.jpg", b"\xff\xd8\xff\xbb", "image/jpeg"),
+                    SimpleUploadedFile("page-a.jpg", photo_a, "image/jpeg"),
+                    SimpleUploadedFile("page-b.jpg", photo_b, "image/jpeg"),
                 ],
             )
 
-        # Вложение в запросе одно — оставшееся фото не теряется молча.
-        self.assertEqual(provider.call_args_list[-1].kwargs["filename"], "page-a.jpg")
-        self.assertContains(response, "page-b.jpg")
-        self.assertContains(response, "только один файл за правку")
+        call = provider.call_args_list[-1]
+        self.assertEqual(call.kwargs["filename"], "page-a.jpg")
+        self.assertEqual(call.kwargs["blob"], photo_a)
+        self.assertEqual(call.kwargs["extra_media"][0][0], "page-b.jpg")
+        self.assertEqual(call.kwargs["extra_media"][0][1], photo_b)
+        self.assertContains(response, "с учётом приложенных файлов")
+        self.assertNotContains(response, "только один файл за правку")
 
     @override_settings(
         LMS_AI_API_KEY="test-key", LMS_AI_ENABLED=True, LMS_AI_PROVIDER="ollama", LMS_AI_LOCAL=True
@@ -905,6 +1009,57 @@ class AssistantModelTests(LMSCase):
         prompt = ai.build_prompt("", target="assignment")
         self.assertIn("В запросе нет отдельного материала", prompt)
         self.assertIn("Нельзя оставлять инструкцию", prompt)
+
+    def test_prompt_places_student_condition_before_material(self):
+        """Условие для ученика — в начале description, материал — только после него."""
+        prompt = ai.build_prompt("текст материала", target="mixed")
+        self.assertIn("Держи правильный порядок внутри условия задания", prompt)
+        self.assertIn("первым делом идёт инструкция", prompt)
+        self.assertIn("не переноси инструкцию в конец", prompt)
+        self.assertIn("Начинай description с этого условия", prompt)
+
+        revision_prompt = ai.build_revision_prompt(self.assignment, "Перепиши условие")
+        self.assertIn("Начинай description с условия для ученика", revision_prompt)
+        self.assertIn("не переноси инструкцию в конец", revision_prompt)
+
+    def test_prompt_forbids_numbering_duplicates_from_screenshots(self):
+        """Номера со скриншотов не дублируются: LMS нумерует пункты теста сама."""
+        prompt = ai.build_prompt("скриншот страницы", target="mixed")
+        self.assertIn("«1. 1. Как дела?»", prompt)
+        self.assertIn("LMS сама добавляет номера", prompt)
+        self.assertIn("только однократно", prompt)
+        self.assertIn("20 глав", prompt)
+        self.assertNotIn("10 глав", prompt)
+
+        revision_prompt = ai.build_revision_prompt(self.assignment, "Перепиши условие")
+        self.assertIn("«1. 1.»", revision_prompt)
+        self.assertIn("LMS нумерует пункты сама", revision_prompt)
+
+    def test_prompt_guides_creation_logic_and_self_check(self):
+        """Тип по форме сдачи, лимиты полей и самопроверка перед возвратом JSON."""
+        prompt = ai.build_prompt("", target="mixed")
+        self.assertIn("по форме сдачи ответа", prompt)
+        self.assertIn("questions возвращай только при type=quiz", prompt)
+        self.assertIn("description — 4000 знаков", prompt)
+        self.assertIn("не додумывай, чем он заканчивается", prompt)
+        self.assertIn("Перед тем как вернуть JSON", prompt)
+
+    def test_prompt_lists_uploaded_files_for_attachment(self):
+        """Промпт перечисляет файлы запроса и объясняет поле attach_files."""
+        prompt = ai.build_prompt("текст", files=["page.jpg", "page2.png"])
+        self.assertIn("Файлы запроса: page.jpg, page2.png", prompt)
+        self.assertIn("перечисли его имя в поле attach_files", prompt)
+        self.assertIn("Без явной просьбы attach_files", prompt)
+        self.assertIn("attach_files", ai.PROMPT_SCHEMA)
+        self.assertIn("attach_files", ai.AI_AUTHORING_CONTEXT)
+
+        revision_prompt = ai.build_material_revision_prompt(
+            {"blocks": [{"topics": []}]},
+            "Приложи файл к заданию",
+            attachable_files=["page.jpg"],
+        )
+        self.assertIn("Файлы, доступные для приложения", revision_prompt)
+        self.assertIn("page.jpg", revision_prompt)
 
     def test_material_revision_prompt_contains_current_version(self):
         material = {
@@ -1187,6 +1342,28 @@ class LocalModelFallbackTests(SimpleTestCase):
         self.assertEqual(meta["provider"], "ollama")
         self.assertIn("Ollama", meta["provider_label"])
         self.assertTrue(any("разобран офлайн" in note for note in meta["notes"]))
+        self.assertTrue(material["blocks"])
+
+    @override_settings(LMS_AI_ENABLED=True, LMS_AI_LOCAL=True)
+    def test_both_photos_are_sent_and_not_dropped_as_empty_text(self):
+        """Второй скриншот уходит модели картинкой, а не пустым текстом в промпте."""
+        captured = {}
+
+        def fake(spec, prompt_text, *, filename="", blob=b"", **kwargs):
+            captured.update(filename=filename, blob=blob, prompt=prompt_text, **kwargs)
+            raise ai.AiError("нет сети")
+
+        first = SimpleUploadedFile("page-a.jpg", b"\xff\xd8\xff\xaa")
+        second = SimpleUploadedFile("page-b.jpg", b"\xff\xd8\xff\xbb")
+        with patch("lms.ai._provider_material", side_effect=fake):
+            material, meta = ai.build_material(prompt="Собери упражнения", uploads=[first, second])
+        self.assertEqual(captured["filename"], "page-a.jpg")
+        self.assertEqual(captured["blob"], b"\xff\xd8\xff\xaa")
+        self.assertEqual(captured["extra_media"][0][0], "page-b.jpg")
+        self.assertEqual(captured["extra_media"][0][1], b"\xff\xd8\xff\xbb")
+        self.assertIn("Файлы запроса: page-a.jpg, page-b.jpg", captured["prompt"])
+        self.assertNotIn("Материал из файла page-b.jpg", captured["prompt"])
+        self.assertEqual(meta["result"], "offline")
         self.assertTrue(material["blocks"])
 
     @override_settings(LMS_AI_ENABLED=True, LMS_AI_LOCAL=True)
@@ -1550,6 +1727,103 @@ class NormaliseRevisionTests(SimpleTestCase):
         with self.assertRaisesMessage(ai.AiError, "карточек"):
             ai.normalise_revision(payload, assignment_type=Assignment.Type.FLASHCARDS)
 
+    def test_revision_card_back_is_clamped_to_model_field_limit(self):
+        payload = dict(
+            REVISION_CARDS,
+            cards=[
+                {"front": "gate", "back": "б" * 400, "example": ""},
+                {"front": "delay", "back": "задержка", "example": ""},
+            ],
+        )
+        revision = ai.normalise_revision(payload, assignment_type=Assignment.Type.FLASHCARDS)
+        self.assertEqual(len(revision["cards"][0]["back"]), 300)
+
     def test_missing_title_is_an_error(self):
         with self.assertRaisesMessage(ai.AiError, "названия или условия"):
             ai.normalise_revision({"description": "only"}, assignment_type=Assignment.Type.TEXT)
+
+
+class SourceAttachmentTests(LMSCase):
+    """Явная просьба приложить файл: после импорта исходник — настоящее вложение."""
+
+    PAYLOAD = {
+        "title": "Travel",
+        "blocks": [
+            {
+                "name": "Travel",
+                "topics": [
+                    {
+                        "title": "Airport",
+                        "assignments": [
+                            {
+                                "type": "text",
+                                "title": "Read the card",
+                                "description": "Прочитайте условие и выполните задание.",
+                                "attach_files": ["page.jpg", "not-uploaded.png"],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+
+    def post_ai(self, **data):
+        payload = {
+            "target": "mixed",
+            "prompt": "Приложи скриншот page.jpg к заданию",
+            "text": "",
+            "structure_confirmed": "on",
+        }
+        payload.update(data)
+        return self.teacher_client.post(reverse("teacher_ai"), payload)
+
+    @override_settings(LMS_AI_ENABLED=True, LMS_AI_LOCAL=True, LMS_AI_API_KEY="")
+    def test_requested_source_file_is_previewed_imported_and_released(self):
+        photo = b"\xff\xd8\xff\xe0" + b"screenshot-bytes"
+        with patch("lms.ai._provider_material", return_value=self.PAYLOAD):
+            response = self.post_ai(upload=SimpleUploadedFile("page.jpg", photo, "image/jpeg"))
+        self.assertFalse(response.context["form"].errors)
+        # Предпросмотр показывает будущее вложение и не показывает выдуманное имя.
+        self.assertContains(response, "будут приложены к заданию")
+        self.assertContains(response, "page.jpg")
+        self.assertNotContains(response, "not-uploaded.png")
+
+        material = self.teacher_client.session["ai_material"]
+        self.assertEqual(
+            material["blocks"][0]["topics"][0]["assignments"][0]["attach_files"], ["page.jpg"]
+        )
+        stored_path = material["source_files"]["page.jpg"]
+        self.assertTrue(default_storage.exists(stored_path))
+
+        response = self.teacher_client.post(reverse("teacher_ai_import"))
+        self.assertRedirects(response, reverse("teacher_curriculum"))
+        draft = Assignment.objects.get(title="Read the card")
+        attachment = draft.attachments.get()
+        self.assertEqual(attachment.title, "page.jpg")
+        self.assertEqual(attachment.file.read(), photo)
+        # После импорта временная копия удалена — у ученика осталась своя.
+        self.assertFalse(default_storage.exists(stored_path))
+
+    @override_settings(LMS_AI_ENABLED=True, LMS_AI_LOCAL=True, LMS_AI_API_KEY="")
+    def test_reset_releases_stored_source_files(self):
+        photo = b"\xff\xd8\xff\xe0"
+        with patch("lms.ai._provider_material", return_value=self.PAYLOAD):
+            self.post_ai(upload=SimpleUploadedFile("page.jpg", photo, "image/jpeg"))
+        stored_path = self.teacher_client.session["ai_material"]["source_files"]["page.jpg"]
+        self.assertTrue(default_storage.exists(stored_path))
+
+        self.teacher_client.post(reverse("teacher_ai"), {"reset": "1"})
+        self.assertFalse(default_storage.exists(stored_path))
+
+    def test_release_source_files_ignores_foreign_paths(self):
+        """Удаляются только временные копии из нашего каталога, не чужие файлы."""
+        keep = default_storage.save("assignments/keep-me.jpg", ContentFile(b"binary"))
+        try:
+            ai.release_source_files({"x": keep})
+            self.assertTrue(default_storage.exists(keep))
+            own = ai.store_source_file("page.jpg", b"\xff\xd8\xff")
+            ai.release_source_files({"page.jpg": own})
+            self.assertFalse(default_storage.exists(own))
+        finally:
+            default_storage.delete(keep)
