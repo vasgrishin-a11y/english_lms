@@ -161,7 +161,7 @@
                                     <input type="file" id="id_revision_upload" name="revision_upload" multiple
                                            accept="{{ upload_accept }}" data-dropzone="1" data-max-mb="{{ max_upload_mb }}"
                                            data-dropzone-hint="Перетащите файлы сюда или вставьте их по одному Ctrl+V">
-                                    <div class="help-text">То же, что и при первом разборе: документы (Word, Excel, PDF, текст) читаются офлайн, фото уходит vision-модели — одно за правку, каждый файл до {{ max_upload_mb }} МБ. Без описания ИИ просто добавит материал из файлов в текущую версию.</div>
+                                    <div class="help-text">То же, что и при первом разборе: документы (Word, Excel, PDF, текст) читаются офлайн, фото уходят vision-модели одним запросом — можно приложить несколько скриншотов сразу, каждый файл до {{ max_upload_mb }} МБ. Без описания ИИ просто добавит материал из файлов в текущую версию.</div>
                                 </div>
                                 <div class="form-actions">
                                     <button class="btn" type="submit" name="revise_material" value="1">{% icon "sparkles" %}{% t "Обновить текущую версию" %}</button>
