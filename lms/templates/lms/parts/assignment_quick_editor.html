@@ -1,0 +1,37 @@
+{% load lms_tags %}
+{% comment %}
+Быстрое редактирование задания: форма темы доски и полного редактора.
+
+Тяжёлая часть доски темы — формы быстрых правок на каждое задание (несколько
+select, textarea и подсказок). Рендерим их тогда, когда редактор действительно
+открыт: ?edit=<pk>, ошибка сохранения или HTMX-запрос по клику на «Быстрое
+редактирование».
+{% endcomment %}
+<form method="post" action="{% url 'teacher_assignment_quick_edit' assignment.pk %}" enctype="multipart/form-data" style="margin-top:12px;display:flex;flex-direction:column;gap:10px">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{% url 'teacher_topic_board' topic.pk %}#assignment-{{ assignment.pk }}">
+    {% include "lms/form_fields.html" with form=assignment.quick_form %}
+    {% if assignment.question_forms %}
+    <p class="alert">При сохранении правильных ответов автоматические результаты прошлых работ будут пересчитаны. Ручные оценки сохранятся.</p>
+    {% for question_form in assignment.question_forms %}
+    <fieldset><legend>Пункт {{ forloop.counter }} — вопрос и правильные ответы</legend>
+        {% include "lms/form_fields.html" with form=question_form %}
+    </fieldset>
+    {% endfor %}
+    {% endif %}
+    {% if assignment.attachments.exists %}
+    <div class="form-field">
+        <label>Удалить вложения</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+            {% for att in assignment.attachments.all %}
+            <label style="display:flex;align-items:center;gap:6px;font-size:11px;background:var(--surface);border:1px solid var(--border-subtle);border-radius:6px;padding:4px 8px"><input type="checkbox" name="delete_attachments" value="{{ att.pk }}"> {{ att.title|default:att.file.name|slice:"-40:" }}</label>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    <div class="row row-tight">
+        <button class="btn btn-sm" type="submit">{% icon "save" %}Сохранить</button>
+        <button class="btn btn-ghost btn-sm" type="button" data-cancel-editor>Отмена</button>
+        <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_form' assignment.pk %}?from_topic=1">Полный редактор</a>
+    </div>
+</form>

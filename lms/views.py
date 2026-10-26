@@ -19,6 +19,7 @@ from django.shortcuts import redirect
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET
 
+from . import audience
 from .decorators import get_user_role
 from .models import Assignment, Feedback, Profile, QuestionResponse, Submission
 from .search import student_suggest, teacher_suggest
@@ -100,47 +101,97 @@ def dashboard(request):
 
 
 def _resolve_private_file(request, name):
-    """Найти файл по имени из БД и проверить доступ. Возвращает FileField или None."""
-    teacher = get_user_role(request.user) == Profile.Role.TEACHER
+    """Найти файл по имени из БД и проверить доступ. Возвращает FileField или None.
+
+    Файл ищется по имени, поэтому кандидатов всегда несколько строк. Раньше доступ
+    ученика проверялся фильтром ``Assignment.objects.visible(user=...)`` — огромный
+    ``visibility_q`` собирался заново на каждый запрос ``<img>`` и ``<audio>`` и
+    выполнялся шесть раз внутри одного запроса. Теперь строки аудитории читаются
+    одним UNION-запросом на всех кандидатов (см. :class:`lms.audience.AudienceRules`).
+    """
     from .models import AssignmentAttachment, FeedbackAudioComment
 
-    materials = Assignment.objects.filter(material_file=name)
-    attachments = AssignmentAttachment.objects.filter(file=name)
-    attempts = Submission.objects.filter(file_answer=name)
-    feedback = Feedback.objects.filter(audio_comment=name)
+    teacher = get_user_role(request.user) == Profile.Role.TEACHER
+    materials = list(
+        Assignment.objects.filter(material_file=name).select_related(
+            "topic__block", "topic__chapter__block"
+        )
+    )
+    attachments = list(
+        AssignmentAttachment.objects.filter(file=name).select_related(
+            "assignment__topic__block", "assignment__topic__chapter__block"
+        )
+    )
+    attempts = list(
+        Submission.objects.filter(file_answer=name).select_related(
+            "assignment__topic__block", "assignment__topic__chapter__block"
+        )
+    )
+    feedback = list(
+        Feedback.objects.filter(audio_comment=name).select_related(
+            "submission__assignment__topic__block", "submission__assignment__topic__chapter__block"
+        )
+    )
     # Голосовые комментарии проверки лежат отдельной моделью: без них ученик
     # получал 404 на каждую запись, кроме самой первой (историческое поле).
-    voice_comments = FeedbackAudioComment.objects.filter(audio=name)
-    items = QuestionResponse.objects.filter(file_answer=name)
-    if not teacher:
-        visible = Assignment.objects.visible(user=request.user)
-        materials = materials.filter(pk__in=visible)
-        attachments = attachments.filter(assignment__in=visible)
-        attempts = attempts.filter(
-            student=request.user,
-            assignment__in=visible,
+    voice_comments = list(
+        FeedbackAudioComment.objects.filter(audio=name).select_related(
+            "feedback__submission__assignment__topic__block",
+            "feedback__submission__assignment__topic__chapter__block",
         )
-        feedback = feedback.filter(
-            submission__student=request.user,
-            submission__assignment__in=visible,
+    )
+    items = list(
+        QuestionResponse.objects.filter(file_answer=name).select_related(
+            "assignment__topic__block", "assignment__topic__chapter__block"
         )
-        voice_comments = voice_comments.filter(
-            feedback__submission__student=request.user,
-            feedback__submission__assignment__in=visible,
-        )
-        items = items.filter(student=request.user, assignment__in=visible)
-    for queryset, field in (
-        (materials, "material_file"),
-        (attachments, "file"),
-        (attempts, "file_answer"),
-        (feedback, "audio_comment"),
-        (voice_comments, "audio"),
-    ):
-        found = queryset.first()
-        if found:
-            return getattr(found, field)
-    item = items.first()
-    return item.file_answer if item else None
+    )
+    if teacher:
+        for row, field in (
+            (materials, "material_file"),
+            (attachments, "file"),
+            (attempts, "file_answer"),
+            (feedback, "audio_comment"),
+            (voice_comments, "audio"),
+            (items, "file_answer"),
+        ):
+            if row:
+                return getattr(row[0], field)
+        return None
+
+    student = request.user
+    assignments = (
+        [*materials]
+        + [row.assignment for row in attachments]
+        + [row.assignment for row in attempts]
+        + [row.submission.assignment for row in feedback]
+        + [row.feedback.submission.assignment for row in voice_comments]
+        + [row.assignment for row in items]
+    )
+    rules = audience.AudienceRules(student, [item for item in assignments if item is not None])
+
+    def allowed(assignment):
+        return assignment is not None and rules.allows(assignment)
+
+    for assignment in materials:
+        if allowed(assignment):
+            return assignment.material_file
+    for attachment in attachments:
+        if allowed(attachment.assignment):
+            return attachment.file
+    for attempt in attempts:
+        if attempt.student_id == student.pk and allowed(attempt.assignment):
+            return attempt.file_answer
+    for row in feedback:
+        if row.submission.student_id == student.pk and allowed(row.submission.assignment):
+            return row.audio_comment
+    for row in voice_comments:
+        submission = row.feedback.submission
+        if submission.student_id == student.pk and allowed(submission.assignment):
+            return row.audio
+    for row in items:
+        if row.student_id == student.pk and allowed(row.assignment):
+            return row.file_answer
+    return None
 
 
 def _signature_matches(name, file):

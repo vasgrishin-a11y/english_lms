@@ -45,7 +45,14 @@ from .backup import (
     load_backup_file,
     serialize_curriculum,
 )
-from .curriculum import course_tree, gradebook, queue_counts, teacher_overview
+from .curriculum import (
+    course_tree,
+    gradebook,
+    gradebook_students,
+    put_cached_queue_counts,
+    queue_counts,
+    teacher_overview,
+)
 from .decorators import get_user_role, teacher_required
 from .forms import (
     AssignmentForm,
@@ -274,7 +281,7 @@ def console_home(request):
         "topic__block", "topic__chapter"
     )[:5]
     blocks_data, _ = course_tree(query="", teacher_view=True)
-    request.session["_queue_counts"] = {"ts": timezone.now().timestamp(), **overview["queue"]}
+    put_cached_queue_counts(overview["queue"])
 
     is_teacher_day = timezone.localdate() == TEACHER_DAY_2026
     show_teacher_day_card = False
@@ -462,8 +469,9 @@ def review_queue(request):
     """Очередь проверки: счётчики по статусам, фильтры и сортировка таблицы."""
     submissions, scope, state = _queue_queryset(request)
     counts = queue_counts()
-    # Только в атрибут запроса: запись в сессию добавила бы три запроса на экран.
+    # Только в атрибут запроса: запись в сессию добавила бы UPDATE на каждый экран.
     request.lms_queue_counts = counts
+    put_cached_queue_counts(counts)
     page = Paginator(submissions, settings.LMS_PAGE_SIZE).get_page(request.GET.get("page"))
     return render(
         request,
@@ -1712,7 +1720,10 @@ def topic_copy(request, pk):
 def assignment_form(request, pk=None):
     assignment = (
         get_object_or_404(
-            Assignment.objects.select_related("topic__block", "topic__chapter"), pk=pk
+            Assignment.objects.select_related("topic__block", "topic__chapter").prefetch_related(
+                *audience.ASSIGNMENT_PREFETCH
+            ),
+            pk=pk,
         )
         if pk
         else None
@@ -1730,7 +1741,12 @@ def assignment_form(request, pk=None):
     parent_topic = assignment.topic if assignment else None
     parent_topic_id = request.POST.get("topic") or request.GET.get("topic") or ""
     if str(parent_topic_id).isdigit():
-        parent_topic = Topic.objects.filter(pk=int(parent_topic_id)).first()
+        parent_topic = (
+            Topic.objects.select_related("block", "chapter")
+            .prefetch_related(*audience.TOPIC_CHAIN_PREFETCH)
+            .filter(pk=int(parent_topic_id))
+            .first()
+        )
     inherited_audience = audience.describe(parent_topic) if parent_topic else None
     form = AssignmentForm(
         request.POST or None,
@@ -2144,40 +2160,94 @@ def topic_board(request, pk):
     return _render_topic_board(request, pk)
 
 
+#: Сколько заданий темы получает форму быстрых правок сразу в HTML доски.
+#: Больше — только по открытию редактора (см. ``assignment_quick_editor``).
+BOARD_INLINE_EDITORS = 0
+
+
+def _quick_editor_context(assignment):
+    """Форма быстрых правок одного задания: она тяжёлая, поэтому строится точечно.
+
+    Поля и подсказки формы вместе со страницами пунктов дают около 10 КБ HTML на
+    задание. На теме из десяти заданий это 100 КБ разметки, которую браузер
+    разбирает ради одного открытого редактора.
+    """
+    assignment.quick_form = AssignmentQuickForm(
+        instance=assignment, auto_id=f"assignment-{assignment.pk}-%s"
+    )
+    # Пункты автопроверки правим только у теста: у задания другого типа они
+    # лежат «про запас» и в быстром редакторе не участвуют в сохранении.
+    assignment.question_forms = (
+        [QuestionForm(instance=q, prefix=f"question-{q.pk}") for q in assignment.questions.all()]
+        if assignment.is_quiz
+        else []
+    )
+    assignment.edit_open = True
+
+
+@teacher_required
+@require_GET
+def assignment_quick_editor(request, pk):
+    """Форма быстрых правок задания для доски темы: приезжает по первому открытию."""
+    assignment = get_object_or_404(
+        Assignment.objects.select_related("topic").prefetch_related(
+            "questions__choices", "attachments"
+        ),
+        pk=pk,
+    )
+    _quick_editor_context(assignment)
+    return render(
+        request,
+        "lms/parts/assignment_quick_editor.html",
+        {"assignment": assignment, "topic": assignment.topic},
+    )
+
+
 def _render_topic_board(request, pk, edit_errors=None):
     """Раздел Задания по Теме: все задания темы со всем содержимым для правок учителя.
 
     Открывается при клике на тему в разделе Курс. Справа — навигация по навыкам на английском.
     Не добавляется в главное меню, выход — кнопка Назад в Курс.
+
+    Форму быстрых правок получают только открытые редакторы: ``?edit=<pk>``,
+    неудачное сохранение или первые ``BOARD_INLINE_EDITORS`` заданий темы.
+    Остальные догружаются по клику на «Быстрое редактирование».
     """
     topic = get_object_or_404(Topic.objects.select_related("block", "chapter"), pk=pk)
     assignments = list(
         Assignment.objects.filter(topic=topic)
         .select_related("topic__block", "topic__chapter")
+        # Правила аудитории самих заданий — prefetch'ом: иначе на каждое задание
+        # по четыре запроса в accumulate(). Уровни-родители уже описаны темой.
         .prefetch_related(
-            "skills", "questions__choices", "cards", "attachments", "groups", "assigned_students"
+            "skills",
+            "questions__choices",
+            "cards",
+            "attachments",
+            *audience.ASSIGNMENT_OWN_PREFETCH,
         )
         .order_by("order", "pk")
     )
     topic_audience = audience.describe(topic)
-    for assignment in assignments:
+    open_pk = None
+    if edit_errors:
+        open_pk = edit_errors[0]
+    else:
+        requested = request.GET.get("edit", "")
+        if requested.isdigit():
+            open_pk = int(requested)
+    for position, assignment in enumerate(assignments):
         assignment.audience = audience.accumulate(assignment, topic_audience)
-        assignment.quick_form = AssignmentQuickForm(
-            instance=assignment, auto_id=f"assignment-{assignment.pk}-%s"
+        assignment.quick_form = None
+        assignment.question_forms = []
+        eager = assignment.pk == open_pk or (
+            BOARD_INLINE_EDITORS and position < BOARD_INLINE_EDITORS
         )
-        # Пункты автопроверки правим только у теста: у задания другого типа они
-        # лежат «про запас» и в быстром редакторе не участвуют в сохранении.
-        assignment.question_forms = (
-            [
-                QuestionForm(instance=q, prefix=f"question-{q.pk}")
-                for q in assignment.questions.all()
-            ]
-            if assignment.is_quiz
-            else []
-        )
+        if not eager:
+            continue
+        _quick_editor_context(assignment)
         if edit_errors and assignment.pk == edit_errors[0]:
             assignment.quick_form, assignment.question_forms = edit_errors[1:]
-            assignment.edit_open = True
     # Собираем навыки присутствующие в теме
     # Для фильтра
     selected_skill = request.GET.get("skill", "").strip().lower()
@@ -3001,11 +3071,21 @@ def student_assignment_preview(request, student_pk, assignment_pk):
 @teacher_required
 @require_GET
 def analytics(request):
+    """Журнал оценок: строки (ученики) постраничные, колонки — весь срез.
+
+    Полная матрица «все ученики × все задания» на курсе из нескольких сотен
+    заданий стоила больше мегабайта HTML и секунды отрисовки таблицы, поэтому
+    ученики идут страницами как в остальных списках. Выгрузка XLSX остаётся
+    полной: там таблицу рисует не браузер.
+    """
     block = request.GET.get("block")
     topic = request.GET.get("topic")
+    students = gradebook_students()
+    page = Paginator(students, settings.LMS_PAGE_SIZE).get_page(request.GET.get("page"))
     data = gradebook(
         block=block if block and block.isdigit() else None,
         topic=topic if topic and topic.isdigit() else None,
+        students=page.object_list,
     )
     summary = (
         Submission.objects.latest_attempts()
@@ -3023,6 +3103,8 @@ def analytics(request):
         {
             **data,
             "summary": summary,
+            "page_obj": page,
+            "students_total": page.paginator.count,
             "selected_block": block or "",
             "selected_topic": topic or "",
             "workspace": "analytics",

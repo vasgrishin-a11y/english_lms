@@ -57,7 +57,14 @@ class TopicEditingTests(LMSCase):
         self.assertEqual(self.assignment.title, "Updated task")
         html = self.teacher_client.get(reverse("teacher_topic_board", args=[self.topic.pk]))
         self.assertContains(html, "data-open-editor=")
-        self.assertContains(html, f'name="question-{self.question.pk}-choices_text"')
+        # Форма пункта больше не едет в каждом задании доски: она приезжает по
+        # открытию редактора — тогда же видны и поля варианта ответа.
+        self.assertNotContains(html, f'name="question-{self.question.pk}-choices_text"')
+        editor = self.teacher_client.get(
+            reverse("teacher_assignment_quick_editor", args=[self.assignment.pk])
+        )
+        self.assertContains(editor, f'name="question-{self.question.pk}-choices_text"')
+        self.assertContains(editor, "London")
         self.assertNotContains(html, "Результаты по пунктам")
 
     def test_invalid_key_keeps_entire_assignment_unchanged(self):

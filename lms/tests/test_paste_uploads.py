@@ -62,19 +62,28 @@ class PasteMarkupTests(LMSCase):
     """Атрибуты доезжают до HTML тех страниц, где учитель правит задание."""
 
     def test_topic_board_quick_editor_renders_a_dropzone(self):
+        # Форма быстрых правок на доске грузится по открытию редактора, поэтому
+        # атрибуты проверяем на фрагменте, а на доске — что есть цель для htmx.
+        board = self.teacher_client.get(reverse("teacher_topic_board", args=[self.topic.pk]))
+        self.assertContains(board, "quick-editor/")
+        self.assertNotContains(board, 'data-dropzone="1"')
         html = self.teacher_client.get(
-            reverse("teacher_topic_board", args=[self.topic.pk])
+            reverse("teacher_assignment_quick_editor", args=[self.assignment.pk])
         ).content.decode()
         self.assertIn('data-dropzone="1"', html)
         self.assertIn('data-paste-target="1"', html)
         self.assertIn("вставьте скриншот Ctrl+V", html)
 
-    def test_topic_board_keeps_the_multiple_attachments_input(self):
+    def test_topic_board_opened_editor_keeps_the_multiple_attachments_input(self):
         html = self.teacher_client.get(
-            reverse("teacher_topic_board", args=[self.topic.pk])
+            reverse("teacher_topic_board", args=[self.topic.pk]), {"edit": self.assignment.pk}
         ).content.decode()
         self.assertIn('name="new_attachments"', html)
         self.assertIn("multiple", html)
+        fragment = self.teacher_client.get(
+            reverse("teacher_assignment_quick_editor", args=[self.assignment.pk])
+        ).content.decode()
+        self.assertIn('name="new_attachments"', fragment)
 
     def test_full_editor_renders_a_dropzone_without_its_own_script(self):
         html = self.teacher_client.get(

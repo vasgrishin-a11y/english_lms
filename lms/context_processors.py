@@ -1,20 +1,27 @@
 """Общий контекст интерфейса: роль, настройки плотности, счётчик очереди.
 
-Счётчик очереди кэшируется в сессии на минуту, чтобы не добавлять запрос к
-каждой странице; экран очереди кладёт свежие значения сам.
+Счётчик очереди кэшируется на минуту в процессе (см.
+``curriculum.cached_queue_counts``), поэтому он не добавляет запрос к каждой
+странице и не заставляет базу сохранять сессию. Экран очереди кладёт свежие
+значения сам.
 """
-
-import time
 
 from django.core.exceptions import PermissionDenied
 
 from . import ui_text
-from .curriculum import queue_counts
+from .curriculum import cached_queue_counts
 from .decorators import get_user_role
 from .models import Profile
 
-CACHE_KEY = "_queue_counts"
-CACHE_TTL = 60
+
+def is_fragment_request(request):
+    """Ответ-фрагмент для htmx/AJAX: навигация в нём не рисуется.
+
+    takim запросам не нужен бейдж «Проверка» — ради них нельзя перечитывать
+    агрегат по всем сдачам и писать сессию.
+    """
+    headers = request.headers
+    return bool(headers.get("HX-Request")) or headers.get("X-Requested-With") == "XMLHttpRequest"
 
 
 def console_context(request):
@@ -45,12 +52,8 @@ def console_context(request):
     context["impersonating_teacher_name"] = request.session.get("impersonating_teacher_name", "")
     if not context["is_teacher"]:
         return context
-    cached = getattr(request, "lms_queue_counts", None)
-    if cached is None:
-        stored = request.session.get(CACHE_KEY) or {}
-        if time.time() - float(stored.get("ts", 0)) > CACHE_TTL:
-            stored = {"ts": time.time(), **queue_counts()}
-            request.session[CACHE_KEY] = stored
-        cached = stored
-    context["pending_count"] = cached.get("waiting")
+    if is_fragment_request(request):
+        return context
+    counts = getattr(request, "lms_queue_counts", None) or cached_queue_counts()
+    context["pending_count"] = counts.get("waiting")
     return context

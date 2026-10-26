@@ -237,6 +237,11 @@ urlpatterns = [
         name="teacher_assignment_publish",
     ),
     path(
+        "teacher/curriculum/assignments/<int:pk>/quick-editor/",
+        views_teacher.assignment_quick_editor,
+        name="teacher_assignment_quick_editor",
+    ),
+    path(
         "teacher/curriculum/assignments/<int:pk>/rename/",
         views_teacher.assignment_rename,
         name="teacher_assignment_rename",

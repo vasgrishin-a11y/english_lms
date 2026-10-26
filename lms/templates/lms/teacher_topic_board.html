@@ -137,37 +137,19 @@
                 </div>
             {% endif %}
 
-            <!-- Быстрое редактирование inline -->
-            <details id="edit-{{ assignment.pk }}" {% if assignment.edit_open %}open{% endif %} style="margin-top:4px;border:1px dashed var(--border);border-radius:8px;padding:10px;background:var(--surface-sunken)">
-                <summary style="cursor:pointer;font-weight:600;font-size:13px;list-style:none;display:flex;align-items:center;gap:6px">{% icon "pencil" "icon icon-sm" %} Быстрое редактирование прямо здесь</summary>
-                <form method="post" action="{% url 'teacher_assignment_quick_edit' assignment.pk %}" enctype="multipart/form-data" style="margin-top:12px;display:flex;flex-direction:column;gap:10px">
-                    {% csrf_token %}
-                    <input type="hidden" name="next" value="{% url 'teacher_topic_board' topic.pk %}#assignment-{{ assignment.pk }}">
-                    {% include "lms/form_fields.html" with form=assignment.quick_form %}
-                    {% if assignment.question_forms %}
-                    <p class="alert">При сохранении правильных ответов автоматические результаты прошлых работ будут пересчитаны. Ручные оценки сохранятся.</p>
-                    {% for question_form in assignment.question_forms %}
-                    <fieldset><legend>Пункт {{ forloop.counter }} — вопрос и правильные ответы</legend>
-                        {% include "lms/form_fields.html" with form=question_form %}
-                    </fieldset>
-                    {% endfor %}
+            <!-- Быстрое редактирование inline: форма грузится по первому открытию.
+                 Доска темы иначе отдаёт по 13 КБ разметки на задание — поля,
+                 подсказки и формы пунктов для всех заданий сразу. -->
+            <details id="edit-{{ assignment.pk }}" class="quick-editor" {% if assignment.edit_open %}open{% endif %} style="margin-top:4px;border:1px dashed var(--border);border-radius:8px;padding:10px;background:var(--surface-sunken)">
+                <summary data-quick-editor-summary style="cursor:pointer;font-weight:600;font-size:13px;list-style:none;display:flex;align-items:center;gap:6px"
+                    {% if not assignment.quick_form %}hx-get="{% url 'teacher_assignment_quick_editor' assignment.pk %}" hx-target="#quick-editor-body-{{ assignment.pk }}" hx-swap="innerHTML" hx-trigger="click once"{% endif %}>{% icon "pencil" "icon icon-sm" %} Быстрое редактирование прямо здесь</summary>
+                <div id="quick-editor-body-{{ assignment.pk }}">
+                    {% if assignment.quick_form %}
+                        {% include "lms/parts/assignment_quick_editor.html" %}
+                    {% else %}
+                        <p class="tiny muted mb-0" style="margin-top:10px">Нажмите на строку выше — тогда откроются поля задания, файлы и пункты автопроверки. Без JavaScript: <a href="{% url 'teacher_assignment_form' assignment.pk %}?from_topic=1">полный редактор задания</a>.</p>
                     {% endif %}
-                    {% if assignment.attachments.exists %}
-                    <div class="form-field">
-                        <label>Удалить вложения</label>
-                        <div style="display:flex;flex-wrap:wrap;gap:6px">
-                            {% for att in assignment.attachments.all %}
-                            <label style="display:flex;align-items:center;gap:6px;font-size:11px;background:var(--surface);border:1px solid var(--border-subtle);border-radius:6px;padding:4px 8px"><input type="checkbox" name="delete_attachments" value="{{ att.pk }}"> {{ att.title|default:att.file.name|slice:"-40:" }}</label>
-                            {% endfor %}
-                        </div>
-                    </div>
-                    {% endif %}
-                    <div class="row row-tight">
-                        <button class="btn btn-sm" type="submit">{% icon "save" %}Сохранить</button>
-                        <button class="btn btn-ghost btn-sm" type="button" data-cancel-editor>Отмена</button>
-                        <a class="btn btn-ghost btn-sm" href="{% url 'teacher_assignment_form' assignment.pk %}?from_topic=1">Полный редактор</a>
-                    </div>
-                </form>
+                </div>
             </details>
         </div>
 
@@ -191,6 +173,19 @@
 (function(){
   const board = document.querySelector('[data-topic-board]');
   if(!board) return;
+
+  const loadQuickEditor = function(editor){
+    // Форма быстрых правок приезжает по первому открытию. При программном
+    // открытии («Редактировать» в строке задания) клика по summary нет,
+    // поэтому запрос запускаем здесь — иначе под кнопкой пусто.
+    if(!editor || !window.htmx) return;
+    const summary = editor.querySelector('[data-quick-editor-summary][hx-get]');
+    if(!summary || editor.dataset.quickEditorLoaded) return;
+    editor.dataset.quickEditorLoaded = '1';
+    window.htmx.ajax('GET', summary.getAttribute('hx-get'), {
+      target: summary.getAttribute('hx-target'), swap: 'innerHTML'
+    });
+  };
 
   const cards = Array.from(board.querySelectorAll('[data-assignment-card]'));
   const toggleAll = document.querySelector('[data-toggle-all-assignments]');
@@ -219,6 +214,7 @@
       const assignmentCard = editor?.closest('[data-assignment-card]');
       if(assignmentCard) assignmentCard.open = true;
       if(editor){
+        loadQuickEditor(editor);
         editor.open = true;
         editor.scrollIntoView({block:'start'});
         editor.querySelector('input:not([type=hidden]), textarea')?.focus();

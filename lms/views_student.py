@@ -11,6 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
+from . import audience
 from .curriculum import (
     WAITING_STATUSES,
     annotate_student_states,
@@ -364,12 +365,10 @@ def _is_returned_for_revision(submission):
 @require_http_methods(["GET", "POST"])
 def assignment_detail(request, pk):
     """Страница задания: условия, ответ или тест, черновик, история попыток."""
-    assignment = get_object_or_404(
-        Assignment.objects.visible(user=request.user).select_related(
-            "topic__block", "topic__chapter"
-        ),
-        pk=pk,
-    )
+    # Проверка доступа к одному заданию — без visibility_q на весь каталог:
+    # страница задания и каждый клик «Проверить» платили за сборку десятков
+    # подзапросов, хотя проверялась одна строка.
+    assignment = audience.visible_assignment_or_404(request.user, pk)
     if assignment.is_no_submission:
         return _no_submission_detail(request, assignment)
     attempts = (
@@ -544,7 +543,7 @@ def _item_response(request, assignment, question_id, *, error="", status=200, fl
 
 
 def _item_action(request, pk, question_id, action):
-    assignment = get_object_or_404(Assignment.objects.visible(user=request.user), pk=pk)
+    assignment = audience.visible_assignment_or_404(request.user, pk)
     if not assignment.is_quiz:
         raise Http404
     expected_round = _parse_int(request.POST.get("round"), None)
@@ -628,7 +627,7 @@ def item_reset(request, pk, question_id):
 @require_POST
 def quiz_finish(request, pk):
     """Отправить работу со свободными/голосовыми пунктами преподавателю."""
-    assignment = get_object_or_404(Assignment.objects.visible(user=request.user), pk=pk)
+    assignment = audience.visible_assignment_or_404(request.user, pk)
     try:
         finish_round(
             student=request.user,
@@ -650,7 +649,7 @@ def quiz_finish(request, pk):
 @student_required
 @require_POST
 def quiz_retake(request, pk):
-    assignment = get_object_or_404(Assignment.objects.visible(user=request.user), pk=pk)
+    assignment = audience.visible_assignment_or_404(request.user, pk)
     try:
         start_retake(student=request.user, assignment_id=assignment.pk)
     except PermissionDenied as exc:
@@ -660,16 +659,21 @@ def quiz_retake(request, pk):
 
 
 def _topic_trainer_cards(assignment, student):
-    """Соседние задания-тренажёры той же темы — для перехода из карточки задания."""
-    return list(
-        Assignment.objects.visible(user=student)
-        .filter(
+    """Соседние задания-тренажёры той же темы — для перехода из карточки задания.
+
+    Кандидатов в теме всегда немного, поэтому доступ проверяется точечно по
+    готовому списку: один общий запрос на строки аудитории вместо
+    ``visibility_q`` на весь каталог.
+    """
+    return audience.filter_visible(
+        Assignment.objects.filter(
             topic_id=assignment.topic_id,
             assignment_type=Assignment.Type.FLASHCARDS,
             is_active=True,
         )
         .exclude(pk=assignment.pk)
-        .order_by("order", "pk")
+        .order_by("order", "pk"),
+        student,
     )
 
 
@@ -721,7 +725,7 @@ def _parse_int(value, default=0):
 @require_POST
 def save_draft(request, pk):
     """Автосохранение черновика ответа (htmx). Попытки при этом не создаются."""
-    assignment = get_object_or_404(Assignment.objects.visible(user=request.user), pk=pk)
+    assignment = audience.visible_assignment_or_404(request.user, pk)
     if assignment.is_quiz or assignment.is_flashcards or assignment.is_material:
         return render(request, "lms/parts/draft_state.html", {"draft": None, "denied": True})
     try:
@@ -809,11 +813,8 @@ def _trainer_session(request, *, cards, session_key, back_url, title, subtitle, 
 @require_http_methods(["GET", "POST"])
 def trainer_session(request, pk):
     """Сессия тренажёра по заданию с карточками."""
-    assignment = get_object_or_404(
-        Assignment.objects.visible(user=request.user)
-        .filter(assignment_type=Assignment.Type.FLASHCARDS)
-        .select_related("topic__block", "topic__chapter"),
-        pk=pk,
+    assignment = audience.visible_assignment_or_404(
+        request.user, pk, assignment_type=Assignment.Type.FLASHCARDS
     )
     if not (assignment.is_active and assignment.topic.is_reachable):
         raise Http404
@@ -930,6 +931,10 @@ def student_grades(request):
     )
 
 
+#: Максимум строк на экране сроков — столько же показывает шаблон.
+UPCOMING_LIMIT = 100
+
+
 @student_required
 @require_GET
 def upcoming(request):
@@ -942,7 +947,12 @@ def upcoming(request):
             .filter(deadline__isnull=False)
             .exclude(assignment_type=Assignment.Type.MATERIAL),
             request.user,
-        ).order_by("deadline")
+        )
+        # Срез уезжает в базу: экран показывает не больше сотни строк, а
+        # annotates на весь курс стоили лишних строк и подзапросов. Просроченные
+        # идут первыми по deadline, поэтому «Просрочено» и «На неделе» из
+        # этой же выборки остаются корректными.
+        .order_by("deadline")[:UPCOMING_LIMIT]
     )
     open_items = []
     for assignment in assignments:
@@ -956,7 +966,7 @@ def upcoming(request):
         request,
         "lms/student_upcoming.html",
         {
-            "items": open_items[:100],
+            "items": open_items[:UPCOMING_LIMIT],
             "overdue": [item for item in open_items if item.hours_left < 0],
             "week": [item for item in open_items if 0 <= item.hours_left <= 168],
             "workspace": "curriculum",
