@@ -193,62 +193,11 @@
 </div>
 </section>
 
-<section class="card">
-<div class="card-head"><h2 class="card-title">{% icon "clock" %}Последние 30 попыток</h2></div>
-{% for attempt in attempts %}
-<div class="row-item" style="margin-bottom:8px">
-<span class="row-main">
-<a class="row-title" href="{% url 'teacher_submission_review' attempt.pk %}?back=student">{{ attempt.assignment.title }}</a>
-<span class="row-meta">
-<span>{{ attempt.assignment.topic.block.name }} · {{ attempt.assignment.topic.chapter.title }} · {{ attempt.assignment.topic.title }}</span>
-<span>Попытка {{ attempt.version }} · {{ attempt.submitted_at|date:"d.m.Y H:i" }}</span>
-{% if attempt.is_late %}<span class="badge badge-needs_revision">после дедлайна</span>{% endif %}
-</span>
-</span>
-<span class="row-side">
-<span class="badge badge-{{ attempt.status }}">{% icon attempt.status|status_icon "icon icon-sm" %}{{ attempt.get_status_display }}</span>
-{% if attempt.feedback and attempt.feedback.grade != None %}
-<span class="grade-pill tnum {{ attempt.feedback.grade|grade_class:attempt.max_points_snapshot }}">{{ attempt.feedback.grade }}<small>/{{ attempt.max_points_snapshot }}</small></span>
-{% endif %}
-</span>
-</div>
-{% empty %}
-<p class="muted small mb-0">Попыток пока нет.</p>
-{% endfor %}
-</section>
+
 </div>
 
 <div class="split-side">
-<section class="card card-pad-sm">
-<div class="card-head" style="margin-bottom:12px"><h2 class="card-title">{% icon "target" %}Навыки</h2></div>
-{% if skill_summary %}
-<p class="small" style="margin-bottom:2px">Средний уровень <strong class="tnum">{{ skill_summary.average }}%</strong></p>
-<p class="tiny muted" style="margin-bottom:12px">Сильнее: {{ skill_summary.strongest }} · Слабее: {{ skill_summary.weakest }}</p>
-{% endif %}
-{% for skill in skills %}
-<div class="skill-row">
-<div class="row row-tight">
-<strong class="small">{{ skill.name }}</strong>
-{% if skill.percent != None %}
-<span class="tiny muted tnum" style="margin-left:auto">{{ skill.percent }}% · {{ skill.verdict|lower }}</span>
-{% else %}
-<span class="tiny muted" style="margin-left:auto">нет оценок</span>
-{% endif %}
-</div>
-{% if skill.percent != None %}
-<div class="progress {{ skill.bar_class }}" role="img" aria-label="Навык {{ skill.name }}: {{ skill.percent }} процентов, {{ skill.verdict|lower }}">
-<span style="width:{{ skill.percent }}%"></span>
-</div>
-{% endif %}
-<p class="tiny muted tnum skill-meta">Оценено {{ skill.graded }} из {{ skill.total }}{% if skill.pending %} · ждёт оценки {{ skill.pending }}{% endif %}</p>
-</div>
-{% empty %}
-<p class="small muted mb-0">Нет оценок по навыкам. Привяжите навыки к заданиям — здесь появится срез Reading / Writing / Listening / Speaking.</p>
-{% endfor %}
-{% if skills %}
-<p class="tiny muted mb-0" style="margin-top:12px">% — средний балл последних попыток по оценённым работам; каждая работа весит одинаково. Сданное без оценки в средний балл не входит.</p>
-{% endif %}
-</section>
+
 
 <section class="card card-pad-sm">
 <p class="rail-title">Профиль</p>

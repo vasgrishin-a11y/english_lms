@@ -148,10 +148,11 @@ class MaterialAssignmentTests(LMSCase):
         self.assertNotIn("Учебник, разворот 12–13", sheet)
         self.assertIn("Past tense", sheet)
 
-    def test_student_detail_hides_material_attempts(self):
-        attempt = self.legacy_submission()
+    def test_student_detail_has_no_last_attempts_section(self):
+        self.legacy_submission()
         response = self.teacher_client.get(f"/teacher/students/{self.student.pk}/")
-        self.assertNotIn(attempt.pk, [item.pk for item in response.context["attempts"]])
+        self.assertNotContains(response, "Последние 30 попыток")
+        self.assertNotIn("attempts", response.context)
 
     def test_assignment_form_has_no_submission_progress_for_material(self):
         response = self.teacher_client.get(f"/teacher/curriculum/assignments/{self.material.pk}/")

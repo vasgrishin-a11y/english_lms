@@ -159,12 +159,14 @@ class TeacherStudentsPerformanceTests(LMSCase):
         self.assertNotContains(response, "A real answer")
         self.assertContains(response, "Показать ответ и разбор")
         self.assertNotContains(response, 'class="review-items assignment-items"')
-        # Дерево курса, состояния, сводка навыков, последние попытки и т.п. —
-        # фиксированным числом запросов, без разбора пунктов каждой сдачи.
-        self.assertLessEqual(len(queries), 16)
+        self.assertNotContains(response, "Последние 30 попыток")
+        self.assertNotContains(response, "Навыки</h2>")
+        # Остались дерево курса, состояния, счётчик карточек, пароль и сессия;
+        # второстепенные блоки и их SQL больше не загружаются.
+        self.assertLessEqual(len(queries), 11)
         # 25 заданий: компактное дерево без ответов, в gzip укладывается в
         # десятки килобайт (отдельная проверка ниже).
-        self.assertLess(len(response.content), 150_000)
+        self.assertLess(len(response.content), 130_000)
 
     def test_dynamic_html_is_gzipped(self):
         response = self.teacher_client.get(
