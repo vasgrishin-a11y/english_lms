@@ -16,7 +16,7 @@
 from __future__ import annotations
 
 from django.contrib.auth import get_user_model
-from django.db.models import Q
+from django.db.models import Exists, Q
 
 from .models import Assignment, Block, Chapter, Group, Profile, Topic
 
@@ -107,6 +107,94 @@ def visibility_q(user):
             allowed_q |= group_term
 
     return open_q | allowed_q
+
+
+def _relation_exists(obj, relation, target_value=None):
+    """``EXISTS`` по строке M2M для одного объекта цепочки аудитории."""
+    field = obj._meta.get_field(relation)
+    through = field.remote_field.through
+    object_column = through._meta.get_field(field.m2m_field_name()).attname
+    target_column = through._meta.get_field(field.m2m_reverse_field_name()).attname
+    filters = {object_column: obj.pk}
+    if target_value is not None:
+        filters[target_column] = target_value
+    return Exists(through.objects.filter(**filters))
+
+
+def assignment_is_visible_to(assignment, user):
+    """Быстрая проверка одного задания без огромного ``visibility_q``.
+
+    ``visibility_q`` годится для выборки всего каталога, но для проверки одного
+    уже загруженного задания он строит десятки подзапросов по всем уровням.
+    Здесь одна выборка с компактными ``EXISTS`` по 16 таблицам назначений
+    плюс один запрос на группы ученика; результат полностью повторяет
+    правила наследования/исключений из :func:`visibility_q`.
+    """
+    if not getattr(user, "is_authenticated", False):
+        return False
+    if not assignment.is_visible:
+        return False
+    topic = assignment.topic
+    if not (topic.is_active and topic.chapter.is_active and topic.block.is_active):
+        return False
+    chain_objects = [topic.block, topic.chapter, topic, assignment]
+    group_ids = list(
+        Group.students.through.objects.filter(user_id=user.pk).values_list("group_id", flat=True)
+    )
+
+    annotations = {}
+    for index, obj in enumerate(chain_objects):
+        students_field = "assigned_students" if isinstance(obj, Assignment) else "students"
+        prefix = f"level_{index}_"
+        # Есть ли вообще назначения на уровне: пустая после исключений ветка
+        # не становится общей, поэтому Grants считаем до фильтра по ученику.
+        annotations[prefix + "has_group_grant"] = _relation_exists(obj, "groups")
+        annotations[prefix + "has_student_grant"] = _relation_exists(obj, students_field)
+        annotations[prefix + "student_grant"] = _relation_exists(
+            obj, students_field, user.pk
+        )
+        annotations[prefix + "student_exclude"] = _relation_exists(
+            obj, "excluded_students", user.pk
+        )
+        for group_id in group_ids:
+            annotations[f"{prefix}group_{group_id}_grant"] = _relation_exists(
+                obj, "groups", group_id
+            )
+            annotations[f"{prefix}group_{group_id}_exclude"] = _relation_exists(
+                obj, "excluded_groups", group_id
+            )
+    row = (
+        Assignment.objects.filter(pk=assignment.pk)
+        .annotate(**annotations)
+        .values(*annotations.keys())
+        .first()
+    )
+    if row is None:
+        return False
+
+    restricted = False
+    student_allowed = False
+    group_allowed = {group_id: False for group_id in group_ids}
+    for index in range(len(chain_objects)):
+        prefix = f"level_{index}_"
+        restricted = restricted or bool(
+            row[prefix + "has_group_grant"] or row[prefix + "has_student_grant"]
+        )
+        # Назначения текущего уровня применяются до исключений этого же уровня.
+        if row[prefix + "student_grant"]:
+            student_allowed = True
+        for group_id in group_ids:
+            if row[f"{prefix}group_{group_id}_grant"]:
+                group_allowed[group_id] = True
+        # Персональное исключение отменяет и личный, и групповой доступ.
+        if row[prefix + "student_exclude"]:
+            student_allowed = False
+            for group_id in group_allowed:
+                group_allowed[group_id] = False
+        for group_id in group_ids:
+            if row[f"{prefix}group_{group_id}_exclude"]:
+                group_allowed[group_id] = False
+    return not restricted or student_allowed or any(group_allowed.values())
 
 
 def chain(obj):

@@ -36,13 +36,13 @@
                     {% if attempt.feedback.audio_comment %}
                         <div class="feedback-audio" style="margin-top:10px">
                             <p class="tiny strong mb-0">{% icon "mic" "icon icon-sm" %} Голосовой комментарий преподавателя</p>
-                            <audio controls preload="metadata" src="{% url 'media_preview' attempt.feedback.audio_comment.name %}"></audio>
+                            <audio controls preload="none" src="{% url 'media_preview' attempt.feedback.audio_comment.name %}"></audio>
                         </div>
                     {% endif %}
                     {% for clip in attempt.feedback.audio_comments.all %}
                         <div class="feedback-audio" style="margin-top:10px">
                             <p class="tiny strong mb-0">{% icon "mic" "icon icon-sm" %} Голосовой комментарий {{ forloop.counter|add:legacy_offset }}</p>
-                            <audio controls preload="metadata" src="{% url 'media_preview' clip.audio.name %}"></audio>
+                            <audio controls preload="none" src="{% url 'media_preview' clip.audio.name %}"></audio>
                         </div>
                     {% endfor %}
                 {% endwith %}

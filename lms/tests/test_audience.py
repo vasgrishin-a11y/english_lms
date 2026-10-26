@@ -28,6 +28,52 @@ class AudienceVisibilityTests(LMSCase):
     def visible_for(self, user):
         return set(Assignment.objects.visible(user=user).values_list("pk", flat=True))
 
+    def assert_single_check_matches_queryset(self):
+        assignment = Assignment.objects.select_related("topic__block", "topic__chapter").get(
+            pk=self.assignment.pk
+        )
+        for user in (self.student, self.other, self.outsider):
+            self.assertEqual(
+                audience.assignment_is_visible_to(assignment, user),
+                assignment.pk in self.visible_for(user),
+                f"расхождение для {user.username}",
+            )
+
+    def clear_rules(self):
+        for obj in (self.block, self.topic.chapter, self.topic, self.assignment):
+            obj.groups.clear()
+            obj.students.clear()
+            obj.excluded_groups.clear()
+            obj.excluded_students.clear()
+
+    def test_single_assignment_helper_matches_queryset(self):
+        self.assert_single_check_matches_queryset()
+        self.block.groups.add(self.group_a)
+        self.assert_single_check_matches_queryset()
+        self.topic.chapter.excluded_groups.add(self.group_a)
+        self.assert_single_check_matches_queryset()
+        self.assignment.groups.add(self.group_a)
+        self.assert_single_check_matches_queryset()
+        self.clear_rules()
+        self.block.students.add(self.outsider)
+        self.topic.excluded_students.add(self.outsider)
+        self.assert_single_check_matches_queryset()
+        self.clear_rules()
+        # Ученик в двух группах: исключение одной не отменяет доступ через другую.
+        self.group_b.students.add(self.student)
+        self.block.groups.add(self.group_a, self.group_b)
+        self.topic.excluded_groups.add(self.group_a)
+        self.assert_single_check_matches_queryset()
+        self.clear_rules()
+        self.block.is_active = False
+        self.block.save(update_fields=["is_active"])
+        self.assert_single_check_matches_queryset()
+        self.block.is_active = True
+        self.block.save(update_fields=["is_active"])
+        self.assignment.status = Assignment.Publication.DRAFT
+        self.assignment.save(update_fields=["status"])
+        self.assert_single_check_matches_queryset()
+
     def test_nothing_assigned_means_everyone(self):
         for user in (self.student, self.other, self.outsider):
             self.assertIn(self.assignment.pk, self.visible_for(user))

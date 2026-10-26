@@ -1,0 +1,55 @@
+{% load lms_tags %}
+{# Ответ ученика и разбор пунктов: грузится по кнопке, а не на каждую карточку курса. #}
+{% with assignment=entry.assignment attempt=entry.attempt %}
+    {% if not attempt %}
+        <p class="small muted mb-0">Сдача не найдена.</p>
+    {% else %}
+        {% if not assignment.is_quiz %}
+            {% if attempt.text_answer %}<div class="answer-body small">{{ attempt.text_answer|truncatechars:600|linebreaksbr }}</div>{% endif %}
+            {% if attempt.file_answer %}
+                <div class="media-frame">
+                    {% if attempt.file_answer.name|media_kind == 'image' %}
+                        <img src="{% url 'media_preview' attempt.file_answer.name %}" alt="Файл ответа ученика" loading="lazy">
+                    {% elif attempt.file_answer.name|media_kind == 'audio' %}
+                        <audio controls preload="none" src="{% url 'media_preview' attempt.file_answer.name %}"></audio>
+                    {% endif %}
+                    <a class="btn btn-secondary btn-sm" href="{{ attempt.file_answer.url }}">{% icon "download" %}Скачать файл ответа</a>
+                </div>
+            {% endif %}
+        {% endif %}
+        {% if entry.items %}
+            <ol class="review-items assignment-items">
+                {% for item in entry.items %}
+                    <li class="review-item review-item-{{ item.state }}">
+                        <div class="row row-tight">
+                            {% if item.manual %}
+                                <span class="badge badge-submitted">{% icon "pencil" "icon icon-sm" %}Проверить</span>
+                            {% elif item.state == 'correct' %}
+                                <span class="badge badge-checked">{% icon "check" "icon icon-sm" %}Верно{% if item.tries_used > 1 %} с {{ item.tries_used }}-й{% endif %}</span>
+                            {% elif item.state == 'failed' %}
+                                <span class="badge badge-needs_revision">{% icon "x" "icon icon-sm" %}Не решено</span>
+                            {% else %}
+                                <span class="badge badge-outline">Без ответа</span>
+                            {% endif %}
+                            <span class="grow small"><strong>{{ item.number }}.</strong> {{ item.question.text|truncatechars:160 }}</span>
+                            <span class="tiny muted tnum">{{ item.points }}/{{ item.question.points }} б.</span>
+                        </div>
+                        {% if item.manual %}
+                            {% if item.text_answer %}<div class="answer-body small">{{ item.text_answer|truncatechars:600|linebreaksbr }}</div>{% endif %}
+                            {% if item.file_answer %}
+                                <div class="media-frame">
+                                    <audio controls preload="none" src="{% url 'media_preview' item.file_answer.name %}"></audio>
+                                    <a class="btn btn-secondary btn-sm" href="{{ item.file_answer.url }}">{% icon "download" %}Скачать запись</a>
+                                </div>
+                            {% endif %}
+                            {% if not item.text_answer and not item.file_answer %}<p class="tiny muted mb-0">Ответ не дан.</p>{% endif %}
+                        {% else %}
+                            <p class="small mb-0"><span class="muted">Ответ ученика:</span> {% if item.last %}{{ item.last.display|default:"—" }}{% else %}—{% endif %}{% if item.tries_used > 1 %} <span class="tiny muted tnum">· попыток: {{ item.tries_used }}</span>{% endif %}</p>
+                            {% if item.expected %}<p class="small mb-0"><span class="muted">Правильный ответ:</span> {{ item.expected }}</p>{% endif %}
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ol>
+        {% endif %}
+    {% endif %}
+{% endwith %}

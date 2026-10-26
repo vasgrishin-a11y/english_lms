@@ -80,13 +80,13 @@
         {% elif item.manual and not item.editable %}
             {# Итог уже отправлен: свободный или голосовой ответ ждёт преподавателя. #}
             {% if item.text_answer %}<div class="answer-body small">{{ item.text_answer|linebreaksbr }}</div>{% endif %}
-            {% if item.file_answer %}<audio controls preload="metadata" src="{% url 'media_preview' item.file_answer.name %}"></audio>{% endif %}
+            {% if item.file_answer %}<audio controls preload="none" src="{% url 'media_preview' item.file_answer.name %}"></audio>{% endif %}
             {% if not item.text_answer and not item.file_answer %}<p class="small muted mb-0">Ответ не дан.</p>{% endif %}
             {% if item.teacher_points != None %}<p class="small mb-0" style="margin-top:6px">Оценка преподавателя: <strong class="tnum">{{ item.teacher_points }}/{{ question.points }}</strong></p>{% endif %}
 
         {% elif question.kind == 'voice' %}
             {% if item.state == 'answered' %}
-                {% if item.file_answer %}<audio controls preload="metadata" src="{% url 'media_preview' item.file_answer.name %}"></audio>{% endif %}
+                {% if item.file_answer %}<audio controls preload="none" src="{% url 'media_preview' item.file_answer.name %}"></audio>{% endif %}
                 <form method="post" action="{% url 'student_item_reset' assignment.pk question.pk %}"
                       hx-post="{% url 'student_item_reset' assignment.pk question.pk %}" hx-target="#q-{{ question.pk }}" hx-swap="outerHTML"
                       hx-confirm="Удалить запись и записать заново?" class="row" style="margin-top:8px">

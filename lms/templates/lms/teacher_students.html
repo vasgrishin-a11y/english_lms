@@ -28,7 +28,7 @@
 
 <section class="card">
     <div class="rows">
-    {% for student in students %}
+    {% for student in page_obj %}
         <div class="row-item">
             <span class="avatar" aria-hidden="true">{{ student|initials }}</span>
             <span class="row-main">
@@ -71,4 +71,5 @@
     {% endfor %}
     </div>
 </section>
+{% include "lms/pagination.html" %}
 {% endblock %}

@@ -1,8 +1,9 @@
 """Построение карты курса и агрегатов прогресса.
 
 Все функции читают данные фиксированным числом запросов. Состояние работ
-ученика добавляется аннотациями к одному запросу по заданиям, а не отдельным
-словарём попыток: каталог остаётся в бюджете ≤6 SQL (проверяется в CI).
+ученика либо аннотируется в SQL для фильтров каталога, либо (для дерева
+прогресса) прикладывается одним отдельным запросом последних сдач. Число
+запросов не зависит от размера курса; бюджет каталога ≤6 SQL проверяется в CI.
 """
 
 from django.db.models import Avg, Count, OuterRef, Q, Subquery
@@ -40,6 +41,59 @@ def annotate_student_states(queryset, student):
         latest_submitted_at=Subquery(attempt.values("submitted_at")[:1]),
         latest_deadline=Subquery(attempt.values("deadline_snapshot")[:1]),
     )
+
+
+def attach_student_states(assignments, student):
+    """Проставить ``latest_*`` атрибуты одним запросом вместо 6 подзапросов на строку.
+
+    ``annotate_student_states`` остаётся для каталога заданий, где нужны
+    аннотации в SQL (фильтры и агрегаты). Для дерева прогресса выгоднее
+    выбрать последние сдачи отдельным запросом и разложить их по объектам:
+    планировщик БД не должен строить 6 коррелированных скалярных подзапросов
+    на каждое задание курса.
+    """
+    fields = (
+        "latest_attempt_id",
+        "latest_status",
+        "latest_grade",
+        "latest_version",
+        "latest_max_points",
+        "latest_submitted_at",
+        "latest_deadline",
+    )
+    by_id = {assignment.pk: assignment for assignment in assignments}
+    for assignment in assignments:
+        for field in fields:
+            setattr(assignment, field, None)
+    if not by_id:
+        return assignments
+    rows = (
+        Submission.objects.filter(student=student, assignment_id__in=list(by_id))
+        .latest_attempts()
+        .order_by()
+        .values(
+            "pk",
+            "assignment_id",
+            "status",
+            "feedback__grade",
+            "version",
+            "max_points_snapshot",
+            "submitted_at",
+            "deadline_snapshot",
+        )
+    )
+    for row in rows:
+        assignment = by_id.get(row["assignment_id"])
+        if assignment is None:
+            continue
+        assignment.latest_attempt_id = row["pk"]
+        assignment.latest_status = row["status"]
+        assignment.latest_grade = row["feedback__grade"]
+        assignment.latest_version = row["version"]
+        assignment.latest_max_points = row["max_points_snapshot"]
+        assignment.latest_submitted_at = row["submitted_at"]
+        assignment.latest_deadline = row["deadline_snapshot"]
+    return assignments
 
 
 def state_of(assignment):
@@ -112,12 +166,15 @@ def course_tree(
     include_archived=False,
     include_skills=False,
     at=None,
+    sql_states=True,
 ):
     """Единое дерево курса для учителя и ученика.
 
-    Ученик: только опубликованное, с состоянием своих работ одним аннотированным запросом.
-    Учитель: активный курс и черновики, со счётчиками работ по каждому заданию.
-    Архив намеренно вынесен в отдельный экран и не смешивается с рабочей картой.
+    Ученик: только опубликованное, с состоянием своих работ одним аннотированным
+    запросом; при ``sql_states=False`` состояние прикладывается отдельным лёгким
+    запросом вместо 6 коррелированных подзапросов в SQL. Учитель: активный курс
+    и черновики, со счётчиками работ по каждому заданию. Архив намеренно вынесен
+    в отдельный экран и не смешивается с рабочей картой.
     """
     show_active_only = not teacher_view or not include_archived
     blocks_queryset = ordered_blocks(active_only=show_active_only)
@@ -136,7 +193,11 @@ def course_tree(
     blocks = list(blocks_queryset)
     chapters = list(chapters_queryset)
     topics = list(topics_queryset)
-    if student is not None:
+    if student is not None and not sql_states:
+        assignments_queryset = Assignment.objects.visible(user=student, at=at).select_related(
+            "topic"
+        )
+    elif student is not None:
         assignments_queryset = annotate_student_states(
             Assignment.objects.visible(user=student, at=at).select_related("topic"), student
         )
@@ -154,6 +215,8 @@ def course_tree(
             "topic__order", "order", "pk"
         )
     )
+    if student is not None and not sql_states:
+        attach_student_states(assignments, student)
     stats = teacher_assignment_stats() if teacher_view else None
     return _assemble(
         blocks,

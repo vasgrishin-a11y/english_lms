@@ -1370,10 +1370,22 @@ class StudentDirectoryTests(LMSCase):
 
 
 class StudentProgressTreeTests(LMSCase):
-    """Прогресс ученика: темы раскрываются, внутри — задания с ответами."""
+    """Прогресс ученика: темы раскрываются, ответы грузятся по запросу."""
 
-    def detail(self):
-        return self.teacher_client.get(f"/teacher/students/{self.student.pk}/")
+    def detail(self, assignment_pk=None):
+        url = f"/teacher/students/{self.student.pk}/"
+        if assignment_pk is not None:
+            url += f"?details={assignment_pk}"
+        return self.teacher_client.get(url)
+
+    def progress_fragment(self, assignment_pk):
+        return self.teacher_client.get(
+            reverse(
+                "teacher_student_assignment_progress",
+                args=[self.student.pk, assignment_pk],
+            ),
+            headers={"HX-Request": "true"},
+        )
 
     def test_topics_collapse_assignments_with_statuses(self):
         page = self.detail()
@@ -1394,7 +1406,7 @@ class StudentProgressTreeTests(LMSCase):
     def test_text_attempt_shows_answer_grade_and_review_link(self):
         attempt = self.submit()
         self.review(attempt, grade=90)
-        page = self.detail()
+        page = self.detail(self.assignment.pk)
         self.assertContains(page, "A real answer")
         self.assertContains(page, "Проверена")
         self.assertContains(page, reverse("teacher_submission_review", args=[attempt.pk]))
@@ -1403,6 +1415,24 @@ class StudentProgressTreeTests(LMSCase):
         self.assertContains(
             page, f"{reverse('teacher_submission_review', args=[attempt.pk])}?back=student"
         )
+
+    def test_student_card_loads_answers_on_demand(self):
+        """Ответы не рендерятся в общей карточке, а приходят отдельным фрагментом."""
+        self.submit()
+        page = self.detail()
+        self.assertContains(page, "Показать ответ и разбор")
+        self.assertContains(
+            page,
+            reverse(
+                "teacher_student_assignment_progress",
+                args=[self.student.pk, self.assignment.pk],
+            ),
+        )
+        self.assertNotContains(page, "A real answer")
+        fragment = self.progress_fragment(self.assignment.pk)
+        self.assertEqual(fragment.status_code, 200)
+        self.assertContains(fragment, "A real answer")
+        self.assertNotContains(fragment, "<html")
 
     def test_no_submission_assignments_are_marked(self):
         self.card_assignment(topic=self.topic, title="Слова темы")
@@ -1438,7 +1468,7 @@ class StudentProgressTreeTests(LMSCase):
             expected_version=0,
             answers={str(question.pk): str(right.pk)},
         )
-        page = self.detail()
+        page = self.detail(quiz.pk)
         self.assertContains(page, "Времена")
         self.assertContains(page, "Ответ ученика:")
         self.assertContains(page, "have")
@@ -1467,7 +1497,7 @@ class StudentProgressTreeTests(LMSCase):
             text="Мы ехали на поезде через всю страну.",
         )
         finish_round(student=self.student, assignment_id=quiz.pk)
-        page = self.detail()
+        page = self.detail(quiz.pk)
         self.assertContains(page, "Эссе")
         self.assertContains(page, "Мы ехали на поезде через всю страну.")
         self.assertContains(page, "Проверить")
