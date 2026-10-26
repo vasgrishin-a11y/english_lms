@@ -1,0 +1,177 @@
+{
+ "Консоль (home)": {
+  "status": 200,
+  "ms": 55.26,
+  "ms_max": 118.95,
+  "sql": 33,
+  "sql_kbytes": 24.4,
+  "html_kbytes": 34.9,
+  "gzip_kbytes": 6.9,
+  "dom_nodes": 634,
+  "seconds_total": 0.7
+ },
+ "Классы: карта курса": {
+  "status": 200,
+  "ms": 80.68,
+  "ms_max": 145.86,
+  "sql": 24,
+  "sql_kbytes": 17.3,
+  "html_kbytes": 413.3,
+  "gzip_kbytes": 21.6,
+  "dom_nodes": 3757,
+  "seconds_total": 1.02
+ },
+ "Классы: уровень заданий (доска темы)": {
+  "status": 200,
+  "ms": 109.48,
+  "ms_max": 184.43,
+  "sql": 36,
+  "sql_kbytes": 15.4,
+  "html_kbytes": 152.6,
+  "gzip_kbytes": 19.5,
+  "dom_nodes": 1599,
+  "seconds_total": 1.27
+ },
+ "Классы: доска темы с открытым редактором": {
+  "status": 200,
+  "ms": 118.93,
+  "ms_max": 206.82,
+  "sql": 36,
+  "sql_kbytes": 15.4,
+  "html_kbytes": 152.6,
+  "gzip_kbytes": 19.5,
+  "dom_nodes": 1599,
+  "seconds_total": 1.35
+ },
+ "Задание: предпросмотр глазами ученика": {
+  "status": 200,
+  "ms": 8.19,
+  "ms_max": 9.18,
+  "sql": 10,
+  "sql_kbytes": 4.0,
+  "html_kbytes": 30.5,
+  "gzip_kbytes": 6.5,
+  "dom_nodes": 511,
+  "seconds_total": 0.09
+ },
+ "Задание: предпросмотр с ответами": {
+  "status": 200,
+  "ms": 8.88,
+  "ms_max": 10.16,
+  "sql": 10,
+  "sql_kbytes": 4.0,
+  "html_kbytes": 30.6,
+  "gzip_kbytes": 6.5,
+  "dom_nodes": 511,
+  "seconds_total": 0.09
+ },
+ "Проверка: очередь": {
+  "status": 200,
+  "ms": 24.45,
+  "ms_max": 25.66,
+  "sql": 9,
+  "sql_kbytes": 7.9,
+  "html_kbytes": 62.1,
+  "gzip_kbytes": 8.0,
+  "dom_nodes": 1085,
+  "seconds_total": 0.32
+ },
+ "Ученики: карточка": {
+  "status": 200,
+  "ms": 62.63,
+  "ms_max": 65.01,
+  "sql": 11,
+  "sql_kbytes": 15.8,
+  "html_kbytes": 374.1,
+  "gzip_kbytes": 19.2,
+  "dom_nodes": 3819,
+  "seconds_total": 0.65
+ },
+ "Страница: предпросмотр ученика (без HTMX)": {
+  "status": 200,
+  "ms": 16.0,
+  "ms_max": 61.58,
+  "sql": 11,
+  "sql_kbytes": 8.3,
+  "html_kbytes": 29.9,
+  "gzip_kbytes": 6.6,
+  "dom_nodes": 489,
+  "seconds_total": 0.22
+ },
+ "Аналитика (журнал)": {
+  "status": 200,
+  "ms": 209.29,
+  "ms_max": 233.4,
+  "sql": 26,
+  "sql_kbytes": 18.7,
+  "html_kbytes": 1376.1,
+  "gzip_kbytes": 25.8,
+  "dom_nodes": 12972,
+  "seconds_total": 2.0
+ },
+ "Ученик: страница задания (тест)": {
+  "status": 200,
+  "ms": 40.45,
+  "ms_max": 110.36,
+  "sql": 24,
+  "sql_kbytes": 27.0,
+  "html_kbytes": 35.7,
+  "gzip_kbytes": 7.2,
+  "dom_nodes": 615,
+  "seconds_total": 0.5
+ },
+ "Ученик: страница задания (карточки)": {
+  "status": 200,
+  "ms": 40.91,
+  "ms_max": 41.75,
+  "sql": 24,
+  "sql_kbytes": 27.0,
+  "html_kbytes": 35.7,
+  "gzip_kbytes": 7.2,
+  "dom_nodes": 615,
+  "seconds_total": 0.42
+ },
+ "Ученик: Сроки": {
+  "status": 200,
+  "ms": 47.12,
+  "ms_max": 83.91,
+  "sql": 5,
+  "sql_kbytes": 13.0,
+  "html_kbytes": 151.1,
+  "gzip_kbytes": 7.8,
+  "dom_nodes": 2556,
+  "seconds_total": 0.54
+ },
+ "_course": {
+  "blocks": 6,
+  "chapters_per_block": 2,
+  "topics_per_chapter": 3,
+  "assignments_per_topic": 4,
+  "assignments": 144,
+  "quiz_questions": 432,
+  "students": 40,
+  "submissions": 320,
+  "question_responses": 960
+ },
+ "_student_detail_markup": {
+  "assignment_progress_nodes": 8,
+  "assignment_preview_nodes": 144,
+  "details_tags": 0,
+  "scripts": 4,
+  "audio_tags": 0,
+  "forms": 3,
+  "buttons": 214,
+  "bytes_per_assignment": 2514.8
+ },
+ "_topic_board_markup": {
+  "bytes": 156256,
+  "dom_nodes": 1599,
+  "forms": 23,
+  "inputs": 143,
+  "selects": 32,
+  "textareas": 40,
+  "details": 9,
+  "bytes_per_assignment": 13021.3,
+  "gzip_kbytes": 19.5
+ }
+}
