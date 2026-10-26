@@ -150,9 +150,7 @@ def assignment_is_visible_to(assignment, user):
         # не становится общей, поэтому Grants считаем до фильтра по ученику.
         annotations[prefix + "has_group_grant"] = _relation_exists(obj, "groups")
         annotations[prefix + "has_student_grant"] = _relation_exists(obj, students_field)
-        annotations[prefix + "student_grant"] = _relation_exists(
-            obj, students_field, user.pk
-        )
+        annotations[prefix + "student_grant"] = _relation_exists(obj, students_field, user.pk)
         annotations[prefix + "student_exclude"] = _relation_exists(
             obj, "excluded_students", user.pk
         )

@@ -2732,9 +2732,11 @@ def deck_legacy_redirect(request, pk):
 @require_GET
 def students_list(request):
     query = request.GET.get("q", "").strip()[:200]
-    students = User.objects.filter(
-        profile__role=Profile.Role.STUDENT, is_active=True
-    ).select_related("profile").prefetch_related("student_groups")
+    students = (
+        User.objects.filter(profile__role=Profile.Role.STUDENT, is_active=True)
+        .select_related("profile")
+        .prefetch_related("student_groups")
+    )
     if query:
         students = students.filter(
             Q(username__icontains=query)
@@ -2848,11 +2850,7 @@ def _attach_progress_details(blocks_data, *, only_assignment_id=None):
         # Пустой details-параметр означает «ничего не раскрывать»; все записи
         # уже получили пустые attempt/items, поэтому дальше SQL не нужен.
         return
-    active_entries = [
-        entry
-        for entry in entries
-        if entry["state"] and entry["state"]["attempt_id"]
-    ]
+    active_entries = [entry for entry in entries if entry["state"] and entry["state"]["attempt_id"]]
     attempt_ids = [entry["state"]["attempt_id"] for entry in active_entries]
     if not attempt_ids:
         return
@@ -2865,7 +2863,9 @@ def _attach_progress_details(blocks_data, *, only_assignment_id=None):
     for entry in active_entries:
         entry["attempt"] = attempts.get(entry["state"]["attempt_id"])
     quiz_entries = [
-        entry for entry in active_entries if entry["attempt"] is not None and entry["assignment"].is_quiz
+        entry
+        for entry in active_entries
+        if entry["attempt"] is not None and entry["assignment"].is_quiz
     ]
     if not quiz_entries:
         return
