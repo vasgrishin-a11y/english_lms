@@ -2732,9 +2732,11 @@ def deck_legacy_redirect(request, pk):
 @require_GET
 def students_list(request):
     query = request.GET.get("q", "").strip()[:200]
-    students = User.objects.filter(
-        profile__role=Profile.Role.STUDENT, is_active=True
-    ).select_related("profile")
+    students = (
+        User.objects.filter(profile__role=Profile.Role.STUDENT, is_active=True)
+        .select_related("profile")
+        .prefetch_related("student_groups")
+    )
     if query:
         students = students.filter(
             Q(username__icontains=query)
@@ -2742,10 +2744,15 @@ def students_list(request):
             | Q(last_name__icontains=query)
             | Q(profile__telegram__icontains=query)
         )
-    students = list(students.order_by("last_name", "first_name", "username"))
+    students = students.order_by("last_name", "first_name", "username")
+    page_obj = Paginator(students, settings.LMS_PAGE_SIZE).get_page(request.GET.get("page"))
+    students = list(page_obj.object_list)
+    # Статистику считаем только для текущей страницы: один агрегат вместо
+    # полного сканирования всех сдач и 2N запросов на группы в шаблоне.
     stats = {
         row["student_id"]: row
         for row in Submission.objects.latest_attempts()
+        .filter(student_id__in=[student.pk for student in students])
         .values("student_id")
         .annotate(
             attempts=Count("pk"),
@@ -2775,6 +2782,7 @@ def students_list(request):
         "lms/teacher_students.html",
         {
             "students": students,
+            "page_obj": page_obj,
             "query": query,
             "total_assignments": total_assignments,
             "workspace": "students",
@@ -2782,112 +2790,49 @@ def students_list(request):
     )
 
 
-#: Полосы вердикта по % освоения навыка: (нижняя граница, вердикт, класс полоски).
-SKILL_BANDS = (
-    (85, "Отлично", "progress-success"),
-    (70, "Хорошо", ""),
-    (50, "Средне", "progress-warning"),
-    (0, "Слабо", "progress-danger"),
-)
-
-
-def _skill_summary(student, blocks_data):
-    """Сводный анализ по навыкам: % освоения, охват и очередь проверки.
-
-    Единица измерения — последнее сданное задание, видимое ученику
-    (тренажёр и материалы без сдачи исключены). Каждое оценённое задание
-    даёт каждому своему навыку один голос ``grade / max_points``; %
-    навыка — среднее по голосам, каждая работа весит одинаково, иначе
-    одна большая работа перекроет всю картину. Сданное без оценки
-    (очередь проверки, свободная часть теста) в % не входит и
-    показывается отдельно. Два запроса: навыки заданий и последние
-    попытки ученика.
-    """
-    visible_ids = [
-        entry["assignment"].pk
-        for block_item in blocks_data
-        for chapter_item in block_item["chapters"]
-        for topic_item in chapter_item["topics"]
-        for entry in topic_item["assignments"]
-        if entry["assignment"].assignment_type not in Assignment.NO_SUBMISSION_TYPES
-    ]
-    skill_names = {}
-    through = Assignment.skills.through
-    for link in through.objects.filter(assignment_id__in=visible_ids).select_related("skill"):
-        skill_names.setdefault(link.assignment_id, []).append(link.skill.name)
-    buckets = {}
-    for assignment_id in visible_ids:
-        for name in skill_names.get(assignment_id, []):
-            bucket = buckets.setdefault(
-                name, {"total": 0, "graded": 0, "percent_sum": 0, "pending": 0}
-            )
-            bucket["total"] += 1
-    rows = (
-        Submission.objects.filter(student=student, assignment_id__in=visible_ids)
-        .latest_attempts()
-        .values("assignment_id", "feedback__grade", "max_points_snapshot")
+def _quiz_items(assignment, attempt, questions, responses):
+    """Разобранные пункты теста для одной сдачи."""
+    quiz = getattr(attempt, "quiz_attempt", None)
+    return build_items(
+        assignment,
+        questions,
+        responses,
+        closed_round=True,
+        legacy=quiz.answers if quiz else None,
     )
-    for row in rows:
-        names = skill_names.get(row["assignment_id"], [])
-        if not names:
-            continue
-        grade = row["feedback__grade"]
-        maximum = row["max_points_snapshot"]
-        for name in names:
-            bucket = buckets[name]
-            if grade is None or not maximum:
-                bucket["pending"] += 1
-            else:
-                bucket["graded"] += 1
-                bucket["percent_sum"] += 100 * grade / maximum
-    skills = []
-    for name, bucket in buckets.items():
-        if not bucket["graded"]:
-            skills.append(
-                {
-                    "name": name,
-                    "percent": None,
-                    "verdict": "Нет оценок",
-                    "bar_class": "progress-sand",
-                    "graded": 0,
-                    "total": bucket["total"],
-                    "pending": bucket["pending"],
-                }
-            )
-            continue
-        percent = int(round(bucket["percent_sum"] / bucket["graded"]))
-        verdict, bar_class = next(
-            (verdict, bar_class) for bound, verdict, bar_class in SKILL_BANDS if percent >= bound
-        )
-        skills.append(
-            {
-                "name": name,
-                "percent": percent,
-                "verdict": verdict,
-                "bar_class": bar_class,
-                "graded": bucket["graded"],
-                "total": bucket["total"],
-                "pending": bucket["pending"],
-            }
-        )
-    skills.sort(key=lambda item: (item["percent"] is None, item["percent"] or 0))
-    summary = None
-    rated = [skill for skill in skills if skill["percent"] is not None]
-    if rated:
-        summary = {
-            "average": int(round(sum(skill["percent"] for skill in rated) / len(rated))),
-            "strongest": max(rated, key=lambda skill: skill["percent"])["name"],
-            "weakest": min(rated, key=lambda skill: skill["percent"])["name"],
-        }
-    return skills, summary
 
 
-def _attach_progress_details(blocks_data):
-    """Сдачи ученика и разбор теста по пунктам прямо в дереве прогресса.
+def _assignment_progress_entry(student, assignment, *, attempt_id=None):
+    """Данные для разбора одной сдачи: фиксированные 3–4 запроса.
 
-    Фиксированные +3 запроса: сдачи, вопросы с вариантами, ответы по пунктам.
-    Каждой записи задания добавляются ``attempt`` (последняя сдача или None)
-    и ``items`` (разбор пунктов теста, для остальных типов — пусто).
+    Используется и в no-JS режиме карточки ученика, и в HTMX-фрагменте.
+    """
+    attempts = Submission.objects.filter(student=student, assignment=assignment).select_related(
+        "feedback", "quiz_attempt"
+    )
+    if attempt_id:
+        attempts = attempts.filter(pk=attempt_id)
+    attempt = attempts.order_by("-version").first()
+    entry = {"assignment": assignment, "attempt": attempt, "items": []}
+    if attempt is None or not assignment.is_quiz:
+        return entry
+    questions = list(
+        assignment.questions.prefetch_related("choices").order_by("assignment_id", "order", "pk")
+    )
+    responses = {
+        response.question_id: response
+        for response in QuestionResponse.objects.filter(submission=attempt)
+    }
+    entry["items"] = _quiz_items(assignment, attempt, questions, responses)
+    return entry
+
+
+def _attach_progress_details(blocks_data, *, only_assignment_id=None):
+    """Подготовить разбор сдач в дереве прогресса.
+
+    По умолчанию только проставляет пустые ключи — тяжёлые ответы и пункты
+    тестов загружаются отдельным HTMX-запросом. В режиме без JS (``?details``)
+    или для прямого рендера можно ограничить загрузку одним заданием.
     """
     entries = [
         entry
@@ -2899,11 +2844,14 @@ def _attach_progress_details(blocks_data):
     for entry in entries:
         entry["attempt"] = None
         entry["items"] = []
-    attempt_ids = [
-        entry["state"]["attempt_id"]
-        for entry in entries
-        if entry["state"] and entry["state"]["attempt_id"]
-    ]
+    if only_assignment_id is not None:
+        entries = [entry for entry in entries if entry["assignment"].pk == only_assignment_id]
+    elif only_assignment_id is None:
+        # Пустой details-параметр означает «ничего не раскрывать»; все записи
+        # уже получили пустые attempt/items, поэтому дальше SQL не нужен.
+        return
+    active_entries = [entry for entry in entries if entry["state"] and entry["state"]["attempt_id"]]
+    attempt_ids = [entry["state"]["attempt_id"] for entry in active_entries]
     if not attempt_ids:
         return
     attempts = {
@@ -2912,12 +2860,12 @@ def _attach_progress_details(blocks_data):
             "feedback", "quiz_attempt"
         )
     }
-    for entry in entries:
-        state = entry["state"]
-        if state and state["attempt_id"]:
-            entry["attempt"] = attempts.get(state["attempt_id"])
+    for entry in active_entries:
+        entry["attempt"] = attempts.get(entry["state"]["attempt_id"])
     quiz_entries = [
-        entry for entry in entries if entry["attempt"] is not None and entry["assignment"].is_quiz
+        entry
+        for entry in active_entries
+        if entry["attempt"] is not None and entry["assignment"].is_quiz
     ]
     if not quiz_entries:
         return
@@ -2941,13 +2889,11 @@ def _attach_progress_details(blocks_data):
         )
     for entry in quiz_entries:
         attempt = entry["attempt"]
-        quiz = getattr(attempt, "quiz_attempt", None)
-        entry["items"] = build_items(
+        entry["items"] = _quiz_items(
             entry["assignment"],
+            attempt,
             questions_by_assignment.get(entry["assignment"].pk, []),
             responses_by_submission.get(attempt.pk, {}),
-            closed_round=True,
-            legacy=quiz.answers if quiz else None,
         )
 
 
@@ -2957,19 +2903,16 @@ def student_detail(request, pk):
     student = get_object_or_404(
         User.objects.select_related("profile"), pk=pk, profile__role=Profile.Role.STUDENT
     )
-    blocks_data, totals = course_tree(student=student)
+    blocks_data, totals = course_tree(student=student, sql_states=False)
     # Пустое дерево значит разное: «в курсе нет классов» и «ученику ничего не
     # назначено» (классы есть, но они у других групп). Подсказка в шаблоне
     # зависит от этого различия, поэтому спрашиваем только в пустом случае.
     course_has_blocks = bool(blocks_data) or Block.objects.filter(is_active=True).exists()
-    _attach_progress_details(blocks_data)
-    attempts = (
-        Submission.objects.filter(student=student)
-        .exclude(assignment__assignment_type__in=Assignment.NO_SUBMISSION_TYPES)
-        .select_related("feedback", "assignment__topic__block", "assignment__topic__chapter")
-        .order_by("-submitted_at", "-pk")[:30]
-    )
-    skills, skill_summary = _skill_summary(student, blocks_data)
+    details_raw = request.GET.get("details", "")
+    details_assignment_pk = int(details_raw) if details_raw.isdigit() else None
+    # По умолчанию не читаем ответы и пункты всех сдач: их загружает отдельный
+    # HTMX-запрос на конкретное задание. ?details=<pk> — путь без JavaScript.
+    _attach_progress_details(blocks_data, only_assignment_id=details_assignment_pk)
     cards_due = CardReview.objects.filter(student=student, due_at__lte=timezone.now()).count()
     issued_password = student.profile.reveal_password()
     return render(
@@ -2982,12 +2925,34 @@ def student_detail(request, pk):
             "blocks_data": blocks_data,
             "course_has_blocks": course_has_blocks,
             "totals": totals,
-            "attempts": list(attempts),
-            "skills": skills,
-            "skill_summary": skill_summary,
             "cards_due": cards_due,
+            "details_assignment_pk": details_assignment_pk,
             "workspace": "students",
         },
+    )
+
+
+@teacher_required
+@require_GET
+def student_assignment_progress(request, student_pk, assignment_pk):
+    """HTMX-фрагмент с ответом и разбором пунктов одной сдачи."""
+    student = get_object_or_404(
+        User.objects.select_related("profile"), pk=student_pk, profile__role=Profile.Role.STUDENT
+    )
+    assignment = get_object_or_404(
+        Assignment.objects.select_related("topic__block", "topic__chapter"), pk=assignment_pk
+    )
+    entry = _assignment_progress_entry(student, assignment)
+    if request.headers.get("HX-Request"):
+        return render(
+            request,
+            "lms/parts/student_assignment_progress_content.html",
+            {"entry": entry},
+        )
+    # Прямой переход без HTMX: показываем тот же разбор на карточке ученика.
+    return redirect(
+        f"{reverse('teacher_student_detail', args=[student.pk])}"
+        f"?details={assignment.pk}#progress-assignment-{assignment.pk}"
     )
 
 
@@ -3001,16 +2966,15 @@ def student_assignment_preview(request, student_pk, assignment_pk):
     - фрагмент — если запрос HTMX (hx-get из карточки ученика), отдаём только
       содержимое lms/parts/student_assignment_preview_content.html для inline-раскрытия.
     """
-    from .curriculum import visible_assignments
-
     student = get_object_or_404(
         User.objects.select_related("profile"), pk=student_pk, profile__role=Profile.Role.STUDENT
     )
     assignment = get_object_or_404(
         Assignment.objects.select_related("topic__block", "topic__chapter"), pk=assignment_pk
     )
-    # Видно ли задание этому ученику сейчас (учитывает группы, персоналки, архив, публикацию)
-    is_visible = visible_assignments(student).filter(pk=assignment.pk).exists()
+    # Видно ли задание этому ученику сейчас (группы, персоналки, архив, публикация).
+    # Для одного задания не строим общий visibility_q на весь каталог.
+    is_visible = audience.assignment_is_visible_to(assignment, student)
 
     questions = list(assignment.questions.prefetch_related("choices").order_by("order", "pk"))
     attachments = list(assignment.attachments.order_by("order", "pk"))

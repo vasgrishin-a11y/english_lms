@@ -395,6 +395,10 @@ class RaccoonSceneTests(LMSCase):
         # Зимой озеро замерзает: отдельная ветка «лёд/коньки» и снегопад.
         self.assertIn("frozen", js)
         self.assertIn("drawSnowfall", js)
+        # Декоративная сцена не должна непрерывно перерисовываться 60 fps.
+        self.assertIn("FRAME_MS = 1000 / 30", js)
+        self.assertIn("visibilitychange", js)
+        self.assertIn("IntersectionObserver", js)
 
 
 class StudentAssignmentPreviewTests(LMSCase):
@@ -423,3 +427,11 @@ class StudentAssignmentPreviewTests(LMSCase):
         page = self.teacher_client.get(url)
         self.assertEqual(page.status_code, 200)
         self.assertIn("<html", page.content.decode())
+
+    def test_private_audio_does_not_prefetch_on_page_load(self):
+        """Каждый metadata-запрос шёл бы через приватный просмотр файлов."""
+        templates = Path("lms/templates/lms").rglob("*.html")
+        for template in templates:
+            self.assertNotIn(
+                'preload="metadata"', template.read_text(encoding="utf-8"), str(template)
+            )

@@ -34,6 +34,8 @@ location / {
 }
 ```
 
+Динамические HTML-ответы сжимает `django.middleware.gzip.GZipMiddleware`, а статику — WhiteNoise. Не включайте повторное gzip-сжатие уже сжатого ответа на ingress; если переносите сжатие HTML на Nginx, отключите middleware в приложении. Для сжатых ответов с CSRF-токеном сохраняйте общий rate limit на ingress — это стандартная мера против атак типа BREACH.
+
 Сертификат, HTTP→HTTPS redirect и сеть доверенных peers настраиваются отдельно под ваш домен/платформу. При контейнерном bridge фактический REMOTE_ADDR может быть адресом gateway, а не `127.0.0.1` — проверьте его перед заданием trusted peers. **Не добавляйте `alias` для `/files/` или `/media/`.** WhiteNoise обслуживает только статические assets.
 
 ## Docker / Compose

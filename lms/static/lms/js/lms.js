@@ -3624,6 +3624,73 @@
     });
   }
 
+  function studentAssignmentDetails() {
+    // Тяжёлый разбор сдачи загружается один раз и дальше только сворачивается.
+    // Так карточка ученика не строит ответы по всем заданиям курса.
+    var LABEL_SHOW = "Показать ответ и разбор";
+    var LABEL_HIDE = "Скрыть ответ и разбор";
+
+    function targetOf(button) {
+      var id = button.getAttribute("aria-controls");
+      return id ? document.getElementById(id) : null;
+    }
+
+    function isLoaded(target) {
+      return !!target && target.innerHTML.trim().length > 0;
+    }
+
+    function setState(button, target, expanded) {
+      var label = button.querySelector("[data-progress-details-label]");
+      button.dataset.progressDetailsState = expanded ? "expanded" : "collapsed";
+      button.setAttribute("aria-expanded", expanded ? "true" : "false");
+      if (target) {
+        if (expanded) target.removeAttribute("hidden");
+        else target.setAttribute("hidden", "");
+      }
+      if (label) label.textContent = expanded ? LABEL_HIDE : LABEL_SHOW;
+    }
+
+    document.addEventListener("click", function (event) {
+      var button = event.target.closest ? event.target.closest("[data-progress-details-toggle]") : null;
+      if (!button) return;
+      var target = targetOf(button);
+      if (!target) return;
+      event.preventDefault();
+      if (button.dataset.progressDetailsState === "loading") return;
+      if (isLoaded(target)) {
+        setState(button, target, target.hasAttribute("hidden"));
+        return;
+      }
+      button.dataset.progressDetailsState = "loading";
+      button.setAttribute("aria-expanded", "true");
+    });
+
+    document.body.addEventListener("htmx:configRequest", function (event) {
+      var button = event.detail && event.detail.elt;
+      if (!button || !button.matches || !button.matches("[data-progress-details-toggle]")) return;
+      if (button.dataset.progressDetailsState === "loading" || isLoaded(targetOf(button))) {
+        event.preventDefault();
+      }
+    });
+
+    document.body.addEventListener("htmx:afterSwap", function (event) {
+      var target = event.detail && event.detail.target;
+      if (!target || !target.classList || !target.classList.contains("assignment-progress-details__body")) return;
+      var button = target.id
+        ? document.querySelector('[aria-controls="' + target.id + '"]')
+        : null;
+      if (button) setState(button, target, true);
+    });
+
+    Array.prototype.forEach.call(["htmx:responseError", "htmx:sendError", "htmx:swapError"], function (name) {
+      document.body.addEventListener(name, function (event) {
+        var button = event.detail && event.detail.elt;
+        if (!button || !button.matches || !button.matches("[data-progress-details-toggle]")) return;
+        setState(button, targetOf(button), false);
+      });
+    });
+  }
+
   function tableFilters() {
     // Фильтры таблицы применяются сразу при выборе значения; кнопка «Показать»
     // остаётся только как путь без JS, поэтому здесь её прячем.
@@ -3673,5 +3740,6 @@
     curriculumBoard();
     classFocus();
     studentAssignmentPreview();
+    studentAssignmentDetails();
   });
 })();

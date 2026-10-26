@@ -337,6 +337,11 @@ urlpatterns = [
         name="teacher_student_assignment_preview",
     ),
     path(
+        "teacher/students/<int:student_pk>/assignments/<int:assignment_pk>/progress/",
+        views_teacher.student_assignment_progress,
+        name="teacher_student_assignment_progress",
+    ),
+    path(
         "teacher/students/<int:pk>/edit/", views_teacher.student_edit, name="teacher_student_edit"
     ),
     path(

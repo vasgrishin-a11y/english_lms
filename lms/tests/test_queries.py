@@ -1,8 +1,10 @@
+from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.db import connection
 from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
 
-from lms.models import Assignment, Block, Submission, Topic
+from lms.models import Assignment, Block, Group, Submission, Topic
 
 from .base import LMSCase
 
@@ -111,3 +113,67 @@ class QueryAndMarkupTests(LMSCase):
         self.assertContains(response, 'class="table-scroll" role="region"')
         self.assertContains(response, 'scope="col"')
         self.assertContains(response, "<caption>")
+
+
+class TeacherStudentsPerformanceTests(LMSCase):
+    """Регрессия стоимости пути «Ученики → карточка → задание»."""
+
+    def test_students_list_is_paginated_and_has_fixed_query_budget(self):
+        User = get_user_model()
+        group = Group.objects.create(name="Perf group", slug="perf-group")
+        for number in range(18):
+            student = User.objects.create_user(f"perf-student-{number}")
+            group.students.add(student)
+        # Первый запрос заполняет минутный кэш счётчика очереди в сессии.
+        self.teacher_client.get("/teacher/students/")
+        with override_settings(LMS_PAGE_SIZE=5):
+            with CaptureQueriesContext(connection) as queries:
+                response = self.teacher_client.get("/teacher/students/")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(len(response.context["page_obj"].object_list), 5)
+            self.assertEqual(response.context["page_obj"].paginator.count, 20)
+            # Сессия/пользователь/роль, страница, prefetch групп, статистика,
+            # количество заданий. Число запросов не растёт вместе со списком.
+            self.assertLessEqual(len(queries), 8)
+
+    def test_student_detail_does_not_load_all_answers(self):
+        for number in range(25):
+            assignment = Assignment.objects.create(
+                topic=self.topic,
+                title=f"Perf task {number}",
+                description="x",
+                order=number + 1,
+            )
+            Submission.objects.create(
+                student=self.student,
+                assignment=assignment,
+                version=1,
+                text_answer="A real answer " * 30,
+                max_points_snapshot=assignment.max_points,
+                status=Submission.Status.CHECKED,
+            )
+        self.teacher_client.get(f"/teacher/students/{self.student.pk}/")
+        with CaptureQueriesContext(connection) as queries:
+            response = self.teacher_client.get(f"/teacher/students/{self.student.pk}/")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "A real answer")
+        self.assertContains(response, "Показать ответ и разбор")
+        self.assertNotContains(response, 'class="review-items assignment-items"')
+        self.assertNotContains(response, "Последние 30 попыток")
+        self.assertNotContains(response, "Навыки</h2>")
+        # Остались дерево курса, состояния, счётчик карточек, пароль и сессия;
+        # второстепенные блоки и их SQL больше не загружаются.
+        self.assertLessEqual(len(queries), 11)
+        # 25 заданий: компактное дерево без ответов, в gzip укладывается в
+        # десятки килобайт (отдельная проверка ниже).
+        self.assertLess(len(response.content), 130_000)
+
+    def test_dynamic_html_is_gzipped(self):
+        response = self.teacher_client.get(
+            f"/teacher/students/{self.student.pk}/", HTTP_ACCEPT_ENCODING="gzip"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Encoding"], "gzip")
+        self.assertIn("Accept-Encoding", response["Vary"])
+        self.assertLess(len(response.content), 20_000)
+        self.assertLessEqual(settings.LMS_PAGE_SIZE, 25)

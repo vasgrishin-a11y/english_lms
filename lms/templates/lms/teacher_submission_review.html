@@ -131,7 +131,7 @@
                     {% if submission.file_answer.name|media_kind == 'image' %}
                         <img src="{% url 'media_preview' submission.file_answer.name %}" alt="Файл ответа ученика" loading="lazy">
                     {% elif submission.file_answer.name|media_kind == 'audio' %}
-                        <audio controls preload="metadata" src="{% url 'media_preview' submission.file_answer.name %}"></audio>
+                        <audio controls preload="none" src="{% url 'media_preview' submission.file_answer.name %}"></audio>
                     {% endif %}
                     <a class="btn btn-secondary btn-sm" href="{{ submission.file_answer.url }}">{% icon "download" %}{% t "Скачать файл ответа" %}</a>
                 </div>
@@ -225,14 +225,14 @@
                     {% if feedback.audio_comment %}
                         <div class="feedback-current" style="margin-top:12px">
                             <span class="tiny strong">Голосовой комментарий</span>
-                            <audio controls preload="metadata" src="{% url 'media_preview' feedback.audio_comment.name %}"></audio>
+                            <audio controls preload="none" src="{% url 'media_preview' feedback.audio_comment.name %}"></audio>
                         </div>
                     {% endif %}
                     {% with legacy_offset=feedback.audio_comment|yesno:"1,0" %}
                         {% for clip in feedback.audio_comments.all %}
                             <div class="feedback-current" style="margin-top:12px">
                                 <span class="tiny strong">Голосовой комментарий {{ forloop.counter|add:legacy_offset }}</span>
-                                <audio controls preload="metadata" src="{% url 'media_preview' clip.audio.name %}"></audio>
+                                <audio controls preload="none" src="{% url 'media_preview' clip.audio.name %}"></audio>
                             </div>
                         {% endfor %}
                     {% endwith %}

@@ -30,7 +30,7 @@
                     <input type="checkbox" class="audio-comment-pick" id="voice-pick-legacy" data-voice-pick aria-label="Выбрать запись 1">
                     <span class="audio-comment-no tnum" data-voice-no aria-hidden="true">1</span>
                     <span class="audio-comment-player">
-                        <audio controls preload="metadata" src="{% url 'media_preview' feedback.audio_comment.name %}"></audio>
+                        <audio controls preload="none" src="{% url 'media_preview' feedback.audio_comment.name %}"></audio>
                         <span class="tiny muted">Опубликованный голосовой комментарий — ученик его уже слышит</span>
                     </span>
                     <button type="button" class="btn btn-ghost btn-sm" data-voice-remove>{% icon "trash" %}Удалить</button>
@@ -47,7 +47,7 @@
                     <input type="checkbox" class="audio-comment-pick" id="voice-pick-{{ clip.pk }}" data-voice-pick aria-label="Выбрать запись {{ forloop.counter|add:legacy_offset }}">
                     <span class="audio-comment-no tnum" data-voice-no aria-hidden="true">{{ forloop.counter|add:legacy_offset }}</span>
                     <span class="audio-comment-player">
-                        <audio controls preload="metadata" src="{% url 'media_preview' clip.audio.name %}"></audio>
+                        <audio controls preload="none" src="{% url 'media_preview' clip.audio.name %}"></audio>
                         <span class="tiny muted">Сохранена — ученик её уже слышит</span>
                     </span>
                     <button type="button" class="btn btn-ghost btn-sm" data-voice-remove>{% icon "trash" %}Удалить</button>

@@ -736,6 +736,56 @@
     if (!canvas || !canvas.getContext) return;
     var reduced =
       window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // Сцена декоративная: 30 кадров/с достаточно, а в скрытой вкладке или
+    // вне viewport её не рисуем вовсе. Раньше requestAnimationFrame(draw)
+    // выполнял всю сцену 60 раз/с на каждой странице LMS.
+    var FRAME_MS = 1000 / 30;
+    var timerId = null;
+    var rafId = null;
+    var sceneVisible = true;
+    var paused = !!document.hidden;
+
+    function cancelNextFrame() {
+      if (timerId !== null) {
+        window.clearTimeout(timerId);
+        timerId = null;
+      }
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+    }
+
+    function scheduleFrame() {
+      if (reduced || paused || timerId !== null || rafId !== null) return;
+      timerId = window.setTimeout(function () {
+        timerId = null;
+        rafId = requestAnimationFrame(function (now) {
+          rafId = null;
+          if (!paused) draw(now);
+        });
+      }, FRAME_MS);
+    }
+
+    function updatePause() {
+      var nextPaused = !!document.hidden || !sceneVisible;
+      if (nextPaused === paused) return;
+      paused = nextPaused;
+      if (paused) cancelNextFrame();
+      else scheduleFrame();
+    }
+
+    document.addEventListener("visibilitychange", updatePause);
+    if (window.IntersectionObserver) {
+      new window.IntersectionObserver(
+        function (entries) {
+          sceneVisible = !!(entries && entries[0] && entries[0].isIntersecting);
+          updatePause();
+        },
+        { rootMargin: "100px" }
+      ).observe(root);
+    }
+
     var season = detectSeason(root);
     var cfg = SEASONS[season];
     root.setAttribute("data-season", season);
@@ -981,11 +1031,14 @@
         ctx.fillText("Z", petX + size * 1.06, petY + size * 0.1);
       }
 
-      if (!reduced) requestAnimationFrame(draw);
+      if (!reduced) scheduleFrame();
     }
 
     resize();
-    window.addEventListener("resize", resize);
+    window.addEventListener("resize", function () {
+      resize();
+      if (reduced) requestAnimationFrame(draw);
+    });
     Promise.all([
       loadImage(root.getAttribute("data-pet-src")),
       loadImage(root.getAttribute("data-sleep-src")),
@@ -994,7 +1047,8 @@
       faceImg = images[0];
       sleepImg = images[1];
       booksImg = images[2];
-      requestAnimationFrame(draw);
+      if (reduced) requestAnimationFrame(draw);
+      else scheduleFrame();
     });
   }
 

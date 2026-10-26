@@ -45,10 +45,10 @@
                             <div class="small">{{ submission.feedback.comment|linebreaks }}</div>
                         {% endif %}
                         {% if submission.feedback.audio_comment %}
-                            <audio controls preload="metadata" src="{% url 'media_preview' submission.feedback.audio_comment.name %}"></audio>
+                            <audio controls preload="none" src="{% url 'media_preview' submission.feedback.audio_comment.name %}"></audio>
                         {% endif %}
                         {% for clip in submission.feedback.audio_comments.all %}
-                            <audio controls preload="metadata" src="{% url 'media_preview' clip.audio.name %}" style="margin-top:6px"></audio>
+                            <audio controls preload="none" src="{% url 'media_preview' clip.audio.name %}" style="margin-top:6px"></audio>
                         {% endfor %}
                         <p class="mb-0 small">
                             {% if assignment.is_quiz %}

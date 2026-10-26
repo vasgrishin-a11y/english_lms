@@ -35,7 +35,7 @@
                     {% if item.text_answer %}<div class="answer-body small" style="margin-top:8px">{{ item.text_answer|linebreaksbr }}</div>{% endif %}
                     {% if item.file_answer %}
                         <div class="media-frame" style="margin-top:8px">
-                            <audio controls preload="metadata" src="{% url 'media_preview' item.file_answer.name %}"></audio>
+                            <audio controls preload="none" src="{% url 'media_preview' item.file_answer.name %}"></audio>
                             <a class="btn btn-secondary btn-sm" href="{{ item.file_answer.url }}">{% icon "download" %}Скачать запись</a>
                         </div>
                     {% endif %}

@@ -64,6 +64,10 @@ INSTALLED_APPS = [
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # WhiteNoise сжимает только собранную статику. Динамический HTML карточки
+    # ученика повторяет много разметки; без GZip он уходит сотнями КБ.
+    # GZipMiddleware сам пропускает FileResponse и уже сжатые ответы.
+    "django.middleware.gzip.GZipMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "lms.middleware.UILanguageMiddleware",
     "lms.middleware.UploadLimitMiddleware",
