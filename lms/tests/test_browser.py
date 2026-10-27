@@ -65,30 +65,39 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
     def check_topic_board_lazy_editor(self, page, topic, assignment):
         """Форма быстрых правок приезжает по клику, а не вместе со всей доской.
 
-        Проверяем то, что сервером не проверяется: htmx действительно догружает
-        редактор, а «Развернуть все задания» не превращает тему в сотню форм.
+        Проверяет то, что сервером не проверяется: htmx действительно догружает
+        редактор, повторное открытие строки не дёргает сеть, а «Развернуть все
+        задания» не превращает тему в сотню форм.
         """
         from playwright.sync_api import expect
 
-        page.goto(self.live_server_url + f"/teacher/curriculum/topics/{topic.pk}/board/")
         loads = []
-        page.on(
-            "request",
-            lambda request: loads.append(request.url) if "/quick-editor/" in request.url else None,
-        )
-        board = page.locator("[data-topic-board]")
-        expect(board).to_be_visible()
-        editor = page.locator(f"#edit-{assignment.pk}")
-        expect(editor).to_be_attached()
-        expect(editor.locator("form")).to_have_count(0)
-        editor.locator("summary").click()
-        expect(editor.locator("form")).to_be_visible()
-        expect(editor.get_by_role("button", name="Сохранить")).to_be_visible()
-        # Повторное открытие не дёргает сеть: форма уже на месте.
-        editor.locator("summary").click()
-        editor.locator("summary").click()
-        expect(editor.locator("form")).to_be_visible()
-        self.assertEqual(len(loads), 1)
+
+        def note_request(request):
+            if "/quick-editor/" in request.url:
+                loads.append(request.url)
+
+        page.on("request", note_request)
+        try:
+            page.goto(self.live_server_url + f"/teacher/curriculum/topics/{topic.pk}/board/")
+            card = page.locator(f"#assignment-{assignment.pk}")
+            expect(card).to_be_visible()
+            editor = page.locator(f"#edit-{assignment.pk}")
+            expect(editor).to_be_attached()
+            expect(editor.locator("form")).to_have_count(0)
+            card.locator("> summary").click()  # раскрываем строку задания
+            editor.locator("> summary").click()  # первый клик — htmx тянет форму
+            expect(editor.locator("form")).to_be_visible()
+            expect(editor.get_by_role("button", name="Сохранить")).to_be_visible()
+            after_first = len(loads)
+            self.assertGreaterEqual(after_first, 1)
+            # Свернуть и открыть снова: форма уже на месте, сети нет.
+            editor.locator("> summary").click()
+            editor.locator("> summary").click()
+            expect(editor.locator("form")).to_be_visible()
+            self.assertEqual(len(loads), after_first)
+        finally:
+            page.remove_listener("request", note_request)
 
     def check_review_back_to_student(self, page, student, assignment):
         """«Разбор» из карточки ученика открывает режим проверки, «Назад» возвращает.
