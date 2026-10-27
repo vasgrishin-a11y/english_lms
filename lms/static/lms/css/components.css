@@ -1837,6 +1837,20 @@ table .grade-col {
     white-space: nowrap;
 }
 
+/* Пустые клетки журнала (задание не назначено) отмечаются стилями: на матрице
+   «класс × курс» разметка span'а на клетку стоила сотен килобайт HTML. */
+table .grade-col.is-not-assigned::after {
+    content: "\00B7";
+    opacity: 0.45;
+}
+
+/* Назначено, но без попытки: прочерк тоже рисуется стилями. */
+table .grade-col.is-pending::after {
+    content: "\2014";
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
 .block-badge {
     display: inline-flex;
     align-items: center;

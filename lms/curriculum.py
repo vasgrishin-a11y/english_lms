@@ -167,6 +167,7 @@ def course_tree(
     include_skills=False,
     at=None,
     sql_states=True,
+    assignment_audience=False,
 ):
     """Единое дерево курса для учителя и ученика.
 
@@ -187,9 +188,11 @@ def course_tree(
         blocks_queryset = blocks_queryset.prefetch_related(*audience_relations)
         chapters_queryset = chapters_queryset.prefetch_related(*audience_relations)
         topics_queryset = topics_queryset.prefetch_related(*audience_relations)
-        assignments_queryset = assignments_queryset.prefetch_related(
-            "groups", "assigned_students", "excluded_groups", "excluded_students"
-        )
+        # Правила самих заданий нужны только там, где их показывают — на карте
+        # курса бейдж у задания не рисуется, а четыре prefetch'а на 144 задания
+        # стоили четверти времени сборки дерева.
+        if assignment_audience:
+            assignments_queryset = assignments_queryset.prefetch_related(*audience_relations)
     blocks = list(blocks_queryset)
     chapters = list(chapters_queryset)
     topics = list(topics_queryset)
@@ -227,6 +230,7 @@ def course_tree(
         student_view=student is not None,
         query=query,
         with_audience=teacher_view,
+        assignment_audience=assignment_audience,
     )
 
 
@@ -259,7 +263,16 @@ def _assignment_publication_state(assignment, moment=None):
     return "published" if published else "draft"
 
 
-def _topic_entry(topic, assignments, *, stats, student_view, query, parent_audience=None):
+def _topic_entry(
+    topic,
+    assignments,
+    *,
+    stats,
+    student_view,
+    query,
+    parent_audience=None,
+    assignment_audience=False,
+):
     """Собрать узел темы: задания с состоянием/статистикой и счётчики темы."""
     entries = []
     publication_state = _publication_state(
@@ -280,7 +293,9 @@ def _topic_entry(topic, assignments, *, stats, student_view, query, parent_audie
             "audience": None,
             "publication_state": _assignment_publication_state(assignment),
         }
-        if topic_audience is not None:
+        if topic_audience is not None and assignment_audience:
+            # Аудитория отдельного задания нужна только на доске темы; на карте
+            # курса и в дереве прогресса рисуются бейджи класса, главы и темы.
             entry["audience"] = audience.accumulate(assignment, topic_audience)
         if assignment.is_flashcards:
             flashcard_count += 1
@@ -370,7 +385,16 @@ def _chapter_entry(chapter, topic_items, chapter_audience=None):
 
 
 def _assemble(
-    blocks, chapters, topics, assignments, *, stats, student_view, query, with_audience=False
+    blocks,
+    chapters,
+    topics,
+    assignments,
+    *,
+    stats,
+    student_view,
+    query,
+    with_audience=False,
+    assignment_audience=False,
 ):
     """Класс → главы → темы → задания.
 
@@ -438,6 +462,7 @@ def _assemble(
                     student_view=student_view,
                     query=topic_query,
                     parent_audience=chapter_audience,
+                    assignment_audience=assignment_audience,
                 )
                 item["publication_state"] = topic_publication[topic.pk]
                 if (
@@ -502,6 +527,36 @@ def _assemble(
     return result, totals
 
 
+#: Минутный кэш счётчиков очереди: навигация преподавателя не должна ради
+#: бейджа перечитывать агрегат по всем сдачам на каждом запросе.
+QUEUE_COUNTS_CACHE_KEY = "lms:queue_counts"
+QUEUE_COUNTS_CACHE_TTL = 60
+
+
+def cached_queue_counts(ttl=None):
+    """Счётчики очереди с коротким кэшем в процессе.
+
+    Раньше значение хранилось в сессии: каждый запрос преподавателя (включая
+    лёгкие HTMX-фрагменты «Показать ответ и разбор») завершался UPDATE строки
+    сессии, а параллельные запросы одного пользователя сериализовались на ней же.
+    Кэш в процессе не пишет БД и живёт одинаково для всех вкладок одного worker.
+    """
+    from django.core.cache import cache
+
+    counts = cache.get(QUEUE_COUNTS_CACHE_KEY)
+    if counts is None:
+        counts = queue_counts()
+        cache.set(QUEUE_COUNTS_CACHE_KEY, counts, ttl or QUEUE_COUNTS_CACHE_TTL)
+    return counts
+
+
+def put_cached_queue_counts(counts):
+    """Обновить кэш после экрана, который посчитал счётчики заново."""
+    from django.core.cache import cache
+
+    cache.set(QUEUE_COUNTS_CACHE_KEY, dict(counts), QUEUE_COUNTS_CACHE_TTL)
+
+
 def queue_counts():
     """Счётчики для вкладок очереди проверки — один агрегирующий запрос.
 
@@ -551,21 +606,37 @@ def teacher_overview():
     }
 
 
-def gradebook(block=None, topic=None):
+def gradebook_students():
+    """Ученики для журнала: активные, в алфавитном порядке."""
+    from django.contrib.auth import get_user_model
+
+    from .models import Profile
+
+    User = get_user_model()
+    return (
+        User.objects.filter(profile__role=Profile.Role.STUDENT, is_active=True)
+        .select_related("profile")
+        .order_by("last_name", "first_name", "username")
+    )
+
+
+def gradebook(block=None, topic=None, students=None):
     """Матрица журнала «ученики × задания»: 4 запроса независимо от размера.
 
     Материалы для занятий не оцениваются, поэтому колонками не становятся,
     но в карте курса остаются как все остальные задания.
-    """
-    from django.contrib.auth import get_user_model
 
-    from .models import Profile, Topic
+    ``students`` — страница учеников. Строки журнала постраничны, потому что
+    матрица растёт как «ученики × задания»: класс из 40 учеников и курса из 150
+    заданий — это 6000 ячеек, полтора мегабайта HTML и десятки тысяч DOM-узлов
+    на одной вкладке.
+    """
+    from .models import Topic
 
     assignments = (
         visible_assignments()
         .exclude(assignment_type=Assignment.Type.MATERIAL)
         .select_related("topic__block", "topic__chapter")
-        .prefetch_related(*audience.ASSIGNMENT_PREFETCH)
     )
     if topic:
         assignments = assignments.filter(topic=topic)
@@ -576,14 +647,25 @@ def gradebook(block=None, topic=None):
             "topic__block__order", "topic__chapter__order", "topic__order", "order", "pk"
         )
     )
-    expected = audience.expected_ids_map(assignments)
-    User = get_user_model()
-    students = list(
-        User.objects.filter(profile__role=Profile.Role.STUDENT, is_active=True)
-        .select_related("profile")
-        .order_by("last_name", "first_name", "username")
-    )
+    # Правила аудитории читаются связующими таблицами: prefetch всех связей
+    # класса, главы и темы собирал лишние модели на каждую колонку журнала.
+    expected = audience.effective_ids_bulk(assignments)
+    if students is None:
+        students = list(gradebook_students())
+    else:
+        students = list(students)
     cells = {}
+    from django.urls import reverse
+
+    from .templatetags.lms_tags import grade_class
+
+    def pill_class(grade, maximum, attempt):
+        """Цвет плашки оценки — тот же фильтр, что и в шаблоне."""
+        if grade is None:
+            return "grade-pill-muted"
+        return grade_class(grade, maximum)
+
+    review_urls = {}
     attempts = (
         Submission.objects.filter(student__in=students, assignment__in=assignments)
         .latest_attempts()
@@ -592,6 +674,7 @@ def gradebook(block=None, topic=None):
     )
     for attempt in attempts:
         cells[(attempt.student_id, attempt.assignment_id)] = attempt
+        review_urls[attempt.pk] = reverse("teacher_submission_review", args=[attempt.pk])
     rows = []
     for student in students:
         row_cells = []
@@ -621,6 +704,14 @@ def gradebook(block=None, topic=None):
                     "status": attempt.status if attempt else None,
                     "percent": _percent(grade, maximum) if grade is not None else None,
                     "assigned": assigned,
+                    # Ссылка, подпись и цвет клетки считаются здесь: на странице
+                    # 144 колонки × 25 строк, и {% url %}, {% if %} и фильтр цвета
+                    # на каждую клетку стоили больше времени, чем вся подготовка
+                    # данных журнала.
+                    "review_url": review_urls[attempt.pk] if attempt else "",
+                    "assignment_title": assignment.title,
+                    "status_label": attempt.get_status_display() if attempt else "",
+                    "pill_class": pill_class(grade, maximum, attempt),
                 }
             )
         rows.append(

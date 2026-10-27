@@ -410,7 +410,10 @@ class AudienceGradebookTests(LMSCase):
         self.assertTrue(rows[self.student.pk]["cells"][0]["assigned"])
         self.assertEqual(rows[self.other.pk]["total"], 0)
         self.assertFalse(rows[self.other.pk]["cells"][0]["assigned"])
-        self.assertContains(response, "Задание не назначено этому ученику")
+        # Пустая клетка больше не прячет подпись в title на каждой клетке —
+        # объяснение вынесено в подпись таблицы, клетка помечена классом.
+        self.assertContains(response, "пустая клетка — задание этому ученику не назначено")
+        self.assertContains(response, 'class="grade-col is-not-assigned"')
 
 
 class AudienceDetailsTests(LMSCase):
@@ -465,3 +468,70 @@ class AudienceDetailsTests(LMSCase):
         page = self.teacher_client.get(reverse("teacher_block_edit", args=[self.block.pk]))
         self.assertContains(page, "Анна Смирнова")
         self.assertNotContains(page, "Уже назначено выше по иерархии")
+
+
+class AudienceBulkIdsTests(LMSCase):
+    """Пачка правил для журнала должна совпадать с пообъектным расчётом."""
+
+    def setUp(self):
+        super().setUp()
+        self.group_a = Group.objects.create(name="Группа A", slug="bulk-a")
+        self.group_b = Group.objects.create(name="Группа B", slug="bulk-b")
+        for user in (self.student, self.other):
+            self.group_a.students.add(user)
+        self.group_b.students.add(self.other)
+        self.topic = Topic.objects.create(block=self.block, title="Bulk topic", slug="bulk-topic")
+        self.chapter_topic = Topic.objects.create(
+            block=self.block,
+            chapter=Chapter.objects.create(block=self.block, title="Bulk chapter", slug="bulk-ch"),
+            title="Bulk chapter topic",
+            slug="bulk-ch-topic",
+        )
+        self.open_task = Assignment.objects.create(topic=self.topic, title="Open", description="x")
+        self.group_task = Assignment.objects.create(
+            topic=self.topic, title="Group A only", description="x"
+        )
+        self.group_task.groups.add(self.group_a)
+        self.cancelling_topic = Topic.objects.create(
+            block=self.block, title="Cancelled", slug="bulk-cancelled"
+        )
+        # Исключение на самом задании снимает группу B; назначением выше по
+        # цепочке (тема исключает B, задание назначает A) доступ открывается.
+        self.cancel_task = Assignment.objects.create(
+            topic=self.cancelling_topic, title="Except B", description="x"
+        )
+        self.cancel_task.groups.add(self.group_a)
+        self.cancel_task.excluded_groups.add(self.group_b)
+        self.topic_task = Assignment.objects.create(
+            topic=self.cancelling_topic, title="Topic excludes B", description="x"
+        )
+        self.cancelling_topic.excluded_groups.add(self.group_b)
+        self.topic_task.groups.add(self.group_a)
+        self.chapter_task = Assignment.objects.create(
+            topic=self.chapter_topic, title="Chapter rule", description="x"
+        )
+        self.chapter_task.topic.chapter.groups.add(self.group_b)
+        self.personal = Assignment.objects.create(
+            topic=self.topic, title="Personal", description="x"
+        )
+        self.personal.assigned_students.add(self.student)
+        self.personal.excluded_students.add(self.other)
+
+    def test_bulk_ids_match_per_object_rules(self):
+        assignments = list(
+            Assignment.objects.select_related("topic__block", "topic__chapter").prefetch_related(
+                *audience.ASSIGNMENT_PREFETCH
+            )
+        )
+        self.assertGreaterEqual(len(assignments), 5)
+        expected = audience.expected_ids_map(assignments)
+        bulk = audience.effective_ids_bulk(assignments)
+        self.assertEqual(set(expected), set(bulk))
+        for pk in expected:
+            self.assertEqual(expected[pk], bulk[pk], f"расхождение в получателях задания {pk}")
+        # Открытое задание — «все», остальные посчитаны по группам и исключениям.
+        self.assertIsNone(bulk[self.open_task.pk])
+        self.assertEqual(bulk[self.group_task.pk], {self.student.pk, self.other.pk})
+        self.assertEqual(bulk[self.cancel_task.pk], {self.student.pk})
+        self.assertEqual(bulk[self.topic_task.pk], {self.student.pk, self.other.pk})
+        self.assertEqual(bulk[self.personal.pk], {self.student.pk})

@@ -62,6 +62,43 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
             page.get_by_role("button", name="Показать содержимое как видит ученик").first
         ).to_be_visible()
 
+    def check_topic_board_lazy_editor(self, page, topic, assignment):
+        """Форма быстрых правок приезжает по клику, а не вместе со всей доской.
+
+        Проверяет то, что сервером не проверяется: htmx действительно догружает
+        редактор, повторное открытие строки не дёргает сеть, а «Развернуть все
+        задания» не превращает тему в сотню форм.
+        """
+        from playwright.sync_api import expect
+
+        loads = []
+
+        def note_request(request):
+            if "/quick-editor/" in request.url:
+                loads.append(request.url)
+
+        page.on("request", note_request)
+        try:
+            page.goto(self.live_server_url + f"/teacher/curriculum/topics/{topic.pk}/board/")
+            card = page.locator(f"#assignment-{assignment.pk}")
+            expect(card).to_be_visible()
+            editor = page.locator(f"#edit-{assignment.pk}")
+            expect(editor).to_be_attached()
+            expect(editor.locator("form")).to_have_count(0)
+            card.locator("> summary").click()  # раскрываем строку задания
+            editor.locator("> summary").click()  # первый клик — htmx тянет форму
+            expect(editor.locator("form")).to_be_visible()
+            expect(editor.get_by_role("button", name="Сохранить")).to_be_visible()
+            after_first = len(loads)
+            self.assertGreaterEqual(after_first, 1)
+            # Свернуть и открыть снова: форма уже на месте, сети нет.
+            editor.locator("> summary").click()
+            editor.locator("> summary").click()
+            expect(editor.locator("form")).to_be_visible()
+            self.assertEqual(len(loads), after_first)
+        finally:
+            page.remove_listener("request", note_request)
+
     def check_review_back_to_student(self, page, student, assignment):
         """«Разбор» из карточки ученика открывает режим проверки, «Назад» возвращает.
 
@@ -457,6 +494,7 @@ class BrowserWorkflowTests(StaticLiveServerTestCase):
                 check_language(page)
                 check_page("queue")
                 self.check_student_assignment_preview(page, student, assignment)
+                self.check_topic_board_lazy_editor(page, topic, assignment)
                 self.check_review_back_to_student(page, student, assignment)
                 page.goto(self.live_server_url + "/teacher/curriculum/")
                 check_page("curriculum")
@@ -658,10 +696,15 @@ class BrowserItemFlowTests(StaticLiveServerTestCase):
             editor = page.locator(f"#edit-{assignment.pk}")
             expect(editor).to_have_attribute("open", "")
             editor.get_by_label("Удалить основной файл после сохранения").check()
-            expect(
-                page.locator(f'#edit-{other.pk} [name="material_file-clear"]')
-            ).not_to_be_checked()
             editor.get_by_role("button", name="Сохранить", exact=True).click()
+            # Редактор второй строки открывается независимо: чекбокс «Удалить
+            # файл» не перетекает между заданиями. Открывать его до сохранения
+            # нельзя — шаблон сворачивает соседние редакторы, и форма стала бы
+            # невидимой.
+            page.locator(f"#assignment-{other.pk} > summary").click()
+            other_editor = page.locator(f"#edit-{other.pk}")
+            other_editor.locator("> summary").click()
+            expect(other_editor.locator('form [name="material_file-clear"]')).not_to_be_checked()
 
             page.goto(self.live_server_url + reverse("teacher_assignment_form", args=[other.pk]))
             expect(page.locator("#ai-extract-source")).to_have_value(f"material:{other.pk}")

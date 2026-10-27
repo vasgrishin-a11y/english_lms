@@ -20,7 +20,7 @@
     <div class="stat stat-warning"><div class="stat-value tnum">{{ summary.waiting }}</div><div class="stat-label">{% icon "clock" "icon icon-sm" %}Ждут проверки</div></div>
     <div class="stat stat-danger"><div class="stat-value tnum">{{ summary.revision }}</div><div class="stat-label">{% icon "refresh" "icon icon-sm" %}На доработке</div></div>
     <div class="stat"><div class="stat-value tnum">{{ assignments|length }}</div><div class="stat-label">{% icon "file-text" "icon icon-sm" %}Заданий в срезе</div></div>
-    <div class="stat"><div class="stat-value tnum">{{ rows|length }}</div><div class="stat-label">{% icon "users" "icon icon-sm" %}Учеников</div></div>
+    <div class="stat"><div class="stat-value tnum">{{ students_total|default:rows|length }}</div><div class="stat-label">{% icon "users" "icon icon-sm" %}Учеников</div></div>
 </div>
 
 <section class="card card-pad-sm">
@@ -52,57 +52,15 @@
 
 <div class="table-scroll" role="region" aria-label="Журнал оценок, прокручивается по горизонтали" tabindex="0">
 <table>
-    <caption>Оценки последних попыток: {{ rows|length }} учеников × {{ assignments|length }} заданий</caption>
+    <caption>Оценки последних попыток: {{ students_total|default:rows|length }} учеников × {{ assignments|length }} заданий. Прочерк — назначено, но ещё без оценки; пустая клетка — задание этому ученику не назначено.</caption>
     <thead>
-        <tr>
-            <th scope="col" class="sticky-col">Ученик</th>
-            {% for assignment in assignments %}
-                <th scope="col" class="grade-col">
-                    <span class="tiny muted">{{ assignment.topic.title|truncatechars:24 }}</span><br>
-                    <span title="{{ assignment.title }}">{{ assignment.title|truncatechars:18 }}</span>
-                </th>
-            {% endfor %}
-            <th scope="col">Итог</th>
-        </tr>
+<tr><th scope="col" class="sticky-col">Ученик</th>{% for assignment in assignments %}<th scope="col" class="grade-col"><span class="tiny muted">{{ assignment.topic.title|truncatechars:24 }}</span><br><span title="{{ assignment.title }}">{{ assignment.title|truncatechars:18 }}</span></th>{% endfor %}<th scope="col">Итог</th></tr>
     </thead>
     <tbody>
-        {% for row in rows %}
-            <tr>
-                <th scope="row" class="sticky-col">
-                    <a href="{% url 'teacher_student_detail' row.student.pk %}">{{ row.student.get_full_name|default:row.student.username }}</a>
-                </th>
-                {% for cell in row.cells %}
-                    <td class="grade-col">
-                        {% if cell.attempt %}
-                            <a class="grade-pill tnum {% if cell.grade != None %}{{ cell.grade|grade_class:cell.maximum }}{% else %}grade-pill-muted{% endif %}"
-                               href="{% url 'teacher_submission_review' cell.attempt.pk %}"
-                               title="{{ cell.assignment.title }} — {{ cell.attempt.get_status_display }}">
-                                {% if cell.grade != None %}{{ cell.grade }}<small>/{{ cell.maximum }}</small>{% else %}…{% endif %}
-                            </a>
-                        {% elif cell.assigned %}
-                            <span class="tiny muted" aria-hidden="true">—</span>
-                        {% else %}
-                            <span class="tiny muted" title="Задание не назначено этому ученику" style="opacity:.45">·</span>
-                        {% endif %}
-                    </td>
-                {% endfor %}
-                <td>
-                    <span class="tiny tnum">{{ row.checked }}/{{ row.total }} проверено</span>
-                    <div class="progress" role="img" aria-label="{{ row.student.get_full_name|default:row.student.username }}: {{ row.percent }} процентов">
-                        <span class="progress-bar" style="width:{{ row.percent }}%"></span>
-                    </div>
-                </td>
-            </tr>
-        {% empty %}
-            <tr><td colspan="2">
-                <div class="empty">
-                    <div class="empty-icon">{% icon "grid" "icon icon-xl" %}</div>
-                    <h3>Нет данных для среза</h3>
-                    <p>Измените фильтр или опубликуйте задания — журнал строится только по видимым ученикам заданиям.</p>
-                </div>
-            </td></tr>
-        {% endfor %}
-    </tbody>
+{% for row in rows %}<tr><th scope="row" class="sticky-col"><a href="{% url 'teacher_student_detail' row.student.pk %}">{{ row.student.get_full_name|default:row.student.username }}</a></th>{% for cell in row.cells %}{% if cell.attempt %}<td class="grade-col"><a class="grade-pill tnum {{ cell.pill_class }}" href="{{ cell.review_url }}" title="{{ cell.assignment_title }} — {{ cell.status_label }}">{% if cell.grade != None %}{{ cell.grade }}<small>/{{ cell.maximum }}</small>{% else %}…{% endif %}</a></td>{% elif cell.assigned %}<td class="grade-col is-pending"></td>{% else %}<td class="grade-col is-not-assigned"></td>{% endif %}{% endfor %}<td><span class="tiny tnum">{{ row.checked }}/{{ row.total }} проверено</span><div class="progress" role="img" aria-label="{{ row.student.get_full_name|default:row.student.username }}: {{ row.percent }} процентов"><span class="progress-bar" style="width:{{ row.percent }}%"></span></div></td></tr>
+{% empty %}<tr><td colspan="2"><div class="empty"><div class="empty-icon">{% icon "grid" "icon icon-xl" %}</div><h3>Нет данных для среза</h3><p>Измените фильтр или опубликуйте задания — журнал строится только по видимым ученикам заданиям.</p></div></td></tr>
+{% endfor %}    </tbody>
 </table>
 </div>
+{% include "lms/pagination.html" %}
 {% endblock %}
