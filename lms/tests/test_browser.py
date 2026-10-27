@@ -696,10 +696,15 @@ class BrowserItemFlowTests(StaticLiveServerTestCase):
             editor = page.locator(f"#edit-{assignment.pk}")
             expect(editor).to_have_attribute("open", "")
             editor.get_by_label("Удалить основной файл после сохранения").check()
-            expect(
-                page.locator(f'#edit-{other.pk} [name="material_file-clear"]')
-            ).not_to_be_checked()
             editor.get_by_role("button", name="Сохранить", exact=True).click()
+            # Редактор второй строки открывается независимо: чекбокс «Удалить
+            # файл» не перетекает между заданиями. Открывать его до сохранения
+            # нельзя — шаблон сворачивает соседние редакторы, и форма стала бы
+            # невидимой.
+            page.locator(f"#assignment-{other.pk} > summary").click()
+            other_editor = page.locator(f"#edit-{other.pk}")
+            other_editor.locator("> summary").click()
+            expect(other_editor.locator('form [name="material_file-clear"]')).not_to_be_checked()
 
             page.goto(self.live_server_url + reverse("teacher_assignment_form", args=[other.pk]))
             expect(page.locator("#ai-extract-source")).to_have_value(f"material:{other.pk}")
