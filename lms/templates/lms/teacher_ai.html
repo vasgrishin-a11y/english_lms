@@ -14,8 +14,21 @@
 </nav>
 
 <div class="content-head">
-    <div>
+    <div class="row">
         <h1>{% icon "sparkles" %}{% t "ИИ-помощник" %}</h1>
+        {% if mode != 'off' %}
+            <details class="info-dot" data-info-dot>
+                <summary aria-label="Лимиты ИИ-помощника" title="Лимиты ИИ-помощника">?</summary>
+                <div class="info-dot-panel">
+                    <p class="rail-title">Лимиты</p>
+                    <ul class="small muted">
+                        <li>файл — до {{ max_upload_mb }} МБ, текста — до {{ limits.text_chars }} знаков;</li>
+                        <li>классов {{ limits.blocks }}, глав {{ limits.chapters|default:limits.topics }}, тем {{ limits.topics }}, заданий {{ limits.assignments }};</li>
+                        <li>вопросов на задание {{ limits.questions }}, карточек {{ limits.cards }}.</li>
+                    </ul>
+                </div>
+            </details>
+        {% endif %}
     </div>
     <span class="badge badge-wrap {% if mode == 'online' %}badge-turquoise{% else %}badge-outline{% endif %}">{{ mode_label }}</span>
 </div>
@@ -33,7 +46,7 @@
         </div>
     </section>
 {% else %}
-    <div class="split">
+    <div class="split split-single">
         <div class="split-main">
             <section class="card">
                 <div class="card-head"><h2 class="card-title">{% icon "upload" %}Материал</h2></div>
@@ -182,37 +195,30 @@
                 </section>
             {% endif %}
         </div>
-
-        <aside class="split-side" tabindex="0" aria-label="Как работает помощник, формат материала и лимиты">
-            <section class="card card-pad-sm">
-                <p class="rail-title">Как это работает</p>
-                <ol class="small muted" style="padding-left:18px">
-                    <li>Материал разбирается в структуру: <strong>класс → главы → темы → задания → вопросы → карточки</strong>. Если главы не указаны — темы попадут в главу «Общее».</li>
-                    <li>Задание рассчитано на заранее неизвестного ученика: ИИ использует только уровень, тему, навык и другие параметры из запроса, не имя или историю попыток.</li>
-                    {% if mode == 'online' %}<li>Если попросить, ИИ создаст к заданию отдельный текстовый материал: он будет приложен как скачиваемый TXT-файл. Исходный загруженный файл автоматически не копируется.</li>{% else %}<li>Офлайн-разбор не создаёт вложения: отдельные TXT-файлы для задания доступны с подключённой моделью.</li>{% endif %}
-                    <li>Если ответ зависит от материала, он должен быть в условии или среди реальных вложений — ИИ не оставляет ссылок на отсутствующий текст.</li>
-                    <li>Локальная vision-модель понимает фото страницы; Word, Excel и PDF читаются офлайн. Файлы можно приложить и к правке текущей версии — не только при первом разборе.</li>
-                    <li>Импорт создаёт только черновики — ученики ничего не видят до публикации и назначения.</li>
-                    <li>Черновики дальше правятся вручную: как обычные задания курса. Главы можно переименовать на карте курса.</li>
-                </ol>
-            </section>
-
-            <section class="card card-pad-sm">
-                <p class="rail-title">Лимиты</p>
-                <ul class="small muted" style="padding-left:18px">
-                    <li>файл — до {{ max_upload_mb }} МБ, текста — до {{ limits.text_chars }} знаков;</li>
-                    <li>классов {{ limits.blocks }}, глав {{ limits.chapters|default:limits.topics }}, тем {{ limits.topics }}, заданий {{ limits.assignments }};</li>
-                    <li>вопросов на задание {{ limits.questions }}, карточек {{ limits.cards }}.</li>
-                </ul>
-                <p class="tiny muted mb-0">Темы без главы при импорте попадут в служебную главу «Общее», которую потом можно переименовать на карте курса.</p>
-            </section>
-        </aside>
     </div>
 {% endif %}
 {% endblock %}
 
 {% block extra_js %}
 {{ structure_tree|json_script:"ai-structure-tree" }}
+<script>
+(function () {
+    // Подсказка «?» с лимитами: закрывается по клику мимо и по Escape.
+    var dots = document.querySelectorAll("[data-info-dot]");
+    Array.prototype.forEach.call(dots, function (dot) {
+        var summary = dot.querySelector("summary");
+        document.addEventListener("click", function (event) {
+            if (dot.open && !dot.contains(event.target)) dot.open = false;
+        });
+        dot.addEventListener("keydown", function (event) {
+            if (event.key === "Escape" && dot.open) {
+                dot.open = false;
+                if (summary) summary.focus();
+            }
+        });
+    });
+}());
+</script>
 <script>
 (function () {
     var root = document.querySelector("[data-ai-structure]");

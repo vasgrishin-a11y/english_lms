@@ -190,6 +190,11 @@
     align-items: start;
 }
 
+/* Раздел без боковой колонки: контент занимает всю ширину. */
+.split.split-single {
+    grid-template-columns: minmax(0, 1fr);
+}
+
 .split-main,
 .split-side {
     display: flex;
