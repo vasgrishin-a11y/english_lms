@@ -88,7 +88,7 @@
                 {% for question in questions %}
                     <li class="panel" style="margin-bottom:12px">
                         <div class="row row-tight" style="margin-bottom:6px">
-                            <strong>{{ forloop.counter }}. {{ question.text|linebreaksbr }}</strong>
+                            <strong>{{ forloop.counter }}. {% if question.kind == 'cloze' %}{{ question.text|cloze_blank|linebreaksbr }}{% else %}{{ question.text|linebreaksbr }}{% endif %}</strong>
                             <span class="tag">{{ question.get_kind_display }}</span>
                             <span class="tiny muted tnum">{{ question.points }} б.</span>
                         </div>
@@ -103,6 +103,17 @@
                             </ul>
                         {% elif question.kind == 'gap' %}
                             <p class="small mb-0" style="margin-top:8px">Пропуск: ученик вписывает ответ в поле. {% if question.choices.exists %}<span class="tiny muted">Принимается {{ question.choices.count }} вариант(а).</span>{% endif %}</p>
+                        {% elif question.kind == 'cloze' %}
+                            <div class="cloze" style="margin-top:8px">
+                                {% spaceless %}
+                                    {% for segment in question.cloze_segments %}
+                                        {% if segment.type == 'text' %}<span class="cloze-text">{{ segment.text }}</span>
+                                        {% else %}<span class="cloze-gap"><span class="cloze-num tnum" aria-hidden="true">{{ segment.number }}</span><input type="text" disabled aria-label="Пропуск {{ segment.number }}" style="width:8ch"></span>
+                                        {% endif %}
+                                    {% endfor %}
+                                {% endspaceless %}
+                            </div>
+                            <p class="tiny muted" style="margin-top:6px">{{ question.cloze_count }} пропуск(ов) — ученик вписывает ответы прямо в текст, балл делится между пропусками.</p>
                         {% elif question.kind == 'match' %}
                             <div class="table-scroll" style="margin-top:8px">
                                 <table>

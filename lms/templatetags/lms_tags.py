@@ -74,6 +74,7 @@ KIND_ICONS = {
     "mcq": "target",
     "multi": "grid",
     "gap": "pencil",
+    "cloze": "file-text",
     "match": "sort",
     "order": "list-ordered",
     "sort": "columns",
@@ -85,6 +86,7 @@ KIND_HINTS = {
     "mcq": "один правильный ответ",
     "multi": "несколько правильных ответов",
     "gap": "впишите ответ",
+    "cloze": "впишите ответы прямо в текст",
     "match": "установите соответствие",
     "order": "соберите предложение из слов",
     "sort": "распределите по колонкам",
@@ -143,6 +145,26 @@ def icon(name, css="icon", title=""):
         css,
         href,
     )
+
+
+@register.filter
+def cloze_key(question):
+    """Текст с пропусками, где пропуски заменены правильными ответами."""
+    from lms.cloze import filled_text
+
+    return filled_text(question.text, question.cloze_accepted)
+
+
+@register.filter
+def cloze_blank(text):
+    """Текст с пропусками без ответов: ``[[1]]`` → ``______``.
+
+    Для списков и подсказок, где разметка не нужна: преподаватель видит
+    обычное предложение с местом для ответа, а не служебные скобки.
+    """
+    from lms.cloze import display_text
+
+    return display_text(text)
 
 
 @register.filter

@@ -54,6 +54,7 @@ from django.core.files.storage import default_storage
 from django.db import transaction
 from django.utils.text import slugify
 
+from .cloze import gap_count, normalize_cloze_text
 from .library import _create_questions
 from .models import (
     Assignment,
@@ -125,6 +126,9 @@ KIND_MARKERS = {
     "несколько": Question.Kind.MULTI,
     "gap": Question.Kind.GAP,
     "пропуск": Question.Kind.GAP,
+    "cloze": Question.Kind.CLOZE,
+    "текст с пропусками": Question.Kind.CLOZE,
+    "пропуски в тексте": Question.Kind.CLOZE,
     "match": Question.Kind.MATCH,
     "соответствие": Question.Kind.MATCH,
     "order": Question.Kind.ORDER,
@@ -999,7 +1003,7 @@ AI_AUTHORING_CONTEXT = """Ты — профессиональный препод
   карточки — это разновидность задания flashcards, а не отдельная сущность курса;
 - навык задания выбирается только из grammar, vocabulary, listening, speaking, writing,
   reading;
-- у quiz допустимы пункты mcq, multi, gap, match, order, sort, spell, text и voice;
+- у quiz допустимы пункты mcq, multi, gap, cloze, match, order, sort, spell, text и voice;
 - Импорт создаёт только черновики: ничего не публикуй и не утверждай за преподавателя.
 
 Выбирай type задания по форме сдачи ответа, а не по оформлению текста:
@@ -1023,7 +1027,7 @@ PROMPT_SCHEMA = """Верни строго JSON без пояснений в ф�
        "assignments": [{"type": "text|file|audio|mixed|quiz|flashcards|material", "title": "Название",
           "description": "Условие для заранее неизвестного ученика: цель, шаги, объём и критерии",
           "max_points": 10, "skills": ["grammar|vocabulary|listening|speaking|writing|reading"],
-          "questions": [{"kind": "mcq|multi|gap|match|order|sort|spell|text|voice", "text": "вопрос",
+          "questions": [{"kind": "mcq|multi|gap|cloze|match|order|sort|spell|text|voice", "text": "вопрос",
               "points": 1, "explanation": "",
               "choices": [{"text": "вариант", "correct": true, "match_text": ""}]}],
           "attachments": [{"title": "Название материала", "content": "Текст отдельного материала для файла .txt"}],
@@ -1058,6 +1062,22 @@ PROMPT_SCHEMA = """Верни строго JSON без пояснений в ф�
 - Для mcq и order укажи ровно один верный вариант; для multi — минимум два; для
   match и sort используй пары text ↔ match_text; для gap и spell приведи принимаемые
   ответы как верные варианты; для text и voice choices не нужны.
+- Пункт cloze («Текст с пропусками») — полноценный тип задания, и его можно
+  использовать, когда это уместно: в исходнике есть связный текст (рассказ, письмо,
+  диалог, инструкция) с пропусками внутри предложений, или преподаватель просит
+  «текст с пропусками», «впишите слова в текст», «fill in the gaps in the text».
+  Тогда пропуски живут внутри одного текста, а не отдельными пунктами «вписать
+  ответ»: контекст предложения сохраняется. Это удобно для времён и форм глагола,
+  предлогов и артиклей, словообразования, коллокаций и чтения с восстановлением
+  текста. Не превращай в cloze отдельные несвязанные предложения и короткие
+  вопросы — для них есть gap, mcq и другие типы.
+- Для cloze (текст с пропусками) верни в text цельный текст, где каждый пропуск
+  размечен [[1]], [[2]] … по порядку; в choices — только принятые ответы, по одному
+  варианту на строку пропуска, с полем "gap": номер пропуска (1, 2, …). Все варианты
+  одного пропуска — отдельные choices с одинаковым "gap" и correct=true. Не добавляй
+  варианты-отвлекающие: ученик вписывает ответ сам.
+  Пример: {"kind": "cloze", "text": "Yesterday Anna [[1]] (go) to the park.",
+           "choices": [{"text": "went", "correct": true, "gap": 1}]}
 - Если выбран quiz, вопросы должны проверять только материал задания. Если в исходном
   материале нет упражнений, можно составить проверочные вопросы только по фактам и
   языку этого материала. Не создавай персональную адаптацию.
@@ -1092,15 +1112,16 @@ PROMPT_SCHEMA = """Верни строго JSON без пояснений в ф�
   question.text и choices нет номеров и двойных «1. 1.»; любое «прочитайте/посмотрите»
   подкреплено реально встроенным материалом; attach_files заполнен только по явной просьбе
   и только именами из списка файлов запроса; для quiz пункты полные, у mcq/order ровно
-  один верный вариант, для остальных типов questions пустые; названия короткие, навыки
+  один верный вариант, у cloze пропуски [[n]] идут по порядку и у каждого есть принятый
+  ответ из choices с тем же "gap", для остальных типов questions пустые; названия короткие, навыки
   по делу, лишних полей и персонализации нет. Найденные ошибки исправь и только потом
   отдавай JSON.
 """
 
 TARGET_PROMPTS = {
     "mixed": "Собери из материала переиспользуемую структуру курса: Класс → Главы → Темы → Задания (тесты, карточки, материалы). Ученик заранее неизвестен, поэтому не персонализируй контент. Если главы явно выделены в материале — используй их, иначе оставь темы в главе «Общее».",
-    "assignment": "Собери одно универсальное задание с понятным условием для заранее неизвестного ученика; если в материале есть упражнения, оформи их в подходящий тип задания.",
-    "quiz": "Собери одно универсальное задание-тест с вопросами только по материалу. Не привязывай тест к конкретному ученику или его прошлым результатам.",
+    "assignment": "Собери одно универсальное задание с понятным условием для заранее неизвестного ученика; если в материале есть упражнения, оформи их в подходящий тип задания. Для связного текста с пропусками внутри предложений есть пункт cloze («Текст с пропусками») — используй его, когда он подходит по форме.",
+    "quiz": "Собери одно универсальное задание-тест с вопросами только по материалу. Не привязывай тест к конкретному ученику или его прошлым результатам. Если в материале есть связный текст с пропусками внутри предложений, оформи его пунктом cloze («Текст с пропусками») — это доступный тип пункта.",
     "cards": "Собери универсальный набор карточек: слово → перевод и пример употребления. Не добавляй персональный контекст ученика.",
 }
 
@@ -1694,13 +1715,18 @@ def _normalise_assignment(item, caps, attachable=frozenset()):
             label = _clean(choice.get("text"), 500)
             if not label:
                 continue
-            choices.append(
-                {
-                    "text": label,
-                    "match_text": _clean(choice.get("match_text"), 500),
-                    "correct": bool(choice.get("correct")),
-                }
-            )
+            entry = {
+                "text": label,
+                "match_text": _clean(choice.get("match_text"), 500),
+                "correct": bool(choice.get("correct")),
+            }
+            if kind == Question.Kind.CLOZE:
+                # Номер пропуска: без него ответ ученика не с чем сверить.
+                try:
+                    entry["gap"] = max(1, min(gap_count(text), int(choice.get("gap", 1))))
+                except (TypeError, ValueError):
+                    entry["gap"] = 1
+            choices.append(entry)
         if kind in {
             Question.Kind.MCQ,
             Question.Kind.MULTI,
@@ -1715,6 +1741,22 @@ def _normalise_assignment(item, caps, attachable=frozenset()):
             choices = []
         elif not choices and kind not in {Question.Kind.GAP, Question.Kind.SPELL}:
             continue
+        if kind == Question.Kind.CLOZE:
+            # Модель могла вернуть текст без разметки или с чужими номерами:
+            # нормируем пропуски и оставляем только те ответы, к которым есть
+            # место в тексте. Иначе пункт нельзя ни открыть, ни проверить.
+            text = normalize_cloze_text(text)
+            total = gap_count(text)
+            if not total:
+                continue
+            choices = [
+                {**choice, "correct": True, "gap": min(choice["gap"], total)}
+                for choice in choices
+                if choice["text"]
+            ]
+            answered = {choice["gap"] for choice in choices}
+            if any(number not in answered for number in range(1, total + 1)):
+                continue
         try:
             points = int(question.get("points", 1))
         except (TypeError, ValueError):
@@ -2450,7 +2492,7 @@ REVISION_SCHEMA = """Верни строго JSON без пояснений в �
 {"title": "Название задания",
  "description": "Условие для заранее неизвестного ученика: цель, шаги, объём и критерии",
  "max_points": 10, "skills": ["grammar|vocabulary|listening|speaking|writing|reading"],
- "questions": [{"kind": "mcq|multi|gap|match|order|sort|spell|text|voice", "text": "вопрос",
+ "questions": [{"kind": "mcq|multi|gap|cloze|match|order|sort|spell|text|voice", "text": "вопрос",
     "points": 1, "explanation": "",
     "choices": [{"text": "вариант", "correct": true, "match_text": ""}]}],
  "cards": [{"front": "слово", "back": "перевод", "example": "пример"}],
@@ -2473,7 +2515,11 @@ REVISION_SCHEMA = """Верни строго JSON без пояснений в �
 не дублируй их, они сохранятся автоматически. Не генерируй base64, ссылки, картинки или
 аудио. Для mcq/order ровно один верный вариант, для multi — от двух; для match/sort в
 choices пары text ↔ match_text; для gap/spell принимаемые ответы как верные варианты;
-text и voice — без choices."""
+text и voice — без choices. Если правишь пункт cloze («Текст с пропусками»), сохраняй
+его тип: в text — цельный текст с пропусками [[1]], [[2]] … по порядку, в choices —
+принятые ответы с полем "gap" (номер пропуска). Этот тип уместен и для нового пункта,
+если правишь текст с пропусками внутрь предложений; отдельные несвязанные предложения
+оформляй как gap, mcq или другие типы."""
 
 
 def assignment_payload(assignment):

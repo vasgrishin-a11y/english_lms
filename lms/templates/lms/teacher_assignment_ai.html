@@ -100,7 +100,7 @@
                         <ol class="col" style="gap:12px;margin:0 0 16px;padding-left:22px">
                             {% for question in revision.questions %}
                                 <li>
-                                    <p class="mb-0">{{ question.text }} <span class="tiny muted tnum">{{ question.points }} б.</span></p>
+                                    <p class="mb-0">{{ question.text|cloze_blank|linebreaksbr }} <span class="tiny muted tnum">{{ question.points }} б.</span></p>
                                     {% if question.choices %}
                                         <ul class="tiny muted" style="margin-top:4px">
                                             {% for choice in question.choices %}

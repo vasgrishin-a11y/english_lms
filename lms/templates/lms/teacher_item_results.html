@@ -38,7 +38,7 @@
                     <tr>
                         <th scope="col">Ученик</th>
                         {% for column in columns %}
-                            <th scope="col" class="tnum" title="{{ column.question.text|truncatechars:120 }}">
+                            <th scope="col" class="tnum" title="{{ column.question.text|cloze_blank|truncatechars:120 }}">
                                 {{ column.number }}
                                 <span class="results-rate{% if column.rate != None and column.rate < 50 %} is-hard{% endif %}">{% if column.rate != None %}{{ column.rate }}%{% else %}—{% endif %}</span>
                             </th>

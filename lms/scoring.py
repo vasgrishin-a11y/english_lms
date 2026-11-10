@@ -24,6 +24,22 @@ def _choice_ids(question):
     return {str(choice.pk) for choice in question.choices.all()}
 
 
+def _score_cloze(question, answer):
+    """«Текст с пропусками»: балл делится по числу верно заполненных пропусков.
+
+    Ответ приходит словарём ``{str(номер): текст}``. Частичный балл здесь
+    методически честен: каждый пропуск — самостоятельная единица проверки,
+    ровно как пара в соответствии. Пустой пропуск считается ошибкой.
+    """
+    from .cloze import accepted_by_gap, filled_text, gap_count, score_cloze
+
+    total = gap_count(question.text)
+    accepted = accepted_by_gap(question.choices.all(), total)
+    result = score_cloze(answer, accepted, total)
+    expected = filled_text(question.text, accepted)
+    return result["ratio"], expected, result["given"]
+
+
 def score_question(question, answer):
     """Вернуть {'ratio', 'points', 'correct', 'expected', 'given'} для одного вопроса."""
     choices = list(question.choices.all())
@@ -95,6 +111,8 @@ def score_question(question, answer):
         accepted.discard("")
         expected = " / ".join(sorted(accepted))
         ratio = 1.0 if normalize_gap(answer) in accepted else 0.0
+    elif question.kind == "cloze":
+        ratio, expected, given = _score_cloze(question, answer)
     else:  # неизвестный тип не даёт баллов, но и не роняет проверку
         ratio = 0.0
 
@@ -148,6 +166,12 @@ def answer_parts(question, given):
             "extra": len(selected - correct),
             "total": len(correct),
         }
+    if question.kind == "cloze":
+        from .cloze import accepted_by_gap, gap_count, score_cloze
+
+        total = gap_count(question.text)
+        result = score_cloze(given, accepted_by_gap(choices, total), total)
+        return {"gaps": result["gaps"], "hits": result["hits"], "total": result["total"]}
     return {}
 
 
@@ -180,14 +204,29 @@ def describe_answer(question, given):
     if question.kind == "order":
         words = [choices[str(pk)].text for pk in (given or []) if str(pk) in choices]
         return " ".join(words) or "—"
+    if question.kind == "cloze":
+        # Номер пропуска → что вписал ученик; пустой пропуск — прочерк.
+        supplied = given if isinstance(given, dict) else {}
+        parts = []
+        for key in sorted(supplied, key=lambda value: (len(str(value)), str(value))):
+            value = " ".join(str(supplied[key] or "").split())[:120]
+            parts.append(f"({key}) {value or '—'}")
+        return "; ".join(parts) or "—"
     text = " ".join(str(given or "").split())
     return text[:500] or "—"
 
 
 def is_blank_answer(question, given):
-    """Пустой ответ не расходует попытку: ученик просто забыл заполнить пункт."""
-    if question.kind in ("match", "sort"):
-        return not any(str(value).strip() for value in (given or {}).values())
+    """Пустой ответ не расходует попытку: ученик просто забыл заполнить пункт.
+
+    Для текста с пропусками «пусто» — это ни одного заполненного пропуска:
+    если ученик вписал хотя бы один, ответ проверяется целиком и недостающие
+    пропуски честно считаются ошибками.
+    """
+    if question.kind in ("match", "sort", "cloze"):
+        if not isinstance(given, dict):
+            return True
+        return not any(str(value).strip() for value in given.values())
     if question.kind in ("multi", "order"):
         return not [value for value in (given or []) if str(value).strip()]
     return not str(given or "").strip()

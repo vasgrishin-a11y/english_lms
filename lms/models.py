@@ -1038,6 +1038,7 @@ class Question(models.Model):
         MCQ = "mcq", "Один правильный ответ"
         MULTI = "multi", "Несколько правильных ответов"
         GAP = "gap", "Вписать ответ"
+        CLOZE = "cloze", "Текст с пропусками"
         MATCH = "match", "Установить соответствие"
         ORDER = "order", "Предложение из слов"
         SORT = "sort", "Сортировка по колонкам"
@@ -1112,6 +1113,33 @@ class Question(models.Model):
     def gaps(self):
         """Принимаемые ответы для пропуска."""
         return [choice.text for choice in self.choices.all() if choice.is_correct]
+
+    @property
+    def cloze_count(self):
+        """Число пропусков в тексте пункта «Текст с пропусками»."""
+        from .cloze import gap_count
+
+        return gap_count(self.text)
+
+    @property
+    def cloze_accepted(self):
+        """Принятые ответы по номерам пропусков: список списков вариантов."""
+        from .cloze import accepted_by_gap
+
+        return accepted_by_gap(self.choices.all(), self.cloze_count)
+
+    def cloze_segments(self, given=None, *, show_answers=False):
+        """Текст с пропусками, разрезанный на сегменты для шаблона."""
+        from .cloze import build_segments
+
+        return build_segments(self.text, self.cloze_accepted, given, show_answers=show_answers)
+
+    @property
+    def cloze_key(self):
+        """Эталонный текст с ответами — для разбора после закрытия пункта."""
+        from .cloze import filled_text
+
+        return filled_text(self.text, self.cloze_accepted)
 
     @property
     def sequence(self):

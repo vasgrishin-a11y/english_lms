@@ -23,7 +23,7 @@
                     {% else %}
                         <span class="badge badge-needs_revision">{% icon "x" "icon icon-sm" %}Не решено</span>
                     {% endif %}
-                    <span class="grow strong">{{ item.number }}. {{ item.question.text|truncatechars:220 }}</span>
+                    <span class="grow strong">{{ item.number }}. {% if item.question.kind == 'cloze' %}{{ item.question.text|cloze_blank|truncatechars:220 }}{% else %}{{ item.question.text|truncatechars:220 }}{% endif %}</span>
                     {% if item.manual %}
                         <span class="tiny muted tnum">{% if item.teacher_points != None %}{{ item.teacher_points }}{% else %}—{% endif %}/{{ item.question.points }} б.</span>
                     {% else %}
@@ -89,7 +89,12 @@
                     {% else %}
                         <p class="small muted mb-0">Ответа нет.</p>
                     {% endif %}
-                    {% if item.expected %}<p class="small mb-0" style="margin-top:6px"><span class="muted">Правильный ответ:</span> {{ item.expected }}</p>{% endif %}
+                    {% if item.question.kind == 'cloze' %}
+                        <div style="margin-top:8px">
+                            {% include "lms/parts/cloze_text.html" with segments=item.cloze question=item.question editable=False %}
+                        </div>
+                        <p class="tiny muted" style="margin-top:6px">Верно заполнено {{ item.cloze_hits }} из {{ item.cloze_total }} пропусков{% if item.expected %} · эталон: {{ item.expected }}{% endif %}</p>
+                    {% elif item.expected %}<p class="small mb-0" style="margin-top:6px"><span class="muted">Правильный ответ:</span> {{ item.expected }}</p>{% endif %}
                 {% endif %}
             </li>
         {% endfor %}

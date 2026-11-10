@@ -21,6 +21,12 @@
             <p class="alert">При сохранении правильных ответов автоматические результаты прошлых работ будут пересчитаны. Ручные оценки сохранятся.</p>
             <form method="post" novalidate>
                 {% csrf_token %}
+                <div class="card card-pad-sm" id="cloze-hint" style="margin-bottom:12px"{% if question.kind != 'cloze' %} hidden{% endif %}>
+                    <p class="rail-title">{% icon "pencil" %}Текст с пропусками</p>
+                    <p class="small mb-0">В поле «Вопрос» напишите текст целиком, а на месте ответов поставьте пропуски: <code>[[1]]</code>, <code>[[2]]</code> или <code>___</code> (три подчёркивания). Ученик будет вписывать ответ прямо в текст.</p>
+                    <p class="small mb-0">В поле «Правильный ответ и варианты» — по одной строке на пропуск, в том же порядке. Допустимые варианты разделяйте « / »: <code>has gone / went</code>.</p>
+                    <p class="tiny muted mb-0">Пример: «Yesterday Anna [[1]] (go) to the park, but she ___ (not / see) her friends.»</p>
+                </div>
                 {% include "lms/form_fields.html" %}
                 <div class="row">
                     <button class="btn" type="submit">{% icon "save" %}{% t "Сохранить вопрос" %}</button>
@@ -36,7 +42,14 @@
     <div class="split-side">
         <div class="card card-pad-sm">
             <p class="rail-title">Текущие варианты</p>
-            {% if question.choices.exists %}
+            {% if question.kind == 'cloze' and question.choices.exists %}
+                <ul class="col" style="padding-left:18px;margin:0">
+                    {% for gap in question.cloze_accepted %}
+                        <li class="small">Пропуск {{ forloop.counter }}: <strong>{{ gap|join:" / " }}</strong></li>
+                    {% endfor %}
+                </ul>
+                <p class="tiny muted">Поле «Правильный ответ и варианты» полностью заменяет список: одна строка на пропуск, в порядке текста.</p>
+            {% elif question.choices.exists %}
                 <ul class="col" style="padding-left:18px;margin:0">
                     {% for choice in question.choices.all %}
                         <li class="small{% if choice.is_correct %} is-correct{% endif %}">{{ choice.text }}{% if choice.is_correct %} — верный{% endif %}</li>

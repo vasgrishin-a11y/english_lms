@@ -99,6 +99,20 @@ def _parse_order_answer(value, question):
     return ordered
 
 
+def _collect_cloze_answer(request, question):
+    """Ответ прямо в тексте: ``{str(номер пропуска): вписанный текст}``.
+
+    Поля приходят парами «номер — значение», поэтому пустые пропуски тоже
+    попадают в словарь: проверка видит, что они не заполнены, а не теряет их.
+    Старые формы (до этого типа) присылают одно поле — оно не подходит.
+    """
+    key = f"q_{question.pk}_gap_"
+    return {
+        str(number): request.POST.get(f"{key}{number}", "")[:500]
+        for number in range(1, question.cloze_count + 1)
+    }
+
+
 def _collect_item_answer(request, question):
     """Ответ на один пункт из POST: выбор, пропуск, соответствие, порядок, сортировка."""
     key = f"q_{question.pk}"
@@ -113,6 +127,8 @@ def _collect_item_answer(request, question):
         return mapping
     if question.kind == "order":
         return _parse_order_answer(request.POST.get(key, ""), question)
+    if question.kind == "cloze":
+        return _collect_cloze_answer(request, question)
     return request.POST.get(key, "")
 
 

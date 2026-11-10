@@ -44,7 +44,7 @@
                             <ol class="col" style="gap:10px;margin:6px 0 0;padding-left:22px">
                                 {% for question in assignment.questions %}
                                     <li>
-                                        <p class="mb-0">{{ question.text }} <span class="tiny muted">{{ question.kind }} · {{ question.points }} б.</span></p>
+                                        <p class="mb-0">{{ question.text|cloze_blank|linebreaksbr }} <span class="tiny muted">{{ question.kind }} · {{ question.points }} б.</span></p>
                                         {% if question.choices %}
                                             <ul class="tiny muted" style="margin:4px 0 0;padding-left:20px">
                                                 {% for choice in question.choices %}

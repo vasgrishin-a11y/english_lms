@@ -5530,3 +5530,142 @@ ul.audience-exclusions label:has(input:checked) {
 .info-dot-panel li + li {
     margin-top: var(--sp-1);
 }
+
+/* ── Текст с пропусками: поля прямо в тексте ──────────────────
+   Ученик читает предложение целиком, а не список «вопрос — поле».
+   Пропуск — строчный элемент: он переносится вместе со строкой и не
+   разрывает предложение на отдельные блоки. */
+.cloze {
+    padding: var(--sp-5);
+    font-size: var(--fs-15);
+    line-height: var(--lh-loose);
+    color: var(--text);
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--r-md);
+    overflow-wrap: break-word;
+}
+
+.cloze-text {
+    white-space: pre-wrap;
+}
+
+.cloze-gap {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 2px;
+    margin: 0 2px;
+    padding: 0 4px 0 2px;
+    border-bottom: 1px solid var(--border-strong);
+    border-radius: var(--r-xs);
+    vertical-align: baseline;
+    transition: background var(--dur-2) var(--ease);
+}
+
+.cloze-gap input[type="text"] {
+    width: 8ch;
+    min-height: 30px;
+    padding: 2px 4px;
+    font-size: var(--fs-14);
+    font-weight: 600;
+    line-height: 1.3;
+    text-align: center;
+    background: var(--surface);
+    border: 1px solid var(--accent-200);
+    border-radius: var(--r-xs);
+}
+
+.cloze-gap input[type="text"]:hover {
+    border-color: var(--accent-400);
+}
+
+.cloze-gap input[type="text"]:focus {
+    border-color: var(--accent-500);
+    box-shadow: var(--ring);
+}
+
+.cloze-num {
+    font-size: var(--fs-12);
+    font-weight: 700;
+    color: var(--text-subtle);
+    align-self: center;
+}
+
+.cloze-gap-ok {
+    background: var(--success-bg);
+    border-bottom-color: var(--success-ink);
+}
+
+.cloze-gap-ok input[type="text"] {
+    border-color: var(--success-border);
+    color: var(--success-ink);
+}
+
+.cloze-gap-bad,
+.cloze-gap-empty {
+    background: var(--danger-bg);
+    border-bottom-color: var(--danger-ink);
+}
+
+.cloze-gap-bad input[type="text"],
+.cloze-gap-empty input[type="text"] {
+    border-color: var(--danger-border);
+    color: var(--danger-ink);
+}
+
+.cloze-mark {
+    display: inline-flex;
+    align-items: center;
+    align-self: center;
+    color: var(--text-subtle);
+}
+
+.cloze-gap-ok .cloze-mark {
+    color: var(--success-ink);
+}
+
+.cloze-gap-bad .cloze-mark,
+.cloze-gap-empty .cloze-mark {
+    color: var(--danger-ink);
+}
+
+/* Пустой пропуск в закрытом пункте подсвечиваем пунктиром: ответа не было. */
+.cloze-gap-empty input[type="text"] {
+    border-style: dashed;
+}
+
+@media (max-width: 640px) {
+    .cloze {
+        padding: var(--sp-4);
+        font-size: var(--fs-14);
+    }
+
+    .cloze-gap input[type="text"] {
+        width: 7ch;
+        min-height: 28px;
+        font-size: var(--fs-13);
+    }
+}
+
+/* Эталонный ответ в предпросмотре: пропуск превращается в подсвеченное слово. */
+.cloze-answer {
+    padding: 0 4px;
+    font-weight: 600;
+    color: var(--success-ink);
+}
+
+/* Режим чтения: тот же текст, но вместо полей — вписанные ответы. */
+.cloze-readonly .cloze-gap {
+    padding: 0 6px;
+}
+
+.cloze-answer {
+    padding: 0 2px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.cloze-answer.is-empty {
+    color: var(--text-subtle);
+    font-weight: 500;
+}

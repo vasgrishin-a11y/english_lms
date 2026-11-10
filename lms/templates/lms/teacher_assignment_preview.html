@@ -42,7 +42,7 @@
                     {% for question in questions %}
                         <li class="panel" style="margin-bottom:8px">
                             <div class="row row-tight">
-                                <strong>{{ forloop.counter }}. {{ question.text }}</strong>
+                                <strong>{{ forloop.counter }}. {% if question.kind == 'cloze' %}{{ question.text|cloze_blank }}{% else %}{{ question.text }}{% endif %}</strong>
                                 <span class="tag">{{ question.get_kind_display }}</span>
                                 <span class="tiny muted tnum">{{ question.points }} б.</span>
                             </div>

@@ -9,7 +9,9 @@
             {% else %}{{ number }}{% endif %}
         </span>
         <div class="ex-head-main">
-            <p class="ex-title mb-0" id="q-{{ question.pk }}-title"><span class="sr-only">Пункт {{ number }}. </span>{{ question.text|linebreaksbr }}</p>
+            <p class="ex-title mb-0" id="q-{{ question.pk }}-title">
+                <span class="sr-only">Пункт {{ number }}. </span>{% if question.kind == 'cloze' %}Заполните пропуски в тексте{% else %}{{ question.text|linebreaksbr }}{% endif %}
+            </p>
             <p class="ex-meta tiny muted mb-0">
                 {% icon question.kind|kind_icon "icon icon-sm" %}
                 <span>{{ question.kind|kind_hint }}</span>
@@ -41,7 +43,7 @@
                 <p class="item-note item-note-bad mb-0">{% icon "x" "icon icon-sm" %}<strong>Неверно.</strong> Попытки закончились.</p>
             {% elif item.just_wrong %}
                 <p class="item-note item-note-bad mb-0">{% icon "x" "icon icon-sm" %}<strong>Неверно.</strong>
-                    {% if item.parts.hits != None and item.parts.total %}Верно выбрано {{ item.parts.hits }} из {{ item.parts.total }}{% if item.parts.extra %}, лишних — {{ item.parts.extra }}{% endif %}.{% endif %}
+                    {% if question.kind == 'cloze' and item.parts.total %}Верно заполнено {{ item.parts.hits }} из {{ item.parts.total }} пропусков.{% elif item.parts.hits != None and item.parts.total %}Верно выбрано {{ item.parts.hits }} из {{ item.parts.total }}{% if item.parts.extra %}, лишних — {{ item.parts.extra }}{% endif %}.{% endif %}
                     {% if item.order_total %}На своих местах {{ item.order_hits }} из {{ item.order_total }} слов.{% endif %}
                     {% if item.row_marks %}Неверные строки отмечены красным.{% endif %}
                     Осталось попыток: {{ item.tries_left }}.</p>
@@ -54,11 +56,22 @@
 
         {% if item.reveal %}
             {# Пункт закрыт: ответ ученика, правильный ответ и пояснение. #}
-            {% if item.last and item.last.display %}
-                <p class="small mb-0"><span class="muted">Ваш ответ:</span> {{ item.last.display }}</p>
-            {% endif %}
-            {% if item.state != 'correct' and item.expected %}
-                <p class="small mb-0 item-expected"><span class="muted">Правильный ответ:</span> <strong>{{ item.expected }}</strong></p>
+            {% if question.kind == 'cloze' %}
+                {% comment %}
+                Тот же текст, но с ответами и отметками у каждого пропуска:
+                разбор не заставляет сопоставлять номера с полями.
+                {% endcomment %}
+                {% include "lms/parts/cloze_text.html" with segments=item.cloze question=question editable=False %}
+                {% if item.state != 'correct' and item.expected %}
+                    <p class="small mb-0 item-expected" style="margin-top:8px"><span class="muted">Правильный ответ:</span> <strong>{{ item.expected }}</strong></p>
+                {% endif %}
+            {% else %}
+                {% if item.last and item.last.display %}
+                    <p class="small mb-0"><span class="muted">Ваш ответ:</span> {{ item.last.display }}</p>
+                {% endif %}
+                {% if item.state != 'correct' and item.expected %}
+                    <p class="small mb-0 item-expected"><span class="muted">Правильный ответ:</span> <strong>{{ item.expected }}</strong></p>
+                {% endif %}
             {% endif %}
             {% if question.explanation %}
                 <p class="small muted mb-0" style="margin-top:6px">{% icon "lightbulb" "icon icon-sm" %} {{ question.explanation }}</p>
@@ -184,6 +197,12 @@
                             </tbody>
                         </table>
                     </div>
+                {% elif question.kind == 'cloze' %}
+                    {% comment %}
+                    Поля стоят внутри текста: ученик видит предложение целиком,
+                    а вписанное остаётся на своём месте и после «Принять».
+                    {% endcomment %}
+                    {% include "lms/parts/cloze_text.html" with segments=item.cloze question=question editable=True %}
                 {% elif question.kind == 'text' %}
                     <label class="sr-only" for="q_{{ question.pk }}">Ваш ответ</label>
                     <textarea id="q_{{ question.pk }}" name="q_{{ question.pk }}" rows="5" maxlength="20000" placeholder="Напишите ответ">{{ item.text_answer }}</textarea>

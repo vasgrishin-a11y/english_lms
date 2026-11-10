@@ -7,6 +7,7 @@ from django.core.exceptions import ValidationError
 from django.utils.text import slugify
 
 from . import ai
+from .cloze import gap_count
 from .models import (
     TEACHER_FEEDBACK_RECORDING_LIMIT_SECONDS,
     Assignment,
@@ -890,8 +891,9 @@ class QuestionForm(forms.ModelForm):
         help_text=(
             "По одному варианту на строку. Правильный ответ отметьте звёздочкой в начале строки: "
             "*London. Для «вписать ответ» — все допустимые варианты, по одному на строку "
-            "(don't / do not). Для «соответствия» и «сортировки» пишите пары через вертикальную "
-            "черту: to book | бронировать (для сортировки справа — название колонки). "
+            "(don't / do not). Для «текста с пропусками» — строка на пропуск, варианты через "
+            "« / »: have gone / went. Для «соответствия» и «сортировки» пишите пары через "
+            "вертикальную черту: to book | бронировать (для сортировки справа — название колонки). "
             "Для «предложения из слов» перечислите слова в правильном порядке, по одному на строку. "
             "Для свободного и голосового ответа поле не нужно — такие пункты проверяете вы."
         ),
@@ -931,6 +933,8 @@ class QuestionForm(forms.ModelForm):
 
     @staticmethod
     def serialize_choices(question):
+        if question.kind == Question.Kind.CLOZE:
+            return QuestionForm.serialize_cloze(question)
         lines = []
         for choice in question.choices.all():
             if question.kind in (Question.Kind.MATCH, Question.Kind.SORT):
@@ -940,6 +944,17 @@ class QuestionForm(forms.ModelForm):
             else:
                 lines.append(("*" if choice.is_correct else "") + choice.text)
         return "\n".join(lines)
+
+    @staticmethod
+    def serialize_cloze(question):
+        """Строка на пропуск: принятые варианты через « / »."""
+        grouped = {}
+        for choice in question.choices.all():
+            number = int(choice.order or 0)
+            if number >= 1:
+                grouped.setdefault(number, []).append(choice.text)
+        count = question.cloze_count
+        return "\n".join(" / ".join(grouped.get(number, [])) for number in range(1, count + 1))
 
     def clean_kind(self):
         kind = self.cleaned_data["kind"]
@@ -953,9 +968,24 @@ class QuestionForm(forms.ModelForm):
                 )
         return kind
 
+    @property
+    def draft_text(self):
+        """Текст пункта из отправленной формы: черновик, если валидация не дошла."""
+        return self.data.get(self.add_prefix("text")) or (
+            self.instance.text if self.instance.pk else ""
+        )
+
     def clean_choices_text(self):
         raw = self.cleaned_data.get("choices_text", "")
         kind = self.data.get(self.add_prefix("kind")) or self.instance.kind
+        if kind == Question.Kind.CLOZE:
+            # Пустые строки и хвостовой перевод строки не отбрасываем: строка
+            # на пропуск, поэтому пустая строка — ошибка внятная, а не сдвиг
+            # нумерации. После последней строки перевод строки не считается.
+            lines = raw.splitlines()
+            while lines and not lines[-1].strip():
+                lines.pop()
+            return self.parse_cloze_choices(lines)
         lines = [line.strip() for line in raw.splitlines() if line.strip()]
         parsed = []
         if kind in Question.MANUAL_KINDS:
@@ -1017,11 +1047,74 @@ class QuestionForm(forms.ModelForm):
             raise forms.ValidationError("Слишком много вариантов: максимум 40.")
         return parsed
 
+    def parse_cloze_choices(self, lines):
+        """Текст с пропусками: строка на пропуск, принятые варианты через « / ».
+
+        Число строк обязано совпасть с числом пропусков: иначе непонятно, какой
+        ответ относится к какому месту, и проверка молча съехала бы на единицу.
+        """
+        from .cloze import MAX_VARIANTS, layout_error
+
+        text = self.draft_text
+        problem = layout_error(text)
+        if problem:
+            raise forms.ValidationError(problem)
+        total = gap_count(text)
+        if len(lines) != total:
+            noun = (
+                "пропуск"
+                if total % 10 == 1 and total % 100 != 11
+                else "пропуска"
+                if 2 <= total % 10 <= 4 and not 12 <= total % 100 <= 14
+                else "пропусков"
+            )
+            raise forms.ValidationError(
+                f"В тексте {total} {noun}, а строк с ответами — {len(lines)}. "
+                "На каждый пропуск нужна одна строка."
+            )
+        parsed = []
+        empty = []
+        for number, line in enumerate(lines, start=1):
+            found = False
+            for variant in line.split(" / "):
+                value = variant.strip().lstrip("*").strip()
+                if not value:
+                    continue
+                found = True
+                parsed.append(
+                    {
+                        "text": value[:500],
+                        "match_text": "",
+                        "correct": True,
+                        "gap": number,
+                    }
+                )
+            if not found:
+                empty.append(str(number))
+        if empty:
+            raise forms.ValidationError(
+                "Заполните принятые ответы для всех пропусков: пусто в " + ", ".join(empty) + "."
+            )
+        if len(parsed) > MAX_VARIANTS:
+            raise forms.ValidationError(
+                f"Слишком много вариантов: {len(parsed)}, максимум {MAX_VARIANTS}."
+            )
+        return parsed
+
     def clean(self):
         data = super().clean()
         kind = data.get("kind")
         if kind != Question.Kind.VOICE:
             data["recording_limit_seconds"] = None
+        # Текст с пропусками: разметку проверяем и тогда, когда поле ответов
+        # скрыто или не заполнено — иначе преподаватель узнает о проблеме
+        # только когда ученик откроет пункт.
+        if kind == Question.Kind.CLOZE and "text" in data:
+            from .cloze import layout_error
+
+            problem = layout_error(data["text"])
+            if problem:
+                self.add_error("text", problem)
         return data
 
     def save_choices(self, question):
@@ -1042,7 +1135,9 @@ class QuestionForm(forms.ModelForm):
             choice.text = item["text"]
             choice.match_text = item["match_text"]
             choice.is_correct = item["correct"]
-            choice.order = index
+            # Для текста с пропусками ``order`` — номер пропуска, а не позиция
+            # варианта: проверка группирует принятые ответы именно по нему.
+            choice.order = item.get("gap", index)
             choice.save()
         question.choices.filter(pk__in=[c.pk for c in existing]).delete()
 
@@ -1431,6 +1526,8 @@ class AIMaterialForm(forms.Form):
             "— ИИ создаст вложение как TXT. Чтобы приложить сами файлы или скриншоты, попросите прямо: "
             "«приложи эти файлы к заданию» — LMS сохранит их исходными вложениями для ученика. "
             "Без явной просьбы файлы остаются источником разбора и в задание не попадают. "
+            "Если в тексте есть пропуски внутри предложений, ИИ оформит их пунктом "
+            "«Текст с пропусками» — можно попросить прямо: «сделай текст с пропусками». "
             "Профиль конкретного ученика заранее не передаётся — опишите общий уровень, тему, навык и цель."
         ),
     )
