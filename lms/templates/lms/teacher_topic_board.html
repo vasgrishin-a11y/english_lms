@@ -119,7 +119,7 @@
                     <p class="tiny strong" style="text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Вопросы теста ({{ assignment.questions.count }})</p>
                     <ol style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px">
                         {% for q in assignment.questions.all %}
-                        <li style="font-size:13px"><strong>{{ q.text|truncatechars:120 }}</strong> <span class="tag">{{ q.get_kind_display }} · {{ q.points }}б</span>{% if q.choices.exists %}<br><span class="tiny muted">{% for c in q.choices.all %}{% if c.is_correct %}*{% endif %}{{ c.text }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}</li>
+                        <li style="font-size:13px"><strong>{{ q.text|cloze_blank|truncatechars:120 }}</strong> <span class="tag">{{ q.get_kind_display }} · {{ q.points }}б</span>{% if q.choices.exists %}<br><span class="tiny muted">{% for c in q.choices.all %}{% if q.kind == 'cloze' %}{{ c.order }}: {% endif %}{% if c.is_correct %}*{% endif %}{{ c.text }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}</li>
                         {% endfor %}
                     </ol>
                     <div class="row row-tight" style="margin-top:8px"><a class="btn btn-ghost btn-sm" href="{% url 'teacher_questions' assignment.pk %}">{% icon "list" %}Редактировать вопросы</a></div>

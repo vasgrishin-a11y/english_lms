@@ -1511,14 +1511,35 @@
       };
       var limit = wrap("recording_limit_seconds");
       var choices = wrap("choices_text");
+      var hint = document.getElementById("cloze-hint");
       var update = function () {
         var kind = select.value;
         var manual = kind === "text" || kind === "voice";
         if (limit) limit.classList.toggle("hidden", kind !== "voice");
         if (choices) choices.classList.toggle("hidden", manual);
+        if (hint) hint.hidden = kind !== "cloze";
       };
       select.addEventListener("change", update);
       update();
+    });
+  }
+
+  /* ── Текст с пропусками: ширина поля по ответу ─────────────
+   * Поле внутри предложения не должно занимать 8ch под «was»: подсказка
+   * ширины подстраивается под вписанное, но никогда не уже 5 знаков.
+   */
+  function clozeFields(root) {
+    var scope = root && root.querySelectorAll ? root : document;
+    var gaps = scope.querySelectorAll ? scope.querySelectorAll(".cloze-gap input[type=text]") : [];
+    Array.prototype.forEach.call(gaps, function (input) {
+      if (input.dataset.clozeReady === "1") return;
+      input.dataset.clozeReady = "1";
+      var resize = function () {
+        var length = Math.max(String(input.value || "").length + 1, 5);
+        input.style.width = Math.min(length, 28) + "ch";
+      };
+      input.addEventListener("input", resize);
+      resize();
     });
   }
 
@@ -3717,8 +3738,11 @@
     reviewAnnotations();
     quizItems();
     questionKindForms();
+    clozeFields();
     document.body.addEventListener("htmx:afterSwap", function (event) {
-      questionKindForms(event.detail && event.detail.target);
+      var target = event.detail && event.detail.target;
+      questionKindForms(target);
+      clozeFields(target);
     });
     reviewPage();
     queueHelp();

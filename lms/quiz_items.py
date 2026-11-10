@@ -4,6 +4,7 @@
 (QuestionResponse), выход — словари, удобные шаблону. Никаких запросов к БД.
 """
 
+from .cloze import build_segments
 from .models import QuestionResponse
 from .scoring import score_question
 
@@ -20,6 +21,12 @@ def _selected(question, given):
         return {"mapping": {str(k): str(v) for k, v in (given or {}).items()}}
     if question.kind in ("gap", "spell"):
         return {"text": str(given or "")}
+    if question.kind == "cloze":
+        return {
+            "gaps": {str(k): str(v) for k, v in (given or {}).items()}
+            if isinstance(given, dict)
+            else {}
+        }
     return {}
 
 
@@ -104,6 +111,22 @@ def build_item(assignment, question, response, *, closed_round=False, legacy=Non
     positions = item["parts"].get("positions") or []
     item["order_hits"] = sum(1 for flag in positions if flag)
     item["order_total"] = len(positions)
+    # Текст с пропусками: сегменты для шаблона. Ответ берём из последней
+    # попытки, пока пункт открыт, и всегда показываем подсказки, если итог уже
+    # раскрыт (reveal) — ученик видит свои ошибки прямо в тексте.
+    if question.kind == "cloze":
+        supplied = {}
+        if last and not exam_hidden and isinstance(last.get("given"), dict):
+            supplied = last["given"]
+        item["cloze"] = build_segments(
+            question.text,
+            question.cloze_accepted,
+            supplied,
+            show_answers=reveal,
+        )
+        gap_marks = item["parts"].get("gaps") or {}
+        item["cloze_hits"] = sum(1 for flag in gap_marks.values() if flag)
+        item["cloze_total"] = len(gap_marks)
     return item
 
 

@@ -514,6 +514,24 @@ class Command(BaseCommand):
         Choice.objects.create(question=spell_q, text="book", is_correct=True, order=1)
         Choice.objects.create(question=spell_q, text="books", is_correct=True, order=2)
 
+        # Цельный текст с пропусками: ответ вписывается прямо в предложение,
+        # балл делится по числу верно заполненных мест.
+        cloze = Question.objects.create(
+            assignment=quiz,
+            kind=Question.Kind.CLOZE,
+            text=(
+                "Last weekend Anna [[1]] (go) to the seaside. She ___ (not / swim) "
+                "because the water [[3]] (be) too cold, but she had a great time."
+            ),
+            explanation="Past Simple: went, didn't swim, was — действие в прошлом.",
+            points=3,
+            order=8,
+        )
+        Choice.objects.create(question=cloze, text="went", is_correct=True, order=1)
+        Choice.objects.create(question=cloze, text="didn't swim", is_correct=True, order=2)
+        Choice.objects.create(question=cloze, text="did not swim", is_correct=True, order=2)
+        Choice.objects.create(question=cloze, text="was", is_correct=True, order=3)
+
         quiz.max_points = sum(question.points for question in quiz.questions.all())
         quiz.save(update_fields=["max_points", "updated_at"])
 
@@ -743,6 +761,12 @@ class Command(BaseCommand):
                     value = {str(choice.pk): str(choice.pk) for choice in correct}
             elif question.kind == Question.Kind.ORDER:
                 value = [str(choice.pk) for choice in choices]
+            elif question.kind == Question.Kind.CLOZE:
+                # Текст с пропусками: по принятому варианту на каждый номер.
+                grouped = {}
+                for choice in correct:
+                    grouped.setdefault(int(choice.order or 1), choice.text)
+                value = {str(number): text for number, text in grouped.items()}
             elif question.kind in (Question.Kind.GAP, Question.Kind.SPELL):
                 value = correct[0].text
             else:

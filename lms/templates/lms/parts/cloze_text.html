@@ -1,0 +1,35 @@
+{% load lms_tags %}
+{% comment %}
+Текст с пропусками: единый кусок разметки и для ответа, и для разбора.
+В режиме ``editable`` пропуск — это поле ввода прямо в предложении;
+в режиме чтения — вписанный ответ с отметкой ✓/✗ и подсказкой с эталоном.
+Параметры: ``segments`` (item.cloze), ``question``, ``editable``.
+{% endcomment %}
+<div class="cloze{% if not editable %} cloze-readonly{% endif %}">
+    {% spaceless %}
+    {% for segment in segments %}
+        {% if segment.type == 'text' %}<span class="cloze-text">{{ segment.text }}</span>
+        {% else %}<span class="cloze-gap cloze-gap-{{ segment.status|default:'open' }}">
+            <span class="cloze-num tnum" aria-hidden="true">{{ segment.number }}</span>
+            {% if editable %}
+                <label class="sr-only" for="q_{{ question.pk }}_gap_{{ segment.number }}">Пропуск {{ segment.number }}</label>
+                <input type="text" id="q_{{ question.pk }}_gap_{{ segment.number }}"
+                       name="q_{{ question.pk }}_gap_{{ segment.number }}"
+                       value="{{ segment.given }}" maxlength="500"
+                       autocomplete="off" autocapitalize="off" spellcheck="false"
+                       {% if segment.title %}title="{{ segment.title }}"{% endif %}>
+            {% else %}
+                <span class="cloze-answer{% if not segment.given %} is-empty{% endif %}">{{ segment.given|default:"—" }}</span>
+            {% endif %}
+            {% if segment.status == 'ok' %}
+                <span class="cloze-mark" aria-hidden="true">{% icon "check" "icon icon-sm" %}</span>
+                <span class="sr-only">пропуск {{ segment.number }} — верно</span>
+            {% elif segment.status == 'bad' or segment.status == 'empty' %}
+                <span class="cloze-mark" aria-hidden="true">{% icon "x" "icon icon-sm" %}</span>
+                <span class="sr-only">пропуск {{ segment.number }} — {% if segment.status == 'empty' %}не заполнен{% else %}неверно{% endif %}{% if segment.answers %}, правильно: {{ segment.answers|join:" или " }}{% endif %}</span>
+            {% endif %}
+        </span>
+        {% endif %}
+    {% endfor %}
+    {% endspaceless %}
+</div>

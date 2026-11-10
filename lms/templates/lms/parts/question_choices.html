@@ -17,6 +17,21 @@
     <p class="small mb-0" style="margin-top:8px">Порядок: <strong>{{ question.sequence|join:" " }}</strong></p>
 {% elif question.kind == 'gap' %}
     <p class="small mb-0" style="margin-top:8px">{% if reveal %}Пропуски: <strong>{{ question.gaps|join:", " }}</strong>{% else %}Пропусков: {{ question.gaps|length }}{% endif %}</p>
+{% elif question.kind == 'cloze' %}
+    {% if reveal %}
+        <div class="cloze" style="margin-top:8px">
+            {% spaceless %}
+                {% for segment in question.cloze_segments %}
+                    {% if segment.type == 'text' %}<span class="cloze-text">{{ segment.text }}</span>
+                    {% else %}<span class="cloze-gap cloze-gap-ok"><span class="cloze-num tnum" aria-hidden="true">{{ segment.number }}</span><span class="cloze-answer">{{ segment.answers|join:" / " }}</span></span>
+                    {% endif %}
+                {% endfor %}
+            {% endspaceless %}
+        </div>
+        <p class="tiny muted" style="margin-top:6px">Пропусков: {{ question.cloze_count }}. Через « / » показаны все принимаемые варианты.</p>
+    {% else %}
+        <p class="small mb-0" style="margin-top:8px">Текст с пропусками: {{ question.cloze_count }}. Ученик вписывает ответ прямо в текст.</p>
+    {% endif %}
 {% elif question.kind == 'spell' %}
     <p class="small mb-0" style="margin-top:8px">{% if reveal %}Ответ: <strong>{{ question.gaps|join:" / " }}</strong>{% else %}Букв: {{ question.scrambled|length }}{% endif %}</p>
 {% endif %}

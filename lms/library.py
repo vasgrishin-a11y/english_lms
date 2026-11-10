@@ -52,6 +52,30 @@ ASSIGNMENT_PRESETS = [
         "skills": ["grammar"],
     },
     {
+        "id": "cloze-text",
+        "icon": "file-text",
+        "label": "Text with Gaps",
+        "tagline": "Текст с пропусками: ответы прямо в тексте",
+        "level": "A2",
+        "fields": {
+            "title": "Text with Gaps: A Day in the Countryside",
+            "description": (
+                "Read the text and complete each gap with ONE word or the form "
+                "in brackets. Write your answers directly in the text.\n\n"
+                "Last Saturday my family and I [[1]] (decide) to spend the day in "
+                "the countryside. We ___ (leave) home early because we wanted to "
+                "avoid the traffic. When we arrived, the sun [[3]] (shine) and the "
+                "birds were singing. My little brother ___ (run) straight to the "
+                "river, but Dad [[5]] (stop) him just in time.\n\n"
+                "Marking: 1 point per gap. Spelling counts, but capital letters "
+                "and punctuation do not."
+            ),
+            "assignment_type": "text",
+            "max_points": 5,
+        },
+        "skills": ["grammar", "reading"],
+    },
+    {
         "id": "transformation",
         "icon": "refresh",
         "label": "Key Word Transformation",
@@ -3764,7 +3788,9 @@ def _create_questions(assignment, questions):
                     text=choice["text"],
                     match_text=choice.get("match_text", ""),
                     is_correct=bool(choice.get("correct")),
-                    order=position,
+                    # У текста с пропусками номер пропуска важнее позиции
+                    # варианта: проверка группирует ответы именно по нему.
+                    order=choice.get("gap", position),
                 )
                 for position, choice in enumerate(data["choices"], start=1)
             ]

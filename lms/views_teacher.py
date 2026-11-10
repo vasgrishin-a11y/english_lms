@@ -45,6 +45,7 @@ from .backup import (
     load_backup_file,
     serialize_curriculum,
 )
+from .cloze import display_text
 from .curriculum import (
     course_tree,
     gradebook,
@@ -2572,7 +2573,8 @@ def item_results_export(request, pk):
     columns, rows = _item_results_data(assignment)
     header = ["Ученик"]
     for column in columns:
-        text = " ".join(str(column["question"].text).split())
+        # В заголовке — текст без служебной разметки пропусков.
+        text = " ".join(display_text(column["question"].text).split())
         header.append(f"{column['number']}. {text[:60]}")
     header += ["Итог", "Максимум", "Статус"]
     table = [header]

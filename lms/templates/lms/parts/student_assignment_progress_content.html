@@ -31,7 +31,7 @@
                             {% else %}
                                 <span class="badge badge-outline">Без ответа</span>
                             {% endif %}
-                            <span class="grow small"><strong>{{ item.number }}.</strong> {{ item.question.text|truncatechars:160 }}</span>
+                            <span class="grow small"><strong>{{ item.number }}.</strong> {% if item.question.kind == 'cloze' %}{{ item.question.text|cloze_blank|truncatechars:160 }}{% else %}{{ item.question.text|truncatechars:160 }}{% endif %}</span>
                             <span class="tiny muted tnum">{{ item.points }}/{{ item.question.points }} б.</span>
                         </div>
                         {% if item.manual %}
@@ -44,8 +44,21 @@
                             {% endif %}
                             {% if not item.text_answer and not item.file_answer %}<p class="tiny muted mb-0">Ответ не дан.</p>{% endif %}
                         {% else %}
-                            <p class="small mb-0"><span class="muted">Ответ ученика:</span> {% if item.last %}{{ item.last.display|default:"—" }}{% else %}—{% endif %}{% if item.tries_used > 1 %} <span class="tiny muted tnum">· попыток: {{ item.tries_used }}</span>{% endif %}</p>
-                            {% if item.expected %}<p class="small mb-0"><span class="muted">Правильный ответ:</span> {{ item.expected }}</p>{% endif %}
+                            {% if item.question.kind == 'cloze' %}
+                                <div class="cloze" style="margin-top:8px">
+                                    {% spaceless %}
+                                        {% for segment in item.cloze %}
+                                            {% if segment.type == 'text' %}<span class="cloze-text">{{ segment.text }}</span>
+                                            {% else %}<span class="cloze-gap cloze-gap-{{ segment.status|default:'open' }}"><span class="cloze-num tnum" aria-hidden="true">{{ segment.number }}</span><span class="cloze-answer{% if not segment.given %} is-empty{% endif %}">{{ segment.given|default:"—" }}</span>{% if segment.status == 'ok' %}<span class="cloze-mark" aria-hidden="true">{% icon "check" "icon icon-sm" %}</span>{% elif segment.status == 'bad' or segment.status == 'empty' %}<span class="cloze-mark" aria-hidden="true">{% icon "x" "icon icon-sm" %}</span>{% endif %}</span>
+                                            {% endif %}
+                                        {% endfor %}
+                                    {% endspaceless %}
+                                </div>
+                                <p class="tiny muted mb-0" style="margin-top:6px">Верно {{ item.cloze_hits }} из {{ item.cloze_total }} пропусков{% if item.tries_used > 1 %} · попыток: {{ item.tries_used }}{% endif %}</p>
+                            {% else %}
+                                <p class="small mb-0"><span class="muted">Ответ ученика:</span> {% if item.last %}{{ item.last.display|default:"—" }}{% else %}—{% endif %}{% if item.tries_used > 1 %} <span class="tiny muted tnum">· попыток: {{ item.tries_used }}</span>{% endif %}</p>
+                                {% if item.expected %}<p class="small mb-0"><span class="muted">Правильный ответ:</span> {{ item.expected }}</p>{% endif %}
+                            {% endif %}
                         {% endif %}
                     </li>
                 {% endfor %}

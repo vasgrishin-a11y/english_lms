@@ -10,7 +10,7 @@
                 {% for question in questions %}
                     <li class="panel" style="margin-bottom:8px">
                         <div class="row row-tight">
-                            <strong>{{ forloop.counter }}. {{ question.text }}</strong>
+                            <strong>{{ forloop.counter }}. {% if question.kind == 'cloze' %}{{ question.text|cloze_blank }}{% else %}{{ question.text }}{% endif %}</strong>
                             <span class="tag">{{ question.get_kind_display }}</span>
                             <span class="tiny muted tnum">{{ question.points }} б.</span>
                             {% if question.kind == 'voice' %}<span class="pill-note">{% icon "timer" "icon icon-sm" %}до {{ question.voice_limit_display }}</span>{% endif %}
@@ -19,7 +19,7 @@
                         {% if question.explanation %}<p class="tiny muted mb-0" style="margin-top:6px">{% icon "lightbulb" "icon icon-sm" %} {{ question.explanation }}</p>{% endif %}
                         <div class="row" style="margin-top:8px">
                             <a class="btn btn-secondary btn-sm" href="{% url 'teacher_question_edit' question.pk %}">{% icon "pencil" %}{% t "Изменить" %}</a>
-                            <form method="post" action="{% url 'teacher_question_delete' question.pk %}" data-confirm="Удалить вопрос «{{ question.text|truncatechars:60 }}»?">
+                            <form method="post" action="{% url 'teacher_question_delete' question.pk %}" data-confirm="Удалить вопрос «{{ question.text|cloze_blank|truncatechars:60 }}»?">
                                 {% csrf_token %}
                                 <button class="btn btn-danger-ghost btn-sm" type="submit">{% icon "trash" %}{% t "Удалить" %}</button>
                             </form>
