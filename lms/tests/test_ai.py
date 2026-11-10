@@ -1044,6 +1044,27 @@ class AssistantModelTests(LMSCase):
         self.assertIn("не додумывай, чем он заканчивается", prompt)
         self.assertIn("Перед тем как вернуть JSON", prompt)
 
+    def test_prompts_offer_cloze_text_type(self):
+        """ИИ знает про тип «Текст с пропусками» и когда его уместно выбрать."""
+        for target in ("mixed", "assignment", "quiz"):
+            prompt = ai.build_prompt("Some text", target=target)
+            self.assertIn("cloze", prompt, target)
+            self.assertIn("Текст с пропусками", prompt, target)
+            self.assertIn("можно\n  использовать, когда это уместно", prompt, target)
+        # Перечень допустимых пунктов quiz включает новый тип.
+        self.assertIn(
+            "- у quiz допустимы пункты mcq, multi, gap, cloze, match, order, sort, "
+            "spell, text и voice;",
+            ai.AI_AUTHORING_CONTEXT,
+        )
+        # Схема и самопроверка закрепляют формат пропусков.
+        self.assertIn(
+            '"kind": "mcq|multi|gap|cloze|match|order|sort|spell|text|voice"', ai.PROMPT_SCHEMA
+        )
+        self.assertIn("у cloze пропуски [[n]] идут по порядку", ai.PROMPT_SCHEMA)
+        # Правка задания тоже умеет сохранять и создавать cloze.
+        self.assertIn("Если правишь пункт cloze", ai.REVISION_SCHEMA)
+
     def test_prompt_lists_uploaded_files_for_attachment(self):
         """Промпт перечисляет файлы запроса и объясняет поле attach_files."""
         prompt = ai.build_prompt("текст", files=["page.jpg", "page2.png"])
