@@ -503,12 +503,13 @@ def review_detail(request, pk):
     submission = get_object_or_404(
         Submission.objects.select_related(
             "student", "assignment__topic__block", "feedback__teacher"
-        ),
+        ).prefetch_related("feedback__audio_comments"),
         pk=pk,
     )
     attempts = list(
         Submission.objects.filter(student=submission.student, assignment=submission.assignment)
         .select_related("feedback__teacher")
+        .prefetch_related("feedback__audio_comments")
         .order_by("-version")
     )
     latest = attempts[0]

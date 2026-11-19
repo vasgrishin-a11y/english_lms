@@ -337,3 +337,126 @@ class CurriculumPathBudgetTests(LMSCase):
         warm_queries = len(queries)
         self.assertEqual(warm_queries, 0)
         self.assertGreater(cold, warm_queries)
+
+
+class FeedbackAudioPrefetchTests(LMSCase):
+    """Голосовые комментарии не должны давать N+1 на экранах с историей проверок.
+
+    На стенде «класс» /my/ делал по одному SQL на каждую проверку с
+    комментариями: 15 запросов на базе и 15 + N при добавлении N проверок.
+    Шаблоны читают ``feedback.audio_comments``, поэтому выборки должны
+    prefetch'ить связь, а бюджет — не зависеть от числа комментариев.
+    """
+
+    def _reviewed(self, number):
+        from lms.models import Feedback, FeedbackAudioComment
+
+        assignment = Assignment.objects.create(
+            topic=self.topic,
+            title=f"Audio task {number}",
+            description="x",
+            order=number + 1,
+        )
+        attempt = Submission.objects.create(
+            student=self.student,
+            assignment=assignment,
+            version=1,
+            text_answer="An answer " * 10,
+            max_points_snapshot=100,
+            status=Submission.Status.CHECKED,
+        )
+        feedback = Feedback.objects.create(
+            submission=attempt, teacher=self.teacher, grade=90, comment="Good"
+        )
+        clips = [
+            FeedbackAudioComment.objects.create(
+                feedback=feedback, audio=f"loadtest/clip-{number}-{order}.wav", order=order
+            )
+            for order in range(3)
+        ]
+        return attempt, clips
+
+    def _query_count(self, client, url):
+        with CaptureQueriesContext(connection) as queries:
+            response = client.get(url)
+        # «/» у ученика редиректит на /my/ (302 с Location) — это тоже успех.
+        self.assertIn(response.status_code, (200, 302))
+        return len(queries)
+
+    def test_student_home_query_budget_does_not_grow_with_audio_comments(self):
+        attempts = [self._reviewed(number) for number in range(5)]
+        before = self._query_count(self.student_client, "/")
+        for attempt, clips in attempts:
+            from lms.models import FeedbackAudioComment
+
+            for clip in clips:
+                FeedbackAudioComment.objects.create(
+                    feedback=clip.feedback, audio=f"loadtest/more-{attempt.pk}-{clip.pk}.wav"
+                )
+        after = self._query_count(self.student_client, "/")
+        self.assertEqual(before, after)
+
+    def test_student_grades_query_budget_does_not_grow_with_audio_comments(self):
+        self._reviewed(1)
+        before = self._query_count(self.student_client, "/grades/")
+        for number in range(2, 8):
+            self._reviewed(number)
+        after = self._query_count(self.student_client, "/grades/")
+        self.assertEqual(before, after)
+
+    def test_teacher_review_query_budget_does_not_grow_with_audio_comments(self):
+        attempt, _ = self._reviewed(1)
+        self.teacher_client.get(f"/teacher/review/{attempt.pk}/")
+        before = self._query_count(self.teacher_client, f"/teacher/review/{attempt.pk}/")
+        from lms.models import FeedbackAudioComment
+
+        feedback = attempt.feedback
+        for order in range(6):
+            FeedbackAudioComment.objects.create(
+                feedback=feedback, audio=f"loadtest/review-{order}.wav", order=order
+            )
+        after = self._query_count(self.teacher_client, f"/teacher/review/{attempt.pk}/")
+        self.assertEqual(before, after)
+
+
+class GradebookUrlResolutionTests(LMSCase):
+    """Ссылка на проверку в журнале собирается без reverse() на клетку.
+
+    Страница журнала — 25 учеников × 288 заданий; reverse() на каждую сдачу
+    стоил ~143 мс из ~298 мс (замер 2026-11-19). URL разрешается один раз,
+    поэтому тест проверяет и результат, и число вызовов: если кто-то вернёт
+    reverse() в цикл, тест упадёт по счётчику.
+    """
+
+    def test_review_urls_are_built_once_and_match_the_route(self):
+        from unittest import mock
+
+        from django.urls import reverse
+
+        from lms import curriculum
+
+        # Журнал показывает только последнюю попытку, поэтому три РАЗНЫЕ
+        # задачи: иначе три версии одной сдачи дадут одну клетку.
+        attempts = []
+        for number in range(3):
+            assignment = Assignment.objects.create(
+                topic=self.topic,
+                title=f"Gradebook task {number}",
+                description="Task",
+                max_points=100,
+            )
+            attempt = self.submit(version=0, text_answer="x", assignment_id=assignment.pk)
+            self.review(attempt)
+            attempts.append(attempt)
+        student = attempts[0].student
+        data = curriculum.gradebook(students=[student])
+        cells = [cell for row in data["rows"] for cell in row["cells"] if cell["attempt"]]
+        self.assertEqual(len(cells), len(attempts))
+        for cell in cells:
+            self.assertEqual(
+                cell["review_url"], reverse("teacher_submission_review", args=[cell["attempt"].pk])
+            )
+
+        with mock.patch("django.urls.reverse", side_effect=reverse, autospec=True) as spy:
+            curriculum.gradebook(students=[student])
+        self.assertLessEqual(spy.call_count, 1)

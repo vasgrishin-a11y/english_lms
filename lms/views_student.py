@@ -215,6 +215,9 @@ def student_home(request):
         Submission.objects.filter(student=student, feedback__isnull=False)
         .exclude(assignment__assignment_type__in=Assignment.NO_SUBMISSION_TYPES)
         .select_related("feedback", "assignment__topic__block", "assignment__topic__chapter")
+        # Шаблон читает feedback.audio_comments: без prefetch это один запрос
+        # на каждую проверку с голосовым комментарием (N+1 на /my/).
+        .prefetch_related("feedback__audio_comments")
         .order_by("-feedback__updated_at", "-pk")[:5]
     )
     card_sets = card_set_stats(student)
@@ -390,6 +393,8 @@ def assignment_detail(request, pk):
     attempts = (
         Submission.objects.filter(student=request.user, assignment=assignment)
         .select_related("feedback__teacher")
+        # История попыток показывает голосовые комментарии к каждой проверке.
+        .prefetch_related("feedback__audio_comments")
         .order_by("-version")
     )
     submission = attempts.first()
@@ -459,6 +464,7 @@ def _quiz_context(request, assignment, attempts=None, submission=None):
         attempts = (
             Submission.objects.filter(student=request.user, assignment=assignment)
             .select_related("feedback__teacher")
+            .prefetch_related("feedback__audio_comments")
             .order_by("-version")
         )
         submission = attempts.first()
@@ -923,6 +929,7 @@ def student_grades(request):
         .exclude(assignment__assignment_type__in=Assignment.NO_SUBMISSION_TYPES)
         .latest_attempts()
         .select_related("feedback", "assignment__topic__block", "assignment__topic__chapter")
+        .prefetch_related("feedback__audio_comments")
         .order_by("-submitted_at", "-pk")
     )
     page = Paginator(attempts, settings.LMS_PAGE_SIZE).get_page(request.GET.get("page"))

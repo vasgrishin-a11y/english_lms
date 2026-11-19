@@ -1,0 +1,683 @@
+{
+  "base": "http://127.0.0.1:8000",
+  "warmup": {
+    "vus": 2,
+    "duration_s": 9.6,
+    "requests": 27,
+    "errors": 0,
+    "error_rate": 0.0,
+    "rps": 2.81,
+    "mb": 1.0,
+    "login_ok": 2,
+    "login_fail": 0,
+    "statuses": {
+      "200": 21,
+      "302": 6
+    },
+    "server": {
+      "rss_mb": 198.7,
+      "workers": 3
+    },
+    "rows": [
+      {
+        "kind": "GET /",
+        "count": 4,
+        "errors": 0,
+        "p50": 8.8,
+        "p95": 8.8,
+        "p99": 8.8,
+        "max": 8.8,
+        "mean": 8.0,
+        "rps": 0.42
+      },
+      {
+        "kind": "GET /assignments/",
+        "count": 1,
+        "errors": 0,
+        "p50": 99.1,
+        "p95": 99.1,
+        "p99": 99.1,
+        "max": 99.1,
+        "mean": 99.1,
+        "rps": 0.1
+      },
+      {
+        "kind": "GET /assignments/81/",
+        "count": 1,
+        "errors": 0,
+        "p50": 40.6,
+        "p95": 40.6,
+        "p99": 40.6,
+        "max": 40.6,
+        "mean": 40.6,
+        "rps": 0.1
+      },
+      {
+        "kind": "GET /assignments/<pk>/",
+        "count": 3,
+        "errors": 0,
+        "p50": 77.0,
+        "p95": 95.3,
+        "p99": 95.3,
+        "max": 95.3,
+        "mean": 75.1,
+        "rps": 0.31
+      },
+      {
+        "kind": "GET /grades/",
+        "count": 1,
+        "errors": 0,
+        "p50": 43.9,
+        "p95": 43.9,
+        "p99": 43.9,
+        "max": 43.9,
+        "mean": 43.9,
+        "rps": 0.1
+      },
+      {
+        "kind": "GET /my/",
+        "count": 1,
+        "errors": 0,
+        "p50": 121.2,
+        "p95": 121.2,
+        "p99": 121.2,
+        "max": 121.2,
+        "mean": 121.2,
+        "rps": 0.1
+      },
+      {
+        "kind": "GET /teacher/review/",
+        "count": 4,
+        "errors": 0,
+        "p50": 98.0,
+        "p95": 104.9,
+        "p99": 104.9,
+        "max": 104.9,
+        "mean": 92.2,
+        "rps": 0.42
+      },
+      {
+        "kind": "GET /teacher/review/<pk>/",
+        "count": 3,
+        "errors": 0,
+        "p50": 54.4,
+        "p95": 60.1,
+        "p99": 60.1,
+        "max": 60.1,
+        "mean": 53.0,
+        "rps": 0.31
+      },
+      {
+        "kind": "GET /teacher/students/",
+        "count": 4,
+        "errors": 0,
+        "p50": 52.6,
+        "p95": 52.9,
+        "p99": 52.9,
+        "max": 52.9,
+        "mean": 46.5,
+        "rps": 0.42
+      },
+      {
+        "kind": "POST draft (HTMX)",
+        "count": 1,
+        "errors": 0,
+        "p50": 26.3,
+        "p95": 26.3,
+        "p99": 26.3,
+        "max": 26.3,
+        "mean": 26.3,
+        "rps": 0.1
+      },
+      {
+        "kind": "login POST",
+        "count": 2,
+        "errors": 0,
+        "p50": 389.9,
+        "p95": 406.2,
+        "p99": 406.2,
+        "max": 406.2,
+        "mean": 398.1,
+        "rps": 0.21
+      },
+      {
+        "kind": "login page",
+        "count": 2,
+        "errors": 0,
+        "p50": 79.2,
+        "p95": 122.4,
+        "p99": 122.4,
+        "max": 122.4,
+        "mean": 100.8,
+        "rps": 0.21
+      }
+    ]
+  },
+  "phases": [
+    {
+      "vus": 10,
+      "duration_s": 31.8,
+      "requests": 334,
+      "errors": 0,
+      "error_rate": 0.0,
+      "rps": 10.51,
+      "mb": 15.0,
+      "login_ok": 10,
+      "login_fail": 0,
+      "statuses": {
+        "200": 293,
+        "302": 41
+      },
+      "server": {
+        "rss_mb": 211.3,
+        "workers": 3
+      },
+      "rows": [
+        {
+          "kind": "GET /",
+          "count": 31,
+          "errors": 0,
+          "p50": 6.6,
+          "p95": 8.6,
+          "p99": 10.4,
+          "max": 10.4,
+          "mean": 6.8,
+          "rps": 0.98
+        },
+        {
+          "kind": "GET /assignments/",
+          "count": 44,
+          "errors": 0,
+          "p50": 78.1,
+          "p95": 1166.7,
+          "p99": 1250.6,
+          "max": 1250.6,
+          "mean": 263.4,
+          "rps": 1.39
+        },
+        {
+          "kind": "GET /assignments/81/",
+          "count": 23,
+          "errors": 0,
+          "p50": 36.5,
+          "p95": 359.1,
+          "p99": 402.4,
+          "max": 402.4,
+          "mean": 79.8,
+          "rps": 0.72
+        },
+        {
+          "kind": "GET /assignments/<pk>/",
+          "count": 58,
+          "errors": 0,
+          "p50": 44.8,
+          "p95": 61.9,
+          "p99": 72.4,
+          "max": 125.2,
+          "mean": 47.5,
+          "rps": 1.83
+        },
+        {
+          "kind": "GET /grades/",
+          "count": 26,
+          "errors": 0,
+          "p50": 38.6,
+          "p95": 49.8,
+          "p99": 60.0,
+          "max": 60.0,
+          "mean": 40.1,
+          "rps": 0.82
+        },
+        {
+          "kind": "GET /my/",
+          "count": 28,
+          "errors": 0,
+          "p50": 83.5,
+          "p95": 375.7,
+          "p99": 511.1,
+          "max": 511.1,
+          "mean": 119.7,
+          "rps": 0.88
+        },
+        {
+          "kind": "GET /teacher/",
+          "count": 10,
+          "errors": 0,
+          "p50": 78.3,
+          "p95": 136.9,
+          "p99": 136.9,
+          "max": 136.9,
+          "mean": 86.9,
+          "rps": 0.31
+        },
+        {
+          "kind": "GET /teacher/groups/",
+          "count": 9,
+          "errors": 0,
+          "p50": 17.8,
+          "p95": 20.0,
+          "p99": 20.0,
+          "max": 20.0,
+          "mean": 17.9,
+          "rps": 0.28
+        },
+        {
+          "kind": "GET /teacher/review/",
+          "count": 28,
+          "errors": 0,
+          "p50": 79.9,
+          "p95": 407.4,
+          "p99": 522.3,
+          "max": 522.3,
+          "mean": 110.9,
+          "rps": 0.88
+        },
+        {
+          "kind": "GET /teacher/review/<pk>/",
+          "count": 22,
+          "errors": 0,
+          "p50": 32.3,
+          "p95": 45.9,
+          "p99": 46.9,
+          "max": 46.9,
+          "mean": 34.1,
+          "rps": 0.69
+        },
+        {
+          "kind": "GET /teacher/students/",
+          "count": 11,
+          "errors": 0,
+          "p50": 35.6,
+          "p95": 54.3,
+          "p99": 54.3,
+          "max": 54.3,
+          "mean": 39.0,
+          "rps": 0.35
+        },
+        {
+          "kind": "POST draft (HTMX)",
+          "count": 24,
+          "errors": 0,
+          "p50": 25.5,
+          "p95": 28.8,
+          "p99": 31.5,
+          "max": 31.5,
+          "mean": 25.0,
+          "rps": 0.76
+        },
+        {
+          "kind": "login POST",
+          "count": 10,
+          "errors": 0,
+          "p50": 1127.5,
+          "p95": 2008.1,
+          "p99": 2008.1,
+          "max": 2008.1,
+          "mean": 1198.8,
+          "rps": 0.31
+        },
+        {
+          "kind": "login page",
+          "count": 10,
+          "errors": 0,
+          "p50": 148.6,
+          "p95": 242.3,
+          "p99": 242.3,
+          "max": 242.3,
+          "mean": 153.3,
+          "rps": 0.31
+        }
+      ]
+    },
+    {
+      "vus": 30,
+      "duration_s": 31.7,
+      "requests": 809,
+      "errors": 0,
+      "error_rate": 0.0,
+      "rps": 25.5,
+      "mb": 34.7,
+      "login_ok": 30,
+      "login_fail": 0,
+      "statuses": {
+        "200": 720,
+        "302": 89
+      },
+      "server": {
+        "rss_mb": 214.2,
+        "workers": 3
+      },
+      "rows": [
+        {
+          "kind": "GET /",
+          "count": 59,
+          "errors": 0,
+          "p50": 10.0,
+          "p95": 819.1,
+          "p99": 913.7,
+          "max": 987.1,
+          "mean": 117.7,
+          "rps": 1.86
+        },
+        {
+          "kind": "GET /assignments/",
+          "count": 93,
+          "errors": 0,
+          "p50": 138.8,
+          "p95": 4408.6,
+          "p99": 4816.8,
+          "max": 4891.8,
+          "mean": 1021.2,
+          "rps": 2.93
+        },
+        {
+          "kind": "GET /assignments/81/",
+          "count": 77,
+          "errors": 0,
+          "p50": 43.6,
+          "p95": 244.9,
+          "p99": 1034.1,
+          "max": 1109.9,
+          "mean": 122.5,
+          "rps": 2.43
+        },
+        {
+          "kind": "GET /assignments/<pk>/",
+          "count": 138,
+          "errors": 0,
+          "p50": 58.3,
+          "p95": 169.1,
+          "p99": 221.2,
+          "max": 274.0,
+          "mean": 75.1,
+          "rps": 4.35
+        },
+        {
+          "kind": "GET /grades/",
+          "count": 73,
+          "errors": 0,
+          "p50": 62.1,
+          "p95": 811.7,
+          "p99": 985.4,
+          "max": 1186.9,
+          "mean": 140.5,
+          "rps": 2.3
+        },
+        {
+          "kind": "GET /my/",
+          "count": 69,
+          "errors": 0,
+          "p50": 136.4,
+          "p95": 777.0,
+          "p99": 1138.8,
+          "max": 1228.3,
+          "mean": 196.8,
+          "rps": 2.18
+        },
+        {
+          "kind": "GET /teacher/",
+          "count": 19,
+          "errors": 0,
+          "p50": 129.9,
+          "p95": 1321.7,
+          "p99": 1679.2,
+          "max": 1679.2,
+          "mean": 270.7,
+          "rps": 0.6
+        },
+        {
+          "kind": "GET /teacher/groups/",
+          "count": 29,
+          "errors": 0,
+          "p50": 37.3,
+          "p95": 130.3,
+          "p99": 1009.5,
+          "max": 1009.5,
+          "mean": 75.4,
+          "rps": 0.91
+        },
+        {
+          "kind": "GET /teacher/review/",
+          "count": 65,
+          "errors": 0,
+          "p50": 90.5,
+          "p95": 221.5,
+          "p99": 256.0,
+          "max": 1339.3,
+          "mean": 127.4,
+          "rps": 2.05
+        },
+        {
+          "kind": "GET /teacher/review/<pk>/",
+          "count": 49,
+          "errors": 0,
+          "p50": 43.0,
+          "p95": 149.4,
+          "p99": 169.7,
+          "max": 169.7,
+          "mean": 63.5,
+          "rps": 1.54
+        },
+        {
+          "kind": "GET /teacher/students/",
+          "count": 20,
+          "errors": 0,
+          "p50": 60.0,
+          "p95": 1209.1,
+          "p99": 1721.3,
+          "max": 1721.3,
+          "mean": 208.4,
+          "rps": 0.63
+        },
+        {
+          "kind": "POST draft (HTMX)",
+          "count": 58,
+          "errors": 0,
+          "p50": 27.3,
+          "p95": 149.0,
+          "p99": 191.8,
+          "max": 194.3,
+          "mean": 44.8,
+          "rps": 1.83
+        },
+        {
+          "kind": "login POST",
+          "count": 30,
+          "errors": 0,
+          "p50": 2790.3,
+          "p95": 5314.3,
+          "p99": 5596.2,
+          "max": 5596.2,
+          "mean": 2960.9,
+          "rps": 0.95
+        },
+        {
+          "kind": "login page",
+          "count": 30,
+          "errors": 0,
+          "p50": 420.7,
+          "p95": 717.6,
+          "p99": 740.1,
+          "max": 740.1,
+          "mean": 434.2,
+          "rps": 0.95
+        }
+      ]
+    },
+    {
+      "vus": 60,
+      "duration_s": 32.9,
+      "requests": 897,
+      "errors": 0,
+      "error_rate": 0.0,
+      "rps": 27.29,
+      "mb": 38.9,
+      "login_ok": 60,
+      "login_fail": 0,
+      "statuses": {
+        "200": 777,
+        "302": 120
+      },
+      "server": {
+        "rss_mb": 214.6,
+        "workers": 3
+      },
+      "rows": [
+        {
+          "kind": "GET /",
+          "count": 60,
+          "errors": 0,
+          "p50": 516.2,
+          "p95": 1904.2,
+          "p99": 2048.5,
+          "max": 2121.1,
+          "mean": 683.9,
+          "rps": 1.83
+        },
+        {
+          "kind": "GET /assignments/",
+          "count": 120,
+          "errors": 0,
+          "p50": 763.8,
+          "p95": 9646.3,
+          "p99": 10315.6,
+          "max": 10332.7,
+          "mean": 3319.0,
+          "rps": 3.65
+        },
+        {
+          "kind": "GET /assignments/81/",
+          "count": 68,
+          "errors": 0,
+          "p50": 579.8,
+          "p95": 1790.8,
+          "p99": 1900.5,
+          "max": 2036.0,
+          "mean": 709.3,
+          "rps": 2.07
+        },
+        {
+          "kind": "GET /assignments/<pk>/",
+          "count": 151,
+          "errors": 0,
+          "p50": 544.5,
+          "p95": 749.5,
+          "p99": 851.6,
+          "max": 865.5,
+          "mean": 508.4,
+          "rps": 4.59
+        },
+        {
+          "kind": "GET /grades/",
+          "count": 65,
+          "errors": 0,
+          "p50": 539.7,
+          "p95": 1838.0,
+          "p99": 1914.6,
+          "max": 2105.0,
+          "mean": 747.7,
+          "rps": 1.98
+        },
+        {
+          "kind": "GET /my/",
+          "count": 60,
+          "errors": 0,
+          "p50": 619.3,
+          "p95": 1786.1,
+          "p99": 1952.1,
+          "max": 1957.3,
+          "mean": 784.5,
+          "rps": 1.83
+        },
+        {
+          "kind": "GET /teacher/",
+          "count": 13,
+          "errors": 0,
+          "p50": 526.2,
+          "p95": 803.8,
+          "p99": 820.7,
+          "max": 820.7,
+          "mean": 558.5,
+          "rps": 0.4
+        },
+        {
+          "kind": "GET /teacher/groups/",
+          "count": 22,
+          "errors": 0,
+          "p50": 556.1,
+          "p95": 2548.9,
+          "p99": 3000.3,
+          "max": 3000.3,
+          "mean": 725.4,
+          "rps": 0.67
+        },
+        {
+          "kind": "GET /teacher/review/",
+          "count": 69,
+          "errors": 0,
+          "p50": 545.7,
+          "p95": 2369.5,
+          "p99": 3266.0,
+          "max": 3691.7,
+          "mean": 636.4,
+          "rps": 2.1
+        },
+        {
+          "kind": "GET /teacher/review/<pk>/",
+          "count": 48,
+          "errors": 0,
+          "p50": 520.0,
+          "p95": 679.5,
+          "p99": 779.1,
+          "max": 779.1,
+          "mean": 440.8,
+          "rps": 1.46
+        },
+        {
+          "kind": "GET /teacher/students/",
+          "count": 24,
+          "errors": 0,
+          "p50": 590.7,
+          "p95": 3403.3,
+          "p99": 3627.8,
+          "max": 3627.8,
+          "mean": 1107.0,
+          "rps": 0.73
+        },
+        {
+          "kind": "POST draft (HTMX)",
+          "count": 77,
+          "errors": 0,
+          "p50": 503.3,
+          "p95": 780.7,
+          "p99": 806.6,
+          "max": 839.8,
+          "mean": 484.5,
+          "rps": 2.34
+        },
+        {
+          "kind": "login POST",
+          "count": 60,
+          "errors": 0,
+          "p50": 5869.0,
+          "p95": 10346.3,
+          "p99": 10755.9,
+          "max": 11046.7,
+          "mean": 5767.5,
+          "rps": 1.83
+        },
+        {
+          "kind": "login page",
+          "count": 60,
+          "errors": 0,
+          "p50": 865.0,
+          "p95": 1393.0,
+          "p99": 1439.4,
+          "max": 1458.6,
+          "mean": 859.8,
+          "rps": 1.83
+        }
+      ]
+    }
+  ]
+}
