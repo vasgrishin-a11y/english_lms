@@ -21,6 +21,23 @@ Python 3.12 / Django 5.2, PostgreSQL 15+ (CI: 16), постоянное прив
 Схематичный location для Nginx внутри HTTPS server block:
 
 ```nginx
+# Один неудачный вход стоит ~330 мс CPU (PBKDF2, 1 000 000 итераций).
+# Приложение блокирует перебор пары «логин + IP» (django-axes, порог 5),
+# но не перебор разных логинов с одного адреса — это делает ingress.
+limit_req_zone $binary_remote_addr zone=lms_login:10m rate=10r/m;
+limit_req_status 429;
+
+location = /accounts/login/ {
+    limit_req zone=lms_login burst=20 nodelay;
+    client_max_body_size 1m;
+    proxy_pass http://127.0.0.1:8000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For "";
+    proxy_read_timeout 210s;
+}
+
 location / {
     client_max_body_size 21m;
     client_body_timeout 30s;
@@ -33,6 +50,13 @@ location / {
     proxy_read_timeout 210s;
 }
 ```
+
+`burst=20 nodelay` нужен, чтобы класс из сорока учеников за школьным NAT
+мог войти утром: очередь сверх лимита отдаётся сразу, а не копится. Если
+ученики выходят через несколько адресов, лимит можно поднять до `30r/m`;
+если у каждого публичный IP — `10r/m` достаточно. Блокировка `429` от
+ingress не должна попадать в мониторинг как ошибка приложения: это штатный
+ответ защиты.
 
 Динамические HTML-ответы сжимает `django.middleware.gzip.GZipMiddleware`, а статику — WhiteNoise. Не включайте повторное gzip-сжатие уже сжатого ответа на ingress; если переносите сжатие HTML на Nginx, отключите middleware в приложении. Для сжатых ответов с CSRF-токеном сохраняйте общий rate limit на ingress — это стандартная мера против атак типа BREACH.
 
