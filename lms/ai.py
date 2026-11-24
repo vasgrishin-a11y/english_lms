@@ -54,6 +54,7 @@ from django.core.files.storage import default_storage
 from django.db import transaction
 from django.utils.text import slugify
 
+from . import audio_formats
 from .cloze import gap_count, normalize_cloze_text
 from .library import _create_questions
 from .models import (
@@ -78,6 +79,11 @@ PDF_EXTENSIONS = {".pdf"}
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".webm", ".mkv", ".avi"}
 AUDIO_EXTENSIONS = {".mp3", ".m4a", ".wav", ".ogg", ".opus", ".flac"}
+#: Аудио из «внешнего мира»: диктофоны и Windows Media Player сохраняют WMA,
+#: телефоны и аудиокниги — M4B. Модели их не читают, а браузер не всегда играет,
+#: поэтому перед отправкой помощник перекодирует их в MP3 (``_provider_audio``).
+OUTER_AUDIO_EXTENSIONS = frozenset(f".{ext}" for ext in audio_formats.DOCUMENT_AUDIO_EXTENSIONS)
+AUDIO_UPLOAD_EXTENSIONS = frozenset(AUDIO_EXTENSIONS) | OUTER_AUDIO_EXTENSIONS
 OFFICE_EXTENSIONS = DOCX_EXTENSIONS | XLSX_EXTENSIONS
 UPLOAD_EXTENSIONS = (
     TEXT_EXTENSIONS
@@ -85,7 +91,7 @@ UPLOAD_EXTENSIONS = (
     | PDF_EXTENSIONS
     | IMAGE_EXTENSIONS
     | VIDEO_EXTENSIONS
-    | AUDIO_EXTENSIONS
+    | AUDIO_UPLOAD_EXTENSIONS
 )
 
 AI_ASSIGNMENT_TYPES = {value for value, _ in Assignment.Type.choices}
@@ -209,7 +215,10 @@ PROVIDERS = {
 }
 
 DEFAULT_PROVIDER = "ollama"
-UPLOAD_KINDS = ("image",)
+#: Что провайдер может отправить модели сам. Аудио (``input_audio``) понимают
+#: только аудио-модели, поэтому оно выключено по умолчанию и включается
+#: ``LMS_AI_UPLOAD_KINDS=image,audio`` — иначе модель просто откажет на запрос.
+UPLOAD_KINDS = ("image", "audio")
 UPLOAD_KIND_LABELS = {
     "image": "фото и картинки",
     "pdf": "PDF",
@@ -357,6 +366,11 @@ def unsupported_upload_note(filename, spec=None):
         return ""
     label = UPLOAD_KIND_LABELS.get(kind, "этот формат")
     spec = spec or provider_spec()
+    if kind == "audio":
+        return (
+            f"{spec['label']} не слушает аудио: запись можно приложить к заданию "
+            "как аудиофайл, а для расшифровки подключите локальную аудио-модель."
+        )
     return (
         f"{spec['label']} не читает {label}: текст из документа разберём офлайн, "
         f"а для фото нужна vision-модель (qwen3-vl, qwen2.5vl, gemma3, minicpm-v)."
@@ -384,7 +398,7 @@ def validate_upload(upload):
     if extension_of(name) not in UPLOAD_EXTENSIONS:
         raise AiError(
             f"Формат файла «{name}» не поддерживается: загрузите фото, Word, "
-            "Excel, PDF, видео или текстовый файл."
+            "Excel, PDF, аудио (MP3, WAV, M4A, OGG, AAC, WMA), видео или текстовый файл."
         )
     limit = max_upload_bytes()
     if (getattr(upload, "size", 0) or 0) > limit:
@@ -430,7 +444,7 @@ def upload_kind(filename):
         return "image"
     if ext in VIDEO_EXTENSIONS:
         return "video"
-    if ext in AUDIO_EXTENSIONS:
+    if ext in AUDIO_UPLOAD_EXTENSIONS:
         return "audio"
     return "other"
 
@@ -440,8 +454,13 @@ def offline_notes(filename):
     kind = upload_kind(filename)
     if kind == "image":
         return "Офлайн-режим не распознаёт текст на картинках — включите локальную модель (LMS_AI_LOCAL=1)."
-    if kind in {"video", "audio"}:
-        return "Офлайн-режим не смотрит видео и не слушает аудио — включите локальную модель (LMS_AI_LOCAL=1)."
+    if kind == "audio":
+        return (
+            "Офлайн-режим не слушает аудио — включите локальную модель (LMS_AI_LOCAL=1). "
+            "Запись можно приложить к заданию как аудиофайл."
+        )
+    if kind == "video":
+        return "Офлайн-режим не смотрит видео — включите локальную модель (LMS_AI_LOCAL=1)."
     if kind == "other":
         return "Такой формат офлайн не разбирается — вставьте текст вручную."
     return ""
@@ -1438,10 +1457,42 @@ def _json_mode(spec):
     return bool(configured)
 
 
+def _provider_audio(filename, blob):
+    """Аудио для ``input_audio``: WMA и родственные контейнеры → MP3.
+
+    Шлюзы и локальные модели декодируют MP3/WAV/M4A/OGG/FLAC, но не WMA.
+    Поэтому перед отправкой такое аудио перекодируется — тем же способом, что и
+    файлы ИИ-помощника, — а формат в запросе всегда совпадает с байтами.
+    """
+    if audio_formats.needs_conversion(filename, blob):
+        blob = audio_formats.convert_to_mp3(blob, filename=filename)
+        filename = audio_formats.mp3_name(filename)
+    _audio_format(filename)  # ранняя понятная ошибка вместо отказа шлюза
+    return filename, blob
+
+
+#: Форматы ``input_audio``, которые понимают OpenAI-совместимые шлюзы.
+#:
+#: WMA/WMV/ASF/M4B сюда не входят (их шлюзы не декодируют) — до отправки такие
+#: файлы уже перекодированы в MP3 в ``_convert_outer_audio``.
+PROVIDER_AUDIO_FORMATS = {"wav", "mp3", "m4a", "ogg", "flac"}
+
+
 def _audio_format(filename):
-    """Формат для ``input_audio``: большинство шлюзов принимают wav/mp3."""
+    """Формат для ``input_audio``: большинство шлюзов принимают wav/mp3.
+
+    Формат обязан совпадать с реальными байтами: сказать шлюзу «wav», отправив
+    WMA, — значит получить отказ модели вместо разбора. WMA и родственные
+    контейнеры к этому моменту уже перекодированы в MP3, поэтому незнакомое
+    значение — ошибка настройки, а не повод соврать в запросе.
+    """
     ext = extension_of(filename).lstrip(".")
-    return ext if ext in {"wav", "mp3", "m4a", "ogg", "flac"} else "wav"
+    if ext in PROVIDER_AUDIO_FORMATS:
+        return ext
+    raise AiError(
+        f"Формат аудио {ext or 'без расширения'} не отправляется модели: "
+        "запись должна быть MP3, WAV, M4A, OGG или FLAC."
+    )
 
 
 def _media_part(filename, blob, media_kind):
@@ -1829,6 +1880,37 @@ def material_summary(material):
     }
 
 
+def _convert_outer_audio(blobs, notes):
+    """Привести WMA/WMV/ASF/M4B к MP3 до разбора и до приложения к заданию.
+
+    Модели не читают WMA, а браузер не играет его даже в плеере задания,
+    поэтому такой файл бесполезен в любом виде. Конвертация — на сервере, с
+    сохранением исходного имени (``lesson.wma`` → ``lesson.mp3``), чтобы
+    «приложи этот файл» продолжало работать: в ``attach_files`` модель видит
+    новое имя из списка файлов запроса.
+
+    Нечитаемая запись не роняет весь запрос: о ней честно сообщаем, а остальные
+    файлы разбираются как обычно.
+    """
+    converted = []
+    for name, data in blobs:
+        if extension_of(name) not in OUTER_AUDIO_EXTENSIONS:
+            converted.append((name, data))
+            continue
+        try:
+            mp3 = audio_formats.convert_to_mp3(data, filename=name)
+        except audio_formats.AudioConvertError as exc:
+            notes.append(f"Файл «{name}» пропущен: {exc}")
+            continue
+        new_name = audio_formats.mp3_name(name)
+        notes.append(
+            f"Файл «{name}» перекодирован в MP3 на сервере — этот формат браузер "
+            "не воспроизводит, а модель не читает."
+        )
+        converted.append((new_name, mp3))
+    return converted
+
+
 # ── Точка входа: файл/текст → материал ────────────────────────────────────
 def build_material(
     *,
@@ -1868,6 +1950,10 @@ def build_material(
                 f"Файл больше {max_upload_bytes() // (1024 * 1024)} МБ — загрузите часть материала."
             )
         blobs.append((name, data))
+
+    # WMA/WMV/ASF/M4B и прочее «внешнее» аудио модели и браузер не читают: один
+    # раз перекодируем его в MP3 и дальше работаем как с обычной записью.
+    blobs = _convert_outer_audio(blobs, notes)
 
     # Документы и PDF разбираем офлайн текстом; изображения уходят модели как есть.
     extracted = []
@@ -1991,13 +2077,17 @@ def revision_uploads(uploads, spec):
     """
     media, files_data, parts, notes = [], [], [], []
     readable = provider_uploads(spec)
+    blobs = []
     for upload in uploads:
         # Формат и размер — общий лимит с первым разбором: неподходящий файл
         # лучше отвергнуть до обращения к модели, чем молча пропустить.
         validate_upload(upload)
-        name = getattr(upload, "name", "") or "файл"
+        blobs.append((getattr(upload, "name", "") or "файл", upload.read()))
+    # WMA и родня: сначала MP3, иначе модель не услышит запись, а вложение
+    # задания окажется форматом, который браузер ученика не проигрывает.
+    blobs = _convert_outer_audio(blobs, notes)
+    for name, data in blobs:
         kind = upload_kind(name)
-        data = upload.read()
         files_data.append((name, data))
         if kind in readable:
             media.append((name, data, "audio" if kind == "audio" else "image"))
@@ -2999,6 +3089,7 @@ def grade_audio_answer(submission):
     if upload_kind(upload.name) != "audio":
         raise AiError("Прикреплённый файл не похож на аудио — проверьте ответ вручную.")
     filename, blob = _read_answer_audio(upload)
+    filename, blob = _provider_audio(filename, blob)
     spec = provider_spec()
     try:
         payload = _provider_material(
@@ -3058,6 +3149,7 @@ def grade_item_answer(response):
     spec = provider_spec()
     if upload:
         filename, blob = _read_answer_audio(upload)
+        filename, blob = _provider_audio(filename, blob)
         try:
             payload = _provider_material(
                 spec,
@@ -3099,7 +3191,9 @@ __all__ = [
     "AiError",
     "AI_CEFR_LEVELS",
     "AI_QUESTION_KINDS",
+    "AUDIO_UPLOAD_EXTENSIONS",
     "DEFAULT_PROVIDER",
+    "OUTER_AUDIO_EXTENSIONS",
     "PROVIDERS",
     "TARGETS",
     "UPLOAD_EXTENSIONS",

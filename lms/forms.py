@@ -27,7 +27,8 @@ from .models import (
 from .skills import apply_default_skills
 from .validators import (
     ALLOWED_FILE_EXTENSIONS,
-    AUDIO_EXTENSIONS,
+    UPLOAD_AUDIO_EXTENSIONS,
+    audio_accept_attribute,
     validate_answer,
     validate_recording_limit,
     validate_upload,
@@ -64,7 +65,9 @@ class SubmissionForm(forms.Form):
             del self.fields["file_answer"]
         else:
             audio = assignment.assignment_type == Assignment.Type.AUDIO
-            extensions = AUDIO_EXTENSIONS if audio else ALLOWED_FILE_EXTENSIONS
+            # Для аудио-задания показываем и WMA/WMV/ASF/M4B: сервер сам
+            # превратит их в MP3, и ученику не придётся искать конвертер.
+            extensions = UPLOAD_AUDIO_EXTENSIONS if audio else ALLOWED_FILE_EXTENSIONS
             self.fields["file_answer"].widget.attrs["accept"] = ",".join(
                 f".{ext}" for ext in sorted(extensions)
             )
@@ -174,7 +177,9 @@ class ReviewForm(forms.Form):
         validators=[validate_upload],
         widget=forms.ClearableFileInput(
             attrs={
-                "accept": ".mp3,.wav,.m4a,.ogg,.aac,audio/*",
+                # WMA и родственные контейнеры принимаем: сервер превратит их
+                # в MP3, иначе комментарий не проиграется у ученика.
+                "accept": audio_accept_attribute(),
                 "data-max-mb": str(settings.LMS_MAX_FILE_BYTES // (1024 * 1024)),
                 "data-dropzone": "1",
                 "data-dropzone-hint": "Перетащите запись сюда или вставьте из буфера Ctrl+V",
@@ -193,14 +198,14 @@ class ReviewForm(forms.Form):
         validators=[validate_upload],
         widget=MultiFileInput(
             attrs={
-                "accept": ".mp3,.wav,.m4a,.ogg,.aac,audio/*",
+                "accept": audio_accept_attribute(),
                 "data-max-mb": str(settings.LMS_MAX_FILE_BYTES // (1024 * 1024)),
                 "data-dropzone": "1",
                 "data-dropzone-hint": "Перетащите записи сюда или вставьте из буфера Ctrl+V",
                 "multiple": True,
             }
         ),
-        help_text="MP3, WAV, M4A, OGG или AAC — можно выбрать сразу несколько.",
+        help_text="MP3, WAV, M4A, OGG, AAC или WMA — можно выбрать сразу несколько.",
     )
     remove_audio_comment_ids = forms.CharField(required=False, widget=RemovedIdsInput)
     highlights_json = forms.CharField(required=False, widget=forms.HiddenInput)
@@ -1544,7 +1549,11 @@ class AIMaterialForm(forms.Form):
             }
         ),
         help_text=(
-            "Можно добавлять файлы по одному или сразу несколько. Каждый файл — до {mb} МБ.".format(
+            "Можно добавлять файлы по одному или сразу несколько. Каждый файл — до {mb} МБ. "
+            "Фото уходят vision-модели, документы читаются офлайн текстом. Аудио "
+            "(MP3, WAV, M4A, OGG, AAC) и записи диктофона (WMA, WMV, ASF, M4B) "
+            "принимаются: WMA сервер сам перекодирует в MP3, чтобы запись играла "
+            "в браузере и её можно было приложить к заданию.".format(
                 mb=ai.max_upload_bytes() // (1024 * 1024)
             )
         ),

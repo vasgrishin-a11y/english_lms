@@ -39,7 +39,12 @@ from .scoring import (
     is_blank_answer,
     score_question,
 )
-from .validators import validate_recording_limit, validate_upload
+from .validators import (
+    BROWSER_AUDIO_EXTENSIONS,
+    validate_audio_upload,
+    validate_recording_limit,
+    validate_upload,
+)
 
 logger = logging.getLogger("lms.activity")
 
@@ -114,6 +119,9 @@ def submit_assignment(*, student, assignment_id, expected_version, text_answer, 
             if recent >= settings.LMS_SUBMISSIONS_PER_HOUR:
                 raise RateLimitError("Слишком много отправок. Повторите позже.")
             if new_upload:
+                # Аудио из диктофона (WMA) превращаем в MP3 до проверки размера
+                # и квоты: иначе ученик получит файл, который не проигрывается.
+                file_answer = validate_audio_upload(file_answer)
                 if file_answer.size > settings.LMS_MAX_FILE_BYTES:
                     raise ValidationError({"file_answer": "Файл превышает допустимый размер."})
                 try:
@@ -212,6 +220,9 @@ def review_submission(
     if item_points:
         grade = _apply_item_points(submission, item_points, grade)
     if audio_comment:
+        # WMA и родственные форматы сначала превращаются в MP3: иначе ученик
+        # получит запись, которую его браузер не воспроизводит.
+        audio_comment = validate_audio_upload(audio_comment)
         validate_recording_limit(audio_comment, TEACHER_FEEDBACK_RECORDING_LIMIT_SECONDS)
     feedback, _ = Feedback.objects.select_for_update().get_or_create(
         submission=submission,
@@ -280,6 +291,7 @@ def _apply_audio_comments(feedback, audio_comments, remove_audio_comment_ids):
     for offset, audio in enumerate(audio_comments):
         if not audio:
             continue
+        audio = validate_audio_upload(audio)
         validate_recording_limit(audio, TEACHER_FEEDBACK_RECORDING_LIMIT_SECONDS)
         FeedbackAudioComment.objects.create(
             feedback=feedback, audio=audio, order=next_order + offset
@@ -566,9 +578,12 @@ def save_item_answer(
                 if not new_upload:
                     raise ValidationError("Запишите ответ на микрофон или прикрепите аудиофайл.")
                 validate_upload(file)
+                # WMA из диктофона — в MP3, затем обычные проверки лимита.
+                file = validate_audio_upload(file)
+                # После перекодирования остаются только браузерные форматы.
                 extension = file.name.rsplit(".", 1)[-1].lower() if "." in file.name else ""
-                if extension not in {"mp3", "wav", "m4a", "ogg", "aac"}:
-                    raise ValidationError("Загрузите аудио: MP3, WAV, M4A, OGG или AAC.")
+                if extension not in BROWSER_AUDIO_EXTENSIONS:
+                    raise ValidationError("Загрузите аудио: MP3, WAV, M4A, OGG, AAC или WMA.")
                 validate_recording_limit(file, question.voice_limit)
                 if file.size > settings.LMS_MAX_FILE_BYTES:
                     raise ValidationError("Файл превышает допустимый размер.")

@@ -49,7 +49,7 @@
 | Показатель | Значение |
 |---|---|
 | Стек | Django 5.2 LTS, Python 3.12 (локально 3.11), серверные шаблоны, PostgreSQL в prod |
-| Runtime-зависимости | 8 (`requirements.in`): Django, axes, gunicorn, psycopg2, dotenv, dj-database-url, whitenoise, mutagen |
+| Runtime-зависимости | 9 (`requirements.in`): Django, axes, gunicorn, psycopg2, dotenv, dj-database-url, whitenoise, mutagen, PyAV (перекодирование WMA → MP3) |
 | Моделей | 7: `Profile`, `Block`, `Topic`, `Assignment`, `Submission`, `Feedback`, `SubmissionEvent` |
 | Экранов LMS | 7 представлений, 13 шаблонов |
 | CSS | **1 файл, 287 строк** (`lms/static/lms/app.css`), шрифт Arial, один акцент `#2563eb` |

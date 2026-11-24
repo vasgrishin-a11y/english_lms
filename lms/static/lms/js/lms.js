@@ -2224,7 +2224,17 @@
         return item.slice(1).toUpperCase();
       });
     if (!extensions.length) return "";
-    if (extensions.length > 6) return extensions.slice(0, 6).join(", ") + " и другие";
+    // У ИИ-помощника и у аудио-полей длинный список форматов: сокращать его по
+    // первым шести бессмысленно (по алфавиту первыми идут служебные .asf/.avi),
+    // поэтому в подсказке явно называем аудио и документы — остальное видно в
+    // диалоге выбора.
+    if (extensions.length > 8) {
+      var wanted = ["WMA", "MP3", "WAV", "M4A", "OGG", "AAC", "PDF", "DOCX"];
+      var shown = wanted.filter(function (ext) {
+        return extensions.indexOf(ext) > -1;
+      });
+      return shown.join(", ") + " и другие";
+    }
     return extensions.join(", ");
   }
 

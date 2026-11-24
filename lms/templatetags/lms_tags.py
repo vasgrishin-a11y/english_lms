@@ -9,6 +9,7 @@ from django.utils.html import format_html
 
 from lms import ui_text
 from lms.models import Submission
+from lms.validators import audio_accept_attribute
 
 register = template.Library()
 
@@ -126,6 +127,12 @@ def kind_icon(kind):
 @register.filter
 def kind_hint(kind):
     return KIND_HINTS.get(kind, "")
+
+
+@register.simple_tag
+def audio_accept():
+    """``accept`` для поля аудио — тот же список, что и в формах (``validators``)."""
+    return audio_accept_attribute()
 
 
 @register.simple_tag

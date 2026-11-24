@@ -1,6 +1,7 @@
 """Bounded upload validation. Format checks are not a substitute for malware scanning."""
 
 import codecs
+import io
 import struct
 from pathlib import Path
 from zipfile import BadZipFile, ZipFile
@@ -10,6 +11,17 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 
 AUDIO_EXTENSIONS = {"mp3", "wav", "m4a", "ogg", "aac"}
+#: Форматы, которые браузер не воспроизводит, но диктофоны и Windows Media
+#: Player сохраняют по умолчанию. Сервер принимает их и перекодирует в MP3
+#: (``lms.audio_formats``), поэтому искать конвертер не приходится.
+#:
+#: Список намеренно короткий: сюда попадает только то, что mutagen умеет
+#: проверить как «настоящее аудио» (ASF и MP4), иначе валидатор отбраковывал бы
+#: файлы, которые сам же и разрешил. AMR/MKA контейнеры mutagen не читает.
+DOCUMENT_AUDIO_EXTENSIONS = {"wma", "wmv", "asf", "m4b"}
+#: Всё аудио, которое принимает сайт — с уже приведённым к MP3 «внешним» звуком.
+BROWSER_AUDIO_EXTENSIONS = AUDIO_EXTENSIONS
+UPLOAD_AUDIO_EXTENSIONS = BROWSER_AUDIO_EXTENSIONS | DOCUMENT_AUDIO_EXTENSIONS
 #: Соответствие расширения аудио и классов mutagen. Единый источник правды для
 #: проверки при загрузке (validate_upload) и при inline-превью (media_preview),
 #: чтобы файл, принятый на входе, всегда можно было воспроизвести.
@@ -20,6 +32,23 @@ AUDIO_MUTAGEN_TYPES = {
     "aac": {"AAC"},
     "ogg": {"OggVorbis", "OggOpus", "OggSpeex", "OggFLAC"},
 }
+#: Контейнеры, которые mutagen разбирает, но браузер играть не умеет. Такой файл
+#: валиден как аудио (проверяем заголовок контейнера, а не расширение), но перед
+#: сохранением его обязательно перекодируют в MP3 (см. ``lms.audio_formats``).
+DOCUMENT_AUDIO_MUTAGEN_TYPES = {
+    "wma": {"ASF"},
+    "wmv": {"ASF"},
+    "asf": {"ASF"},
+    "m4b": {"MP4"},
+    # M4B — обычный MP4-контейнер, поэтому mutagen называет его MP4 и умеет
+    # прочитать длительность; перекодируем его потому, что браузеры не всегда
+    # открывают .m4b как аудио.
+}
+#: Типы mutagen для inline-превью: только то, что реально играет браузер.
+INLINE_AUDIO_MUTAGEN_TYPES = dict(AUDIO_MUTAGEN_TYPES)
+#: Начало любого ASF-файла (WMA/WMV). Расширение может и не быть ``.wma``:
+#: диктофон мог сохранить ASF как ``.wmv`` или вовсе без понятного расширения.
+ASF_HEADER = b"\x30\x26\xb2\x75\x8e\x66\xcf\x11\xa6\xd9\x00\xaa\x00\x62\xce\x6c"
 ALLOWED_FILE_EXTENSIONS = [
     "pdf",
     "doc",
@@ -41,6 +70,10 @@ ALLOWED_FILE_EXTENSIONS = [
     "m4a",
     "ogg",
     "aac",
+    "wma",
+    "wmv",
+    "asf",
+    "m4b",
     "zip",
     "rar",
     "7z",
@@ -68,6 +101,77 @@ def _bounded_zip_directory(file):
     )
 
 
+def audio_accept_attribute():
+    """Значение ``accept`` для полей аудио: браузерные форматы плюс WMA-семейство.
+
+    Одна функция на весь проект: форма, тег шаблона и подсказка дропзоны не
+    должны расходиться в том, что сервер реально принимает.
+    """
+    return ",".join(f".{ext}" for ext in sorted(UPLOAD_AUDIO_EXTENSIONS)) + ",audio/*"
+
+
+def audio_extension(filename):
+    """Расширение аудио без точки в нижнем регистре.
+
+    В отличие от ``Path(...).suffix`` понимает и голое расширение (``".mp3"``):
+    им пользуются внутренние вызовы, где имя файла уже не нужно.
+    """
+    name = str(filename or "").lower().rsplit("/", 1)[-1]
+    if name.startswith(".") and "." not in name[1:]:
+        return name[1:]
+    dot = name.rfind(".")
+    return name[dot + 1 :] if dot > -1 else ""
+
+
+def audio_container_types(extension, header=b""):
+    """Классы mutagen, которые считаются «настоящим аудио» для этого файла.
+
+    ASF-контейнер (WMA, а также диктофонный ``.wmv``) узнаём по заголовку, а не
+    по расширению: пользователь мог переименовать файл, а браузер его всё равно
+    не проигрывает — такой файл перекодируется в MP3 на сервере.
+    """
+    if bytes(header[:16]) == ASF_HEADER:
+        # Заголовок ASF однозначен: неважно, назвал файл .wma, .wmv или никак.
+        return DOCUMENT_AUDIO_MUTAGEN_TYPES["wma"]
+    return (
+        AUDIO_MUTAGEN_TYPES.get(extension) or DOCUMENT_AUDIO_MUTAGEN_TYPES.get(extension) or set()
+    )
+
+
+def _audio_matches(audio, expected):
+    """mutagen распознал контейнер как ожидаемый и у него есть длительность."""
+    return (
+        audio is not None
+        and type(audio).__name__ in expected
+        and getattr(audio.info, "length", 0) > 0
+    )
+
+
+def validate_audio_content(blob, filename):
+    """Проверить, что байты — настоящее аудио ожидаемого контейнера.
+
+    Общая проверка для ``lms.ai`` (файлы ИИ-помощника не проходят через
+    ``validate_upload``) и для перекодирования в ``lms.audio_formats``: она
+    работает с байтами в памяти, а не с ``UploadedFile``, поэтому её можно
+    вызвать и до сохранения файла, и после.
+    """
+    extension = audio_extension(filename)
+    if extension not in UPLOAD_AUDIO_EXTENSIONS:
+        raise ValidationError("Это не аудиофайл.")
+    expected = audio_container_types(extension, bytes(blob[:16]))
+    if not expected:
+        raise ValidationError("Это не аудиофайл.")
+    try:
+        audio = mutagen.File(fileobj=io.BytesIO(blob))
+    except (OSError, ValueError, EOFError, mutagen.MutagenError) as exc:
+        raise ValidationError(
+            "Не удалось прочитать аудиофайл — загрузите неповреждённую запись."
+        ) from exc
+    if not _audio_matches(audio, expected):
+        raise ValidationError("Содержимое файла не соответствует его формату или файл повреждён.")
+    return audio
+
+
 def validate_upload(file):
     if not file:
         return
@@ -87,13 +191,12 @@ def validate_upload(file):
             file.seek(0)
             header = file.read(1024)
             file.seek(0)
-            if extension in AUDIO_EXTENSIONS:
+            if extension in UPLOAD_AUDIO_EXTENSIONS or header[:16] == ASF_HEADER:
+                # Сюда попадают и WMA/WMV/ASF/M4B: в ALLOWED они есть, и проверять
+                # их содержимое нужно как аудио, а не по таблице сигнатур.
+                expected = audio_container_types(extension, header)
                 audio = mutagen.File(fileobj=file)
-                valid = (
-                    audio is not None
-                    and type(audio).__name__ in AUDIO_MUTAGEN_TYPES[extension]
-                    and audio.info.length > 0
-                )
+                valid = _audio_matches(audio, expected)
             elif extension == "txt":
                 decoder = codecs.getincrementaldecoder("utf-8-sig")("strict")
                 while chunk := file.read(64 * 1024):
@@ -152,9 +255,11 @@ def audio_content_matches(fileobj, extension):
     файла, поэтому любой корректно загруженный аудиофайл гарантированно
     проходит проверку при inline-превью (без хрупкого списка magic-байтов,
     который отбраковывал валидные MP3/контейнеры и отдавал ученику 404).
+    Для превью годятся только форматы, которые играет браузер: WMA сюда не
+    попадает и не превращается в плеер, который молча не работает.
     """
     extension = extension.lower().lstrip(".")
-    expected = AUDIO_MUTAGEN_TYPES.get(extension)
+    expected = INLINE_AUDIO_MUTAGEN_TYPES.get(extension)
     if not expected:
         return False
     position = fileobj.tell()
@@ -165,11 +270,7 @@ def audio_content_matches(fileobj, extension):
         return False
     finally:
         fileobj.seek(position)
-    return (
-        audio is not None
-        and type(audio).__name__ in expected
-        and getattr(audio.info, "length", 0) > 0
-    )
+    return _audio_matches(audio, expected)
 
 
 #: Запас на округление кодеков и задержку остановки записи в браузере.
@@ -193,6 +294,46 @@ def audio_duration(file):
     if audio is None or not getattr(audio, "info", None):
         return None
     return float(audio.info.length or 0)
+
+
+def validate_audio_upload(file):
+    """Проверка аудио-загрузки с перекодированием внебраузерных форматов.
+
+    WMA браузер не играет, поэтому файл сначала проверяется как обычно, а затем
+    заменяется результатом серверной конвертации в MP3. Возвращает исходный
+    ``file`` без изменений, если перекодирование не нужно, и новый
+    ``SimpleUploadedFile`` (.mp3), если нужно.
+
+    Живёт здесь, а не в ``lms.audio_formats``, чтобы не было цикла импортов:
+    форматная часть не знает о Django, а валидаторы — знают.
+    """
+    if not file:
+        return file
+    from .audio_formats import AudioConvertError, convert_to_mp3, mp3_name
+
+    extension = Path(file.name).suffix.lower().lstrip(".")
+    if extension not in DOCUMENT_AUDIO_EXTENSIONS:
+        return file
+    validate_upload(file)
+    position = file.tell() if hasattr(file, "tell") else 0
+    try:
+        blob = file.read()
+    finally:
+        if hasattr(file, "seek"):
+            file.seek(position)
+    if not blob:
+        raise ValidationError("Пустой файл нельзя отправить.")
+    try:
+        blob = convert_to_mp3(blob, filename=file.name)
+    except AudioConvertError as exc:
+        raise ValidationError(str(exc)) from exc
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    converted = SimpleUploadedFile(mp3_name(file.name), blob, content_type="audio/mpeg")
+    # Длительность нужна лимиту записи: считаем её у уже чистого MP3, чтобы
+    # не зависеть от поддержки контейнера в mutagen.
+    converted.audio_duration = audio_duration(converted)
+    return converted
 
 
 def validate_recording_limit(file, limit_seconds):
@@ -222,8 +363,10 @@ def validate_answer(assignment_type, text, file):
     if (
         assignment_type == "audio"
         and file
-        and Path(file.name).suffix.lower().lstrip(".") not in AUDIO_EXTENSIONS
+        and Path(file.name).suffix.lower().lstrip(".") not in UPLOAD_AUDIO_EXTENSIONS
     ):
-        errors["file_answer"] = "Загрузите аудио: MP3, WAV, M4A, OGG или AAC."
+        # WMA и родственные контейнеры тоже принимаем: перед сохранением их
+        # перекодирует ``validate_audio_upload``.
+        errors["file_answer"] = "Загрузите аудио: MP3, WAV, M4A, OGG, AAC или WMA."
     if errors:
         raise ValidationError(errors)

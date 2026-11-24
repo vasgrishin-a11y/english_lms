@@ -22,8 +22,9 @@
         <details class="recorder-upload">
             <summary class="tiny">Нет микрофона? Загрузите аудиофайл</summary>
             <label class="sr-only" for="{{ input_id }}">Аудиофайл ответа</label>
-            <input type="file" id="{{ input_id }}" name="{{ input_name }}" accept=".mp3,.wav,.m4a,.ogg,.aac,audio/*">
-            <p class="tiny muted mb-0">MP3, WAV, M4A, OGG или AAC{% if limit %}, не длиннее {{ limit_label }}{% endif %}.</p>
+            {% audio_accept as audio_accept_value %}
+            <input type="file" id="{{ input_id }}" name="{{ input_name }}" accept="{{ audio_accept_value }}">
+            <p class="tiny muted mb-0">MP3, WAV, M4A, OGG, AAC или WMA{% if limit %}, не длиннее {{ limit_label }}{% endif %}.</p>
         </details>
     {% endif %}
 </div>
