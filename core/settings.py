@@ -228,7 +228,7 @@ LMS_AI_JSON_MODE = env_bool("LMS_AI_JSON_MODE", False)
 # Какие файлы отправлять модели как вложение: image или none. Пусто — по провайдеру.
 LMS_AI_UPLOAD_KINDS = os.getenv("LMS_AI_UPLOAD_KINDS", "").strip()
 LMS_AI_TIMEOUT = env_int("LMS_AI_TIMEOUT", 60)
-LMS_MAX_FILE_BYTES = env_int("LMS_MAX_FILE_BYTES", 20 * 1024 * 1024)
+LMS_MAX_FILE_BYTES = env_int("LMS_MAX_FILE_BYTES", 30 * 1024 * 1024)
 LMS_STUDENT_QUOTA_BYTES = env_int("LMS_STUDENT_QUOTA_BYTES", 200 * 1024 * 1024)
 # Общий лимит файлового хранилища LMS: сколько места отведено всем материалам,
 # вложениям и ответам вместе. 0 — лимит не задан, и потолок ограничен только
