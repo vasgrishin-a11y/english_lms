@@ -204,6 +204,28 @@ class OfflineParsingTests(LMSCase):
         self.assertEqual(summary["topics"], 1)
         self.assertEqual(summary["assignments"], 1)
 
+    def test_assignment_description_accepts_up_to_twenty_thousand_characters(self):
+        description = "x" * (ai.AI_ASSIGNMENT_DESCRIPTION_CHARS + 100)
+        material = ai.normalise(
+            {
+                "blocks": [
+                    {
+                        "name": "Класс",
+                        "topics": [
+                            {
+                                "title": "Тема",
+                                "assignments": [
+                                    {"title": "Чтение", "description": description}
+                                ],
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+        saved_description = material["blocks"][0]["topics"][0]["assignments"][0]["description"]
+        self.assertEqual(len(saved_description), ai.AI_ASSIGNMENT_DESCRIPTION_CHARS)
+
     def test_limits_cut_the_answer_instead_of_failing(self):
         payload = {
             "blocks": [
@@ -1040,7 +1062,7 @@ class AssistantModelTests(LMSCase):
         prompt = ai.build_prompt("", target="mixed")
         self.assertIn("по форме сдачи ответа", prompt)
         self.assertIn("questions возвращай только при type=quiz", prompt)
-        self.assertIn("description — 4000 знаков", prompt)
+        self.assertIn("description — 20000 знаков", prompt)
         self.assertIn("не додумывай, чем он заканчивается", prompt)
         self.assertIn("Перед тем как вернуть JSON", prompt)
 

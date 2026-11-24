@@ -102,6 +102,9 @@ TARGETS = (
 AI_ATTACHMENT_MAX_COUNT = 3
 AI_ATTACHMENT_MAX_CHARS = 12000
 AI_ATTACHMENT_TOTAL_CHARS = 20000
+# Задание часто содержит сам текст для чтения/анализа, поэтому даём описанию
+# столько же места, сколько обычному текстовому ответу.
+AI_ASSIGNMENT_DESCRIPTION_CHARS = 20000
 
 TYPE_MARKERS = {
     "текст": Assignment.Type.TEXT,
@@ -916,7 +919,9 @@ def parse_text(text, *, source=""):
             assignment = builder.ensure_assignment(
                 source or "Задание из материала", Assignment.Type.TEXT
             )
-            assignment["description"] = body[:4000] or "Материал без текста."
+            assignment["description"] = (
+                body[:AI_ASSIGNMENT_DESCRIPTION_CHARS] or "Материал без текста."
+            )
         builder.ensure_topic()
     return {"title": source or "Материал ИИ-помощника", "blocks": builder.blocks}
 
@@ -1101,7 +1106,7 @@ PROMPT_SCHEMA = """Верни строго JSON без пояснений в ф�
   description, чтобы задание читалось само по себе.
 - Пиши инструкции для ученика на языке запроса преподавателя, а слова, примеры и ответы
   оставляй на языке материала — не переводи английские формулировки без просьбы.
-- Помни лимиты полей: description — 4000 знаков, question.text — 2000, choice.text — 500.
+- Помни лимиты полей: description — 20000 знаков, question.text — 2000, choice.text — 500.
   При нехватке сокращай материал, но не условие: оно идёт первым и не должно обрезаться.
 - Если текст материала в запросе усечён по лимиту, не додумывай, чем он заканчивается, —
   работай только с тем, что передано.
@@ -1773,7 +1778,7 @@ def _normalise_assignment(item, caps, attachable=frozenset()):
     if questions:
         assignment_type = Assignment.Type.QUIZ
     title = _clean(item.get("title"), 200)
-    description = _clean_text(item.get("description"))
+    description = _clean_text(item.get("description"), AI_ASSIGNMENT_DESCRIPTION_CHARS)
     if not title:
         return None
     if not description and not questions:
